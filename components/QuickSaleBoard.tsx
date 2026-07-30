@@ -1,0 +1,430 @@
+"use client";
+
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Banknote,
+  ChevronUp,
+  CreditCard,
+  LoaderCircle,
+  Minus,
+  Plus,
+  ReceiptText,
+  ShoppingBag,
+  Trash2,
+  Utensils,
+  X,
+} from "lucide-react";
+import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
+import {
+  buildCheckoutReceiptHtml,
+  printHtmlReceipt,
+} from "@/lib/print/receipts";
+import { formatMoney } from "@/lib/venues";
+
+type Category = { id: number; name: string };
+type Item = {
+  id: number;
+  name: string;
+  price: number;
+  categoryId: number;
+};
+
+export function QuickSaleBoard({
+  venueId,
+  categories,
+  items,
+}: {
+  venueId: string;
+  categories: Category[];
+  items: Item[];
+}) {
+  const router = useRouter();
+  const [cart, setCart] = useState<QuickSaleLine[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  const [method, setMethod] = useState<"cash" | "card" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const total = useMemo(
+    () => cart.reduce((sum, line) => sum + line.unitPrice * line.qty, 0),
+    [cart],
+  );
+  const itemCount = useMemo(
+    () => cart.reduce((sum, line) => sum + line.qty, 0),
+    [cart],
+  );
+
+  function add(item: Item) {
+    setError(null);
+    setCart((prev) => {
+      const existing = prev.find((line) => line.itemId === item.id);
+      if (existing) {
+        return prev.map((line) =>
+          line.itemId === item.id ? { ...line, qty: line.qty + 1 } : line,
+        );
+      }
+      return [
+        ...prev,
+        {
+          itemId: item.id,
+          name: item.name,
+          unitPrice: item.price,
+          qty: 1,
+        },
+      ];
+    });
+  }
+
+  function changeQty(itemId: number, qty: number) {
+    setCart((prev) =>
+      qty <= 0
+        ? prev.filter((line) => line.itemId !== itemId)
+        : prev.map((line) => (line.itemId === itemId ? { ...line, qty } : line)),
+    );
+  }
+
+  function remove(itemId: number) {
+    setCart((prev) => prev.filter((line) => line.itemId !== itemId));
+  }
+
+  function askConfirm(selected: "cash" | "card") {
+    if (cart.length === 0) {
+      setError("أضف أصنافاً قبل الدفع");
+      return;
+    }
+    setError(null);
+    setMethod(selected);
+    const dialog = document.getElementById(
+      "quick-sale-confirm",
+    ) as HTMLDialogElement | null;
+    dialog?.showModal();
+  }
+
+  function closeModal() {
+    const dialog = document.getElementById(
+      "quick-sale-confirm",
+    ) as HTMLDialogElement | null;
+    dialog?.close();
+    setMethod(null);
+  }
+
+  function confirmPay() {
+    if (!method) return;
+    startTransition(async () => {
+      const result = await payQuickSale(venueId, cart, method);
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+
+      closeModal();
+      setCart([]);
+      setCartOpen(false);
+
+      try {
+        await printHtmlReceipt(buildCheckoutReceiptHtml(result.receipt));
+      } catch {
+        // Sale is recorded even if printing fails
+      }
+
+      router.refresh();
+    });
+  }
+
+  const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
+
+  const cartBody = (
+    <>
+      <ul className="max-h-[42vh] space-y-2 overflow-y-auto lg:max-h-[46vh]">
+        {cart.map((line) => (
+          <li
+            key={line.itemId}
+            className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-black">{line.name}</p>
+                <p className="text-xs text-base-content/45">
+                  {formatMoney(line.unitPrice)} للوحدة
+                </p>
+              </div>
+              <p className="shrink-0 font-black text-primary">
+                {formatMoney(line.unitPrice * line.qty)}
+              </p>
+            </div>
+            <div className="flex items-center justify-between">
+              <div className="join">
+                <button
+                  type="button"
+                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
+                  onClick={() => changeQty(line.itemId, line.qty - 1)}
+                  aria-label="تقليل الكمية"
+                >
+                  <Minus className="size-3.5" />
+                </button>
+                <span className="join-item grid h-11 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black">
+                  {line.qty}
+                </span>
+                <button
+                  type="button"
+                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
+                  onClick={() => changeQty(line.itemId, line.qty + 1)}
+                  aria-label="زيادة الكمية"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn btn-circle btn-ghost btn-sm text-error"
+                onClick={() => remove(line.itemId)}
+                aria-label="حذف الصنف"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          </li>
+        ))}
+        {cart.length === 0 && (
+          <li className="py-8 text-center">
+            <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-base-200 text-base-content/20">
+              <ShoppingBag className="size-6" />
+            </span>
+            <p className="font-bold">السلة فارغة</p>
+            <p className="text-xs text-base-content/40">اختر صنفاً من القائمة</p>
+          </li>
+        )}
+      </ul>
+
+      <div className="mt-4 border-t border-dashed border-base-300 pt-4">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs font-bold text-base-content/45">
+              الإجمالي المستحق
+            </p>
+            <p className="text-xs text-base-content/35">
+              لا تُسجّل الفاتورة إلا بعد الدفع
+            </p>
+          </div>
+          <span className="text-2xl font-black text-primary">
+            {formatMoney(total)}
+          </span>
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20"
+          disabled={pending || cart.length === 0}
+          onClick={() => askConfirm("cash")}
+        >
+          <Banknote className="size-6" />
+          <span className="font-black">دفع نقدي</span>
+        </button>
+        <button
+          type="button"
+          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20"
+          disabled={pending || cart.length === 0}
+          onClick={() => askConfirm("card")}
+        >
+          <CreditCard className="size-6" />
+          <span className="font-black">دفع بالبطاقة</span>
+        </button>
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-center text-sm font-bold text-error">{error}</p>
+      ) : null}
+    </>
+  );
+
+  return (
+    <>
+      <div className="grid flex-1 gap-5 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0">
+        <div className="min-w-0 space-y-7">
+          {categories.map((cat) => {
+            const catItems = items.filter((item) => item.categoryId === cat.id);
+            if (catItems.length === 0) return null;
+            return (
+              <section key={cat.id}>
+                <div className="mb-3 flex items-center gap-2">
+                  <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <Utensils className="size-4" />
+                  </span>
+                  <h3 className="text-lg font-black">{cat.name}</h3>
+                  <span className="badge badge-ghost badge-sm">
+                    {catItems.length}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {catItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className="group card min-h-28 border border-base-300/70 bg-base-100 text-right shadow-sm transition duration-200 hover:border-primary/30 hover:shadow-md disabled:opacity-60 sm:min-h-32"
+                      disabled={pending}
+                      onClick={() => add(item)}
+                    >
+                      <span className="card-body w-full justify-between p-4">
+                        <span className="grid size-9 place-items-center rounded-xl bg-base-200 text-base-content/35 transition group-hover:bg-primary/10 group-hover:text-primary">
+                          <Plus className="size-4" />
+                        </span>
+                        <span>
+                          <span className="block line-clamp-2 font-black">
+                            {item.name}
+                          </span>
+                          <span className="mt-1 block text-sm font-bold text-primary">
+                            {formatMoney(item.price)}
+                          </span>
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          {items.length === 0 && (
+            <div className="premium-card rounded-3xl p-10 text-center">
+              <Utensils className="mx-auto mb-3 size-9 text-base-content/20" />
+              <p className="font-black">لا توجد أصناف متاحة</p>
+              <p className="text-sm text-base-content/45">
+                أضف الأصناف من لوحة الإدارة
+              </p>
+            </div>
+          )}
+        </div>
+
+        <aside className="premium-card sticky top-24 hidden h-fit overflow-hidden lg:card lg:block">
+          <div className="flex items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
+            <div className="flex items-center gap-2">
+              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
+                <ShoppingBag className="size-4.5" />
+              </span>
+              <div>
+                <h3 className="font-black">سلة البيع السريع</h3>
+                <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
+              </div>
+            </div>
+            <ReceiptText className="size-5 text-base-content/20" />
+          </div>
+          <div className="card-body gap-0 p-5">{cartBody}</div>
+        </aside>
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 p-3 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="flex w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3.5 text-primary-content shadow-lg shadow-primary/20"
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-white/15">
+              <ShoppingBag className="size-5" />
+            </span>
+            <span className="text-right">
+              <span className="block text-xs text-primary-content/70">
+                {itemCount} عنصر في السلة
+              </span>
+              <span className="block text-lg font-black">
+                {formatMoney(total)}
+              </span>
+            </span>
+          </span>
+          <span className="flex items-center gap-1 text-sm font-bold">
+            الدفع
+            <ChevronUp className="size-4" />
+          </span>
+        </button>
+      </div>
+
+      {cartOpen ? (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button
+            type="button"
+            className="absolute inset-0 bg-neutral/45 backdrop-blur-[2px]"
+            aria-label="إغلاق السلة"
+            onClick={() => setCartOpen(false)}
+          />
+          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-base-300/60 px-4 py-3">
+              <div>
+                <p className="font-black">سلة البيع السريع</p>
+                <p className="text-xs text-base-content/45">{itemCount} عنصر</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-circle btn-ghost btn-sm"
+                onClick={() => setCartOpen(false)}
+                aria-label="إغلاق"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-4 pb-8">{cartBody}</div>
+          </div>
+        </div>
+      ) : null}
+
+      <dialog id="quick-sale-confirm" className="modal modal-bottom sm:modal-middle">
+        <div className="modal-box max-w-md rounded-t-3xl sm:rounded-3xl">
+          <div
+            className={`mb-4 grid size-14 place-items-center rounded-2xl ${
+              method === "cash"
+                ? "bg-success/10 text-success"
+                : "bg-info/10 text-info"
+            }`}
+          >
+            {method === "cash" ? (
+              <Banknote className="size-7" />
+            ) : (
+              <CreditCard className="size-7" />
+            )}
+          </div>
+          <h3 className="text-2xl font-black">تأكيد الدفع</h3>
+          <p className="mt-2 leading-7 text-base-content/60">
+            هل تريد تأكيد الدفع بطريقة{" "}
+            <span className="font-black text-base-content">{methodLabel}</span>{" "}
+            بمبلغ{" "}
+            <span className="font-black text-primary">{formatMoney(total)}</span>؟
+          </p>
+          <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              className="btn btn-ghost rounded-xl"
+              onClick={closeModal}
+              disabled={pending}
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              className={`btn rounded-xl ${
+                method === "cash" ? "btn-success" : "btn-info"
+              }`}
+              onClick={confirmPay}
+              disabled={pending || !method}
+            >
+              {pending ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  جاري الدفع...
+                </>
+              ) : (
+                `تأكيد الدفع ${methodLabel}`
+              )}
+            </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="submit" disabled={pending} onClick={() => setMethod(null)}>
+            إغلاق
+          </button>
+        </form>
+      </dialog>
+    </>
+  );
+}

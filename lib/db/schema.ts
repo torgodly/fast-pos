@@ -1,0 +1,167 @@
+import { relations, sql } from "drizzle-orm";
+import {
+  integer,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
+
+export const venues = sqliteTable("venues", {
+  id: text("id").primaryKey(), // restaurant | cafe
+  name: text("name").notNull(),
+});
+
+export const users = sqliteTable(
+  "users",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    role: text("role", { enum: ["admin", "waiter", "cashier"] }).notNull(),
+    venueId: text("venue_id").references(() => venues.id),
+    username: text("username"),
+    passwordHash: text("password_hash"),
+    pinHash: text("pin_hash"),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [uniqueIndex("users_username_idx").on(table.username)],
+);
+
+export const categories = sqliteTable("categories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const items = sqliteTable("items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  categoryId: integer("category_id")
+    .notNull()
+    .references(() => categories.id),
+  name: text("name").notNull(),
+  price: real("price").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const tables = sqliteTable("tables", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  name: text("name").notNull(),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const orders = sqliteTable("orders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  tableId: integer("table_id").references(() => tables.id),
+  waiterId: integer("waiter_id").references(() => users.id),
+  cashierId: integer("cashier_id").references(() => users.id),
+  status: text("status", { enum: ["open", "paid", "cancelled"] })
+    .notNull()
+    .default("open"),
+  paymentMethod: text("payment_method", { enum: ["cash", "card"] }),
+  total: real("total").notNull().default(0),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  paidAt: text("paid_at"),
+});
+
+export const orderItems = sqliteTable("order_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => orders.id),
+  itemId: integer("item_id").references(() => items.id),
+  itemName: text("item_name").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  qty: integer("qty").notNull().default(1),
+  lineTotal: real("line_total").notNull(),
+  kitchenSentQty: integer("kitchen_sent_qty").notNull().default(0),
+});
+
+export const venuesRelations = relations(venues, ({ many }) => ({
+  users: many(users),
+  categories: many(categories),
+  items: many(items),
+  tables: many(tables),
+  orders: many(orders),
+}));
+
+export const usersRelations = relations(users, ({ one }) => ({
+  venue: one(venues, {
+    fields: [users.venueId],
+    references: [venues.id],
+  }),
+}));
+
+export const categoriesRelations = relations(categories, ({ one, many }) => ({
+  venue: one(venues, {
+    fields: [categories.venueId],
+    references: [venues.id],
+  }),
+  items: many(items),
+}));
+
+export const itemsRelations = relations(items, ({ one }) => ({
+  venue: one(venues, {
+    fields: [items.venueId],
+    references: [venues.id],
+  }),
+  category: one(categories, {
+    fields: [items.categoryId],
+    references: [categories.id],
+  }),
+}));
+
+export const tablesRelations = relations(tables, ({ one }) => ({
+  venue: one(venues, {
+    fields: [tables.venueId],
+    references: [venues.id],
+  }),
+}));
+
+export const ordersRelations = relations(orders, ({ one, many }) => ({
+  venue: one(venues, {
+    fields: [orders.venueId],
+    references: [venues.id],
+  }),
+  table: one(tables, {
+    fields: [orders.tableId],
+    references: [tables.id],
+  }),
+  waiter: one(users, {
+    fields: [orders.waiterId],
+    references: [users.id],
+  }),
+  cashier: one(users, {
+    fields: [orders.cashierId],
+    references: [users.id],
+  }),
+  items: many(orderItems),
+}));
+
+export const orderItemsRelations = relations(orderItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [orderItems.orderId],
+    references: [orders.id],
+  }),
+  item: one(items, {
+    fields: [orderItems.itemId],
+    references: [items.id],
+  }),
+}));
