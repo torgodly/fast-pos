@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 
 const MAX_WIDTH = 384;
@@ -12,29 +11,21 @@ function readLogoPixels(): PNG | null {
   if (!fs.existsSync(LOGO_PATH)) return null;
 
   const buffer = fs.readFileSync(LOGO_PATH);
-  if (buffer.length < 4) return null;
+  if (buffer.length < 8) return null;
 
   const isPng =
     buffer[0] === 0x89 &&
     buffer[1] === 0x50 &&
     buffer[2] === 0x4e &&
     buffer[3] === 0x47;
-  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+
+  if (!isPng) return null;
 
   try {
-    if (isPng) {
-      return PNG.sync.read(buffer);
-    }
-    if (isJpeg) {
-      const decoded = jpeg.decode(buffer, { useTArray: true });
-      const png = new PNG({ width: decoded.width, height: decoded.height });
-      png.data = Buffer.from(decoded.data);
-      return png;
-    }
+    return PNG.sync.read(buffer);
   } catch {
     return null;
   }
-  return null;
 }
 
 export function clearReceiptLogoCache() {
