@@ -24,20 +24,24 @@ export function LocalPrintAgentBanner({
   );
   const [pending, startTransition] = useTransition();
 
+  function probe() {
+    checkLocalPrintAgent().then((ok) => {
+      setStatus(ok ? "ok" : "missing");
+    });
+  }
+
+  function retryProbe() {
+    setStatus("loading");
+    probe();
+  }
+
   useEffect(() => {
     if (!needsLocalPrint) return;
-    let active = true;
 
-    function probe() {
-      checkLocalPrintAgent().then((ok) => {
-        if (active) setStatus(ok ? "ok" : "missing");
-      });
-    }
-
+    setStatus("loading");
     probe();
     const timer = window.setInterval(probe, 5000);
     return () => {
-      active = false;
       window.clearInterval(timer);
     };
   }, [needsLocalPrint]);
@@ -105,15 +109,24 @@ export function LocalPrintAgentBanner({
   return (
     <div className="alert alert-warning rounded-2xl text-sm">
       <AlertTriangle className="size-5 shrink-0" />
-      <div>
-        <p className="font-bold">شغّل SETUP.bat على PC الكاشير — ليس على السيرفر!</p>
-        <p className="mt-1 text-base-content/70">
-          انسخ مجلد <code className="text-xs">tools\cashier-print-agent</code> إلى
-          جهاز الكاشير (حيث USB موصول)، ثم شغّل SETUP.bat هناك.
+      <div className="flex flex-1 flex-col gap-2">
+        <p className="font-bold">وكيل USB غير متصل على هذا الجهاز</p>
+        <p className="text-base-content/70">
+          شغّل <code className="text-xs">SETUP.bat</code> على{" "}
+          <strong>PC الكاشير</strong> (حيث USB موصول)، ثم{" "}
+          <code className="text-xs">CHECK.bat</code> للتأكد.
         </p>
-        <p className="mt-1 text-xs text-base-content/50">
-          افتح شاشة الكاشير من متصفح ذلك الجهاز، ليس من iPad.
+        <p className="text-xs text-base-content/50">
+          افتح شاشة الكاشير من Chrome على <strong>نفس PC</strong>، ليس iPad
+          ولا السيرفر. إذا CHECK يظهر OK لكن التحذير باقٍ، اضغط إعادة التحقق.
         </p>
+        <button
+          type="button"
+          className="btn btn-sm btn-warning w-fit"
+          onClick={retryProbe}
+        >
+          إعادة التحقق
+        </button>
       </div>
     </div>
   );

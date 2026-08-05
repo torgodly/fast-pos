@@ -46,9 +46,14 @@ export async function checkLocalPrintAgent(
 ): Promise<boolean> {
   try {
     const response = await fetch(`${agentUrl}/health`, {
-      signal: AbortSignal.timeout(2000),
+      method: "GET",
+      mode: "cors",
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { ok?: boolean };
+    return payload.ok === true;
   } catch {
     return false;
   }

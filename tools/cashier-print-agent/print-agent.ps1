@@ -1,5 +1,5 @@
-# Fast POS USB print agent — PowerShell only, no Node, no admin URL ACL
-# TCP http://127.0.0.1:9288 (works without Administrator)
+# Fast POS USB print agent - PowerShell only, no Node, no admin URL ACL
+# Listens on http://127.0.0.1:9288
 
 $Port = 9288
 $ErrorActionPreference = "Stop"
@@ -174,12 +174,18 @@ function Handle-Client($Client) {
   }
 }
 
-$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
-$listener.Start()
+try {
+  $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+  $listener.Start()
+} catch {
+  Write-Log "Failed to start on port ${Port}: $($_.Exception.Message)"
+  Write-Host "ERROR: Cannot listen on port $Port - $($_.Exception.Message)"
+  exit 1
+}
 
 $dp = Get-DefaultPrinterName
 Write-Log "Agent started on port $Port, printer=$dp"
-Write-Host "Fast POS Print Agent — port $Port (no Node, no admin)"
+Write-Host "Fast POS Print Agent - port $Port"
 Write-Host "Printer: $(if ($dp) { $dp } else { 'SET DEFAULT IN WINDOWS' })"
 Write-Host "Log: $LogPath"
 
