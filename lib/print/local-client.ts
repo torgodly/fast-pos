@@ -1,6 +1,16 @@
 const DEFAULT_AGENT_URL = "http://127.0.0.1:9288";
 const BRIDGE_URL = `${DEFAULT_AGENT_URL}/bridge`;
 
+let bridgeRequestCounter = 0;
+
+function bridgeRequestId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  bridgeRequestCounter += 1;
+  return `fastpos-${Date.now()}-${bridgeRequestCounter}`;
+}
+
 type BridgeResult = { ok?: boolean; error?: string; printer?: string | null };
 
 let bridgeWindow: Window | null = null;
@@ -102,7 +112,7 @@ function bridgeCall(
       return;
     }
 
-    const id = crypto.randomUUID();
+    const id = bridgeRequestId();
     const timeout = window.setTimeout(() => {
       window.removeEventListener("message", onMessage);
       reject(new Error("Bridge request timeout"));

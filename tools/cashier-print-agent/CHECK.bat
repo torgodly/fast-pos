@@ -9,7 +9,7 @@ echo  ==========================
 echo.
 
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { $dp = Get-Printer ^| Where-Object { $_.Default -eq $true } ^| Select-Object -First 1; if ($dp) { Write-Host '[OK] Default printer:' $dp.Name } else { Write-Host '[WARN] No default printer in Windows' } } catch { Write-Host '[WARN] Could not list printers' }"
+  "function Get-DefaultName { try { $p = Get-CimInstance Win32_Printer -Filter \"Default='True'\" ^| Select-Object -First 1; if ($p) { return [string]$p.Name } } catch {}; try { Add-Type -AssemblyName System.Drawing; return (New-Object System.Drawing.Printing.PrinterSettings).PrinterName } catch {}; try { $d = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows').Device; if ($d) { return ($d -split ',')[0] } } catch {}; return $null }; if (Test-Path '%~dp0printer.txt') { $n = (Get-Content '%~dp0printer.txt' -Raw).Trim(); if ($n) { Write-Host '[OK] printer.txt:' $n; exit 0 } }; $dp = Get-DefaultName; if ($dp) { Write-Host '[OK] Default printer:' $dp } else { Write-Host '[WARN] Default not detected - run LIST-PRINTERS.bat' }"
 
 echo.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^

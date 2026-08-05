@@ -47,7 +47,8 @@ window.addEventListener("message", async function(e) {
     var h = await fetch("/health");
     var j = await h.json();
     if (!j.ok) throw new Error("Agent not ready");
-    document.getElementById("s").textContent = "USB ready: " + (j.printer || "default printer");
+    if (!j.printer) throw new Error("No default printer. Installed: " + ((j.installed || []).join(", ") || "none") + ". Create printer.txt with exact name.");
+    document.getElementById("s").textContent = "USB ready: " + j.printer;
     notify("fastpos-bridge-ready", { printer: j.printer });
   } catch (err) {
     document.getElementById("s").textContent = "USB connect failed";
@@ -65,12 +66,92 @@ function Write-Log([string]$Message) {
   } catch { }
 }
 
-function Get-DefaultPrinterName {
+function Get-InstalledPrinterNames {
+  $names = New-Object System.Collections.Generic.List[string]
+
   try {
-    $p = Get-Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1
-    if ($p) { return [string]$p.Name }
-  } catch { }
+    Get-CimInstance -ClassName Win32_Printer -ErrorAction Stop |
+      ForEach-Object { [void]$names.Add([string]$_.Name) }
+  } catch {
+    try {
+      Get-Printer -ErrorAction Stop | ForEach-Object { [void]$names.Add([string]$_.Name) }
+    } catch { }
+  }
+
+  return @($names | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Get-ConfiguredPrinterName {
+  $path = Join-Path $PSScriptRoot "printer.txt"
+  if (-not (Test-Path $path)) { return $null }
+  $name = (Get-Content $path -Raw -ErrorAction SilentlyContinue).Trim()
+  if ($name) { return $name }
   return $null
+}
+
+function Get-DefaultPrinterName {
+  $configured = Get-ConfiguredPrinterName
+  if ($configured) { return $configured }
+
+  try {
+    $p = Get-CimInstance -ClassName Win32_Printer -Filter "Default='True'" -ErrorAction Stop |
+      Select-Object -First 1
+    if ($p -and $p.Name) { return [string]$p.Name }
+  } catch { }
+
+  try {
+    $p = Get-CimInstance -ClassName Win32_Printer -ErrorAction Stop |
+      Where-Object { $_.Default -eq $true } |
+      Select-Object -First 1
+    if ($p -and $p.Name) { return [string]$p.Name }
+  } catch { }
+
+  try {
+    $device = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Windows" -ErrorAction Stop).Device
+    if ($device) {
+      $name = ($device -split ",")[0].Trim()
+      if ($name) { return $name }
+    }
+  } catch { }
+
+  try {
+    Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+    $settings = New-Object System.Drawing.Printing.PrinterSettings
+    if ($settings.PrinterName) { return [string]$settings.PrinterName }
+  } catch { }
+
+  try {
+    $p = Get-Printer -ErrorAction Stop | Where-Object { $_.Default -eq $true } | Select-Object -First 1
+    if ($p -and $p.Name) { return [string]$p.Name }
+  } catch { }
+
+  return $null
+}
+
+function Resolve-PrinterName([string]$RequestedName) {
+  $name = $RequestedName
+  if (-not $name -or $name -eq "default") {
+    $name = Get-DefaultPrinterName
+  }
+
+  if ($name) {
+    $installed = Get-InstalledPrinterNames
+    if ($installed.Count -eq 0) { return $name }
+    if ($installed -contains $name) { return $name }
+    foreach ($candidate in $installed) {
+      if ($candidate.Equals($name, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $candidate
+      }
+    }
+  }
+
+  if ($name) { return $name }
+
+  $installed = Get-InstalledPrinterNames
+  if ($installed.Count -eq 1) { return $installed[0] }
+
+  $list = if ($installed.Count -gt 0) { $installed -join ", " } else { "none found" }
+  throw "No default printer detected. Installed printers: $list. Put the exact Windows printer name in printer.txt in this folder."
 }
 
 function Send-RawPrint([byte[]]$Bytes, [string]$PrinterName) {
@@ -207,11 +288,7 @@ function Handle-PrintRequest([string]$RawBody) {
   $payload = $RawBody | ConvertFrom-Json
   $b64 = [string]$payload.data
   if (-not $b64) { throw "Missing data" }
-  $name = [string]$payload.printerName
-  if (-not $name -or $name -eq "default") {
-    $name = Get-DefaultPrinterName
-  }
-  if (-not $name) { throw "Set a default printer in Windows" }
+  $name = Resolve-PrinterName ([string]$payload.printerName)
   $bytes = [Convert]::FromBase64String($b64)
   Send-RawPrint $bytes $name
   Write-Log "Printed $($bytes.Length) bytes to $name"
@@ -240,7 +317,12 @@ function Handle-Client($Client) {
 
     if ($method -eq "GET" -and $path -eq "/health") {
       $dp = Get-DefaultPrinterName
-      $json = (@{ ok = $true; printer = $dp } | ConvertTo-Json -Compress)
+      $installed = Get-InstalledPrinterNames
+      $json = (@{
+        ok = $true
+        printer = $dp
+        installed = $installed
+      } | ConvertTo-Json -Compress)
       Send-HttpResponse $stream 200 $json "application/json; charset=utf-8"
       return
     }
