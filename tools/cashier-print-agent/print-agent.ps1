@@ -5,6 +5,59 @@ $Port = 9288
 $ErrorActionPreference = "Stop"
 $LogPath = Join-Path $PSScriptRoot "print-agent.log"
 
+$BridgeHtml = @'
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Fast POS USB</title></head>
+<body style="font-family:sans-serif;padding:16px">
+<p id="s">Connecting USB printer...</p>
+<script>
+async function notify(type, extra) {
+  var t = window.opener || window.parent;
+  if (t && t !== window) t.postMessage(Object.assign({ type: type }, extra || {}), "*");
+}
+window.addEventListener("message", async function(e) {
+  var d = e.data || {};
+  var reply = function(data) { if (e.source) e.source.postMessage(data, e.origin || "*"); };
+  if (d.type === "fastpos-health") {
+    try {
+      var h = await fetch("/health");
+      var j = await h.json();
+      reply({ type: "fastpos-health-result", id: d.id, ok: j.ok, printer: j.printer });
+    } catch (err) {
+      reply({ type: "fastpos-health-result", id: d.id, error: String(err) });
+    }
+  }
+  if (d.type === "fastpos-print") {
+    try {
+      var r = await fetch("/print", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(d.payload || {})
+      });
+      var j = await r.json();
+      if (!r.ok || j.error) reply({ type: "fastpos-print-result", id: d.id, error: j.error || "Print failed" });
+      else reply({ type: "fastpos-print-result", id: d.id, ok: true, printer: j.printer });
+    } catch (err) {
+      reply({ type: "fastpos-print-result", id: d.id, error: String(err) });
+    }
+  }
+});
+(async function() {
+  try {
+    var h = await fetch("/health");
+    var j = await h.json();
+    if (!j.ok) throw new Error("Agent not ready");
+    document.getElementById("s").textContent = "USB ready: " + (j.printer || "default printer");
+    notify("fastpos-bridge-ready", { printer: j.printer });
+  } catch (err) {
+    document.getElementById("s").textContent = "USB connect failed";
+    notify("fastpos-bridge-error", { error: String(err) });
+  }
+})();
+</script>
+</body></html>
+'@
+
 function Write-Log([string]$Message) {
   $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
   try {
@@ -79,94 +132,137 @@ public class RawPrinterHelper {
   }
 }
 
-function Send-HttpResponse($Stream, [int]$Code, [string]$Json) {
-  $body = [System.Text.Encoding]::UTF8.GetBytes($Json)
+function Send-HttpResponse($Stream, [int]$Code, [string]$Body, [string]$ContentType) {
+  $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($Body)
   $status = switch ($Code) { 200 { "OK" } 204 { "No Content" } default { "Error" } }
   $header = "HTTP/1.1 $Code $status`r`n" +
-    "Content-Type: application/json; charset=utf-8`r`n" +
+    "Content-Type: $ContentType`r`n" +
     "Access-Control-Allow-Origin: *`r`n" +
     "Access-Control-Allow-Methods: GET, POST, OPTIONS`r`n" +
     "Access-Control-Allow-Headers: Content-Type`r`n" +
     "Access-Control-Allow-Private-Network: true`r`n" +
-    "Content-Length: $($body.Length)`r`n" +
+    "Content-Length: $($bodyBytes.Length)`r`n" +
     "Connection: close`r`n`r`n"
   $hdr = [System.Text.Encoding]::ASCII.GetBytes($header)
   $Stream.Write($hdr, 0, $hdr.Length)
-  if ($body.Length -gt 0) {
-    $Stream.Write($body, 0, $body.Length)
+  if ($bodyBytes.Length -gt 0) {
+    $Stream.Write($bodyBytes, 0, $bodyBytes.Length)
   }
   $Stream.Flush()
 }
 
-function Read-RequestBody($Stream, [int]$ContentLength) {
-  if ($ContentLength -le 0) { return "" }
-  $buffer = New-Object byte[] $ContentLength
-  $read = 0
-  while ($read -lt $ContentLength) {
-    $n = $Stream.Read($buffer, $read, $ContentLength - $read)
-    if ($n -le 0) { break }
-    $read += $n
+function Find-HeaderEnd([byte[]]$Bytes) {
+  for ($i = 0; $i -le $Bytes.Length - 4; $i++) {
+    if ($Bytes[$i] -eq 13 -and $Bytes[$i + 1] -eq 10 -and $Bytes[$i + 2] -eq 13 -and $Bytes[$i + 3] -eq 10) {
+      return $i + 4
+    }
   }
-  return [System.Text.Encoding]::UTF8.GetString($buffer, 0, $read)
+  return -1
+}
+
+function Read-FullRequest([System.Net.Sockets.NetworkStream]$Stream) {
+  $ms = New-Object System.IO.MemoryStream
+  $buf = New-Object byte[] 8192
+  $headerEnd = -1
+
+  while ($headerEnd -lt 0 -and $ms.Length -lt 65536) {
+    $n = $Stream.Read($buf, 0, $buf.Length)
+    if ($n -le 0) { break }
+    $ms.Write($buf, 0, $n)
+    $headerEnd = Find-HeaderEnd $ms.ToArray()
+  }
+
+  if ($headerEnd -lt 0) { return $null }
+
+  $all = $ms.ToArray()
+  $headerText = [System.Text.Encoding]::ASCII.GetString($all, 0, $headerEnd)
+  $contentLength = 0
+  foreach ($line in ($headerText -split "`r`n")) {
+    if ($line -match '^(?i)Content-Length:\s*(\d+)') {
+      $contentLength = [int]$Matches[1]
+    }
+  }
+
+  $totalNeeded = $headerEnd + $contentLength
+  while ($all.Length -lt $totalNeeded) {
+    $n = $Stream.Read($buf, 0, $buf.Length)
+    if ($n -le 0) { break }
+    $ms.Write($buf, 0, $n)
+    $all = $ms.ToArray()
+  }
+
+  $body = ""
+  if ($contentLength -gt 0 -and $all.Length -gt $headerEnd) {
+    $len = [Math]::Min($contentLength, $all.Length - $headerEnd)
+    $body = [System.Text.Encoding]::UTF8.GetString($all, $headerEnd, $len)
+  }
+
+  return @{
+    HeaderText = $headerText
+    Body = $body
+  }
+}
+
+function Handle-PrintRequest([string]$RawBody) {
+  $payload = $RawBody | ConvertFrom-Json
+  $b64 = [string]$payload.data
+  if (-not $b64) { throw "Missing data" }
+  $name = [string]$payload.printerName
+  if (-not $name -or $name -eq "default") {
+    $name = Get-DefaultPrinterName
+  }
+  if (-not $name) { throw "Set a default printer in Windows" }
+  $bytes = [Convert]::FromBase64String($b64)
+  Send-RawPrint $bytes $name
+  Write-Log "Printed $($bytes.Length) bytes to $name"
+  return (@{ ok = $true; printer = $name; bytes = $bytes.Length } | ConvertTo-Json -Compress)
 }
 
 function Handle-Client($Client) {
   try {
     $stream = $Client.GetStream()
-    $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::ASCII, $false, 8192, $true)
-    $requestLine = $reader.ReadLine()
+    $stream.ReadTimeout = 60000
+    $request = Read-FullRequest $stream
+    if (-not $request) { return }
+
+    $lines = $request.HeaderText -split "`r`n"
+    $requestLine = $lines[0]
     if (-not $requestLine) { return }
 
     $parts = $requestLine.Split(" ")
     $method = $parts[0]
     $path = if ($parts.Length -gt 1) { ($parts[1] -split "\?")[0] } else { "/" }
 
-    $contentLength = 0
-    while ($true) {
-      $line = $reader.ReadLine()
-      if ([string]::IsNullOrEmpty($line)) { break }
-      if ($line -match "^(?i)Content-Length:\s*(\d+)") {
-        $contentLength = [int]$Matches[1]
-      }
-    }
-
     if ($method -eq "OPTIONS") {
-      Send-HttpResponse $stream 204 "{}"
+      Send-HttpResponse $stream 204 "{}" "application/json; charset=utf-8"
       return
     }
 
     if ($method -eq "GET" -and $path -eq "/health") {
       $dp = Get-DefaultPrinterName
       $json = (@{ ok = $true; printer = $dp } | ConvertTo-Json -Compress)
-      Send-HttpResponse $stream 200 $json
+      Send-HttpResponse $stream 200 $json "application/json; charset=utf-8"
+      return
+    }
+
+    if ($method -eq "GET" -and $path -eq "/bridge") {
+      Send-HttpResponse $stream 200 $BridgeHtml "text/html; charset=utf-8"
       return
     }
 
     if ($method -eq "POST" -and $path -eq "/print") {
-      $rawBody = Read-RequestBody $stream $contentLength
       try {
-        $payload = $rawBody | ConvertFrom-Json
-        $b64 = [string]$payload.data
-        if (-not $b64) { throw "Missing data" }
-        $name = [string]$payload.printerName
-        if (-not $name -or $name -eq "default") {
-          $name = Get-DefaultPrinterName
-        }
-        if (-not $name) { throw "Set a default printer in Windows" }
-        $bytes = [Convert]::FromBase64String($b64)
-        Send-RawPrint $bytes $name
-        Write-Log "Printed $($bytes.Length) bytes to $name"
-        $json = (@{ ok = $true; printer = $name; bytes = $bytes.Length } | ConvertTo-Json -Compress)
-        Send-HttpResponse $stream 200 $json
+        $json = Handle-PrintRequest $request.Body
+        Send-HttpResponse $stream 200 $json "application/json; charset=utf-8"
       } catch {
         $msg = $_.Exception.Message -replace '"', "'"
         Write-Log "Print error: $msg"
-        Send-HttpResponse $stream 500 "{ `"error`": `"$msg`" }"
+        Send-HttpResponse $stream 500 "{ `"error`": `"$msg`" }" "application/json; charset=utf-8"
       }
       return
     }
 
-    Send-HttpResponse $stream 404 "{ `"error`": `"Not found`" }"
+    Send-HttpResponse $stream 404 "{ `"error`": `"Not found`" }" "application/json; charset=utf-8"
   } catch {
     Write-Log "Client error: $($_.Exception.Message)"
   } finally {

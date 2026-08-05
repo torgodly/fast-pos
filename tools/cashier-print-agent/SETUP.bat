@@ -21,7 +21,7 @@ if /I not "%OK%"=="Y" (
 
 echo.
 echo  Step 1: Set receipt printer as DEFAULT in Windows Settings
-echo  Step 2: Adding auto-start...
+echo  Step 2: Free port 9288 and start agent...
 echo.
 
 set "STARTUP=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup"
@@ -36,32 +36,43 @@ echo shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle H
 echo  [OK] Will start automatically when Windows starts.
 echo.
 
-REM Stop any old hidden agent on port 9288 (same script only)
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" ^| Where-Object { $_.CommandLine -like '*print-agent.ps1*' } ^| ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" 2>nul
-
-start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%AGENT%"
-
-echo  Waiting for agent to start...
-timeout /t 3 /nobreak >nul
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-  "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:9288/health' -UseBasicParsing -TimeoutSec 5; Write-Host '  [OK] Agent health:' $r.Content; exit 0 } catch { Write-Host '  [FAIL] Agent did not start.'; Write-Host '         ' $_.Exception.Message; if (Test-Path '%~dp0print-agent.log') { Get-Content '%~dp0print-agent.log' -Tail 3 }; exit 1 }"
-
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop-agent.ps1"
 if errorlevel 1 (
   echo.
-  echo  SETUP did NOT finish OK. Run START-DEBUG.bat and read the error.
-  echo  Common fixes:
-  echo    - Set USB printer as Default in Windows
-  echo    - Close other program using port 9288
-  echo    - Run START-DEBUG.bat on this PC
+  echo  Could not free port 9288 automatically.
+  echo  Run STOP.bat as Administrator, or restart this PC, then SETUP again.
   pause
   exit /b 1
 )
 
+start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%AGENT%"
+
+echo  Waiting for agent to start...
+set RETRIES=0
+
+:CHECK_LOOP
+timeout /t 2 /nobreak >nul
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:9288/health' -UseBasicParsing -TimeoutSec 5; Write-Host '  [OK] Agent health:' $r.Content; exit 0 } catch { exit 1 }"
+if not errorlevel 1 goto SETUP_OK
+
+set /a RETRIES+=1
+if %RETRIES% LSS 5 goto CHECK_LOOP
+
+echo  [FAIL] Agent did not start.
+if exist "%~dp0print-agent.log" (
+  echo.
+  echo  --- print-agent.log (last lines) ---
+  powershell.exe -NoProfile -Command "Get-Content '%~dp0print-agent.log' -Tail 5"
+)
+echo.
+echo  Run START-DEBUG.bat on this PC to see the error in a window.
+pause
+exit /b 1
+
+:SETUP_OK
 echo.
 echo  [OK] Print agent is running on this PC.
+echo  Run CHECK.bat anytime to verify.
 echo  Open cashier in Chrome ON THIS PC: http://192.168.1.122:3000
-echo  Then pick your USB station and click test print.
 echo.
 pause
