@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { loginAdmin } from "@/app/actions/auth";
 
 export function AdminLoginForm({ resetNotice = false }: { resetNotice?: boolean }) {
   const [error, setError] = useState<string | null>(null);
@@ -21,15 +20,25 @@ export function AdminLoginForm({ resetNotice = false }: { resetNotice?: boolean 
 
   function onSubmit(formData: FormData) {
     startTransition(async () => {
-      const result = await loginAdmin(
-        String(formData.get("username") ?? ""),
-        String(formData.get("password") ?? ""),
-      );
-      if (result && "ok" in result && result.ok) {
-        window.location.href = result.redirectTo;
-        return;
+      setError(null);
+      try {
+        const response = await fetch("/api/auth/admin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: String(formData.get("username") ?? ""),
+            password: String(formData.get("password") ?? ""),
+          }),
+        });
+        const result = await response.json();
+        if (result.ok && result.redirectTo) {
+          window.location.href = result.redirectTo;
+          return;
+        }
+        setError(result.error ?? "تعذر تسجيل الدخول");
+      } catch {
+        setError("تعذر الاتصال بالسيرفر");
       }
-      if (result?.error) setError(result.error);
     });
   }
 

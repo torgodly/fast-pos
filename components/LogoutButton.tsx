@@ -2,7 +2,6 @@
 
 import { useTransition } from "react";
 import { LogOut } from "lucide-react";
-import { logout } from "@/app/actions/auth";
 
 type LogoutButtonProps = {
   className?: string;
@@ -15,8 +14,11 @@ export function LogoutButton({ className, children, label }: LogoutButtonProps) 
 
   function onClick() {
     startTransition(async () => {
-      await logout();
-      window.location.href = "/";
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } finally {
+        window.location.href = "/";
+      }
     });
   }
 

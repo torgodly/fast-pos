@@ -47,6 +47,7 @@ export function FactoryResetPanel() {
       setError(null);
       const result = await factoryResetDatabase(password);
       if (result && "ok" in result && result.ok) {
+        await fetch("/api/auth/logout", { method: "POST" });
         window.location.href = "/admin/login?reset=1";
         return;
       }

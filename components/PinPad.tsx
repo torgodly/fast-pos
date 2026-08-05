@@ -9,7 +9,6 @@ import {
   RotateCcw,
   ShieldCheck,
 } from "lucide-react";
-import { loginWithPin } from "@/app/actions/auth";
 
 export function PinPad({ venueId, venueName }: { venueId: string; venueName: string }) {
   const [pin, setPin] = useState("");
@@ -33,13 +32,22 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
 
   function submit() {
     startTransition(async () => {
-      const result = await loginWithPin(venueId, pin);
-      if (result && "ok" in result && result.ok) {
-        window.location.href = result.redirectTo;
-        return;
-      }
-      if (result?.error) {
-        setError(result.error);
+      setError(null);
+      try {
+        const response = await fetch("/api/auth/pin", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ venueId, pin }),
+        });
+        const result = await response.json();
+        if (result.ok && result.redirectTo) {
+          window.location.href = result.redirectTo;
+          return;
+        }
+        setError(result.error ?? "رمز الدخول غير صحيح");
+        setPin("");
+      } catch {
+        setError("تعذر الاتصال بالسيرفر");
         setPin("");
       }
     });
