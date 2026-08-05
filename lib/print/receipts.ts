@@ -97,7 +97,7 @@ export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
     <div class="line"></div>
     <div class="row"><span>فاتورة</span><span class="bold">#${data.orderId}</span></div>
     <div class="row"><span>الطاولة</span><span class="bold">${escapeHtml(data.tableName)}</span></div>
-    <div class="row"><span>النادل</span><span class="bold">${escapeHtml(data.waiterName)}</span></div>
+    <div class="row"><span>السفرادجي</span><span class="bold">${escapeHtml(data.waiterName)}</span></div>
     <div class="row"><span>الوقت</span><span>${escapeHtml(data.createdAt)}</span></div>
     <div class="line"></div>
     ${lines}
@@ -137,7 +137,7 @@ export function buildCheckoutReceiptHtml(data: CheckoutReceiptData) {
     <div class="row"><span>الطاولة</span><span class="bold">${escapeHtml(data.tableName)}</span></div>
     ${
       data.waiterName
-        ? `<div class="row"><span>النادل</span><span>${escapeHtml(data.waiterName)}</span></div>`
+        ? `<div class="row"><span>السفرادجي</span><span>${escapeHtml(data.waiterName)}</span></div>`
         : ""
     }
     <div class="row"><span>الكاشير</span><span>${escapeHtml(data.cashierName)}</span></div>

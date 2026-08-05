@@ -24,6 +24,7 @@ type Item = {
   name: string;
   price: number;
   categoryId: number;
+  active?: boolean;
 };
 type Line = {
   id: number;
@@ -158,7 +159,7 @@ export function OrderMenu({
 
   return (
     <>
-      <div className="grid flex-1 gap-5 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0">
+      <div className="grid flex-1 gap-4 pb-32 md:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-7">
           {categories.map((cat) => {
             const catItems = items.filter((item) => item.categoryId === cat.id);
@@ -174,30 +175,61 @@ export function OrderMenu({
                     {catItems.length}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                  {catItems.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="group card min-h-28 border border-base-300/70 bg-base-100 text-right shadow-sm transition duration-200 hover:border-primary/30 hover:shadow-md disabled:opacity-60 sm:min-h-32"
-                      disabled={pending}
-                      onClick={() => add(item.id)}
-                    >
-                      <span className="card-body w-full justify-between p-4">
-                        <span className="grid size-9 place-items-center rounded-xl bg-base-200 text-base-content/35 transition group-hover:bg-primary/10 group-hover:text-primary">
-                          <Plus className="size-4" />
-                        </span>
-                        <span>
-                          <span className="block line-clamp-2 font-black">
-                            {item.name}
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                  {catItems.map((item) => {
+                    const available = item.active !== false;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`group card min-h-32 touch-manipulation text-right shadow-sm transition duration-200 md:min-h-36 ${
+                          available
+                            ? "border border-base-300/70 bg-base-100 hover:border-primary/30 hover:shadow-md disabled:opacity-60"
+                            : "cursor-not-allowed border-2 border-error/35 bg-base-200 text-base-content opacity-100 shadow-sm disabled:bg-base-200 disabled:text-base-content disabled:opacity-100"
+                        }`}
+                        disabled={pending || !available}
+                        onClick={() => {
+                          if (!available) return;
+                          add(item.id);
+                        }}
+                        title={
+                          available
+                            ? undefined
+                            : "غير متوفر حالياً — أخبر الزبون بذلك"
+                        }
+                      >
+                        <span className="card-body w-full justify-between gap-3 p-4 md:p-5 lg:p-4 xl:p-5">
+                          {available ? (
+                            <span className="grid size-9 place-items-center rounded-xl bg-base-200 text-base-content/35 transition group-hover:bg-primary/10 group-hover:text-primary">
+                              <Plus className="size-4" />
+                            </span>
+                          ) : (
+                            <span className="grid size-9 place-items-center rounded-xl bg-error text-error-content shadow-sm">
+                              <X className="size-4" />
+                            </span>
+                          )}
+                          <span>
+                            <span
+                              className={`block line-clamp-2 text-base font-black leading-6 ${
+                                available ? "" : "text-base-content"
+                              }`}
+                            >
+                              {item.name}
+                            </span>
+                            {available ? (
+                              <span className="mt-1 block text-sm font-bold text-primary">
+                                {formatMoney(item.price)}
+                              </span>
+                            ) : (
+                              <span className="mt-1 inline-flex rounded-lg bg-error/10 px-2 py-1 text-xs font-black leading-5 text-error">
+                                غير متوفر حالياً
+                              </span>
+                            )}
                           </span>
-                          <span className="mt-1 block text-sm font-bold text-primary">
-                            {formatMoney(item.price)}
-                          </span>
                         </span>
-                      </span>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </section>
             );
@@ -214,7 +246,7 @@ export function OrderMenu({
           )}
         </div>
 
-        <aside className="premium-card sticky top-24 hidden h-fit overflow-hidden lg:card lg:block">
+        <aside className="premium-card sticky top-20 hidden h-fit max-h-[calc(100dvh-6rem)] overflow-hidden lg:card lg:block xl:top-24">
           <div className="flex items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
             <div className="flex items-center gap-2">
               <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
@@ -231,11 +263,11 @@ export function OrderMenu({
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 p-3 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
         <button
           type="button"
           onClick={() => setCartOpen(true)}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3.5 text-primary-content shadow-lg shadow-primary/20"
+          className="flex min-h-16 w-full touch-manipulation items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3.5 text-primary-content shadow-lg shadow-primary/20 md:mx-auto md:max-w-2xl md:px-6"
         >
           <span className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-white/15">
@@ -265,7 +297,7 @@ export function OrderMenu({
             aria-label="إغلاق الفاتورة"
             onClick={() => setCartOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
+          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl bg-base-100 pb-[env(safe-area-inset-bottom)] shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
             <div className="flex items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
                 <p className="font-black">ملخص الفاتورة</p>

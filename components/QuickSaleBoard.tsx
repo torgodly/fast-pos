@@ -17,9 +17,9 @@ import {
 } from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
 import {
-  buildCheckoutReceiptHtml,
-  printHtmlReceipt,
-} from "@/lib/print/receipts";
+  ActionFeedback,
+  type ActionFeedbackTone,
+} from "@/components/ActionFeedback";
 import { formatMoney } from "@/lib/venues";
 
 type Category = { id: number; name: string };
@@ -43,7 +43,8 @@ export function QuickSaleBoard({
   const [cart, setCart] = useState<QuickSaleLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [method, setMethod] = useState<"cash" | "card" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [tone, setTone] = useState<ActionFeedbackTone>("info");
+  const [message, setMessage] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const total = useMemo(
@@ -56,7 +57,7 @@ export function QuickSaleBoard({
   );
 
   function add(item: Item) {
-    setError(null);
+    setMessage(null);
     setCart((prev) => {
       const existing = prev.find((line) => line.itemId === item.id);
       if (existing) {
@@ -90,10 +91,11 @@ export function QuickSaleBoard({
 
   function askConfirm(selected: "cash" | "card") {
     if (cart.length === 0) {
-      setError("أضف أصنافاً قبل الدفع");
+      setTone("error");
+      setMessage("أضف أصنافاً قبل الدفع");
       return;
     }
-    setError(null);
+    setMessage(null);
     setMethod(selected);
     const dialog = document.getElementById(
       "quick-sale-confirm",
@@ -111,23 +113,21 @@ export function QuickSaleBoard({
 
   function confirmPay() {
     if (!method) return;
+    setTone("pending");
+    setMessage("جاري الدفع والطباعة...");
     startTransition(async () => {
       const result = await payQuickSale(venueId, cart, method);
       if ("error" in result) {
-        setError(result.error);
+        setTone("error");
+        setMessage(result.error);
         return;
       }
 
       closeModal();
       setCart([]);
       setCartOpen(false);
-
-      try {
-        await printHtmlReceipt(buildCheckoutReceiptHtml(result.receipt));
-      } catch {
-        // Sale is recorded even if printing fails
-      }
-
+      setTone(result.printOk ? "success" : "warning");
+      setMessage(result.message);
       router.refresh();
     });
   }
@@ -234,8 +234,10 @@ export function QuickSaleBoard({
         </button>
       </div>
 
-      {error ? (
-        <p className="mt-2 text-center text-sm font-bold text-error">{error}</p>
+      {message ? (
+        <div className="mt-2">
+          <ActionFeedback tone={tone} message={message} />
+        </div>
       ) : null}
     </>
   );
@@ -411,7 +413,7 @@ export function QuickSaleBoard({
               {pending ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />
-                  جاري الدفع...
+                  جاري الدفع والطباعة...
                 </>
               ) : (
                 `تأكيد الدفع ${methodLabel}`

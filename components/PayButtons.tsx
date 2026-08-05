@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Banknote, CreditCard, LoaderCircle } from "lucide-react";
 import { payOrder } from "@/app/actions/orders";
 import {
-  buildCheckoutReceiptHtml,
-  printHtmlReceipt,
-} from "@/lib/print/receipts";
+  ActionFeedback,
+  type ActionFeedbackTone,
+} from "@/components/ActionFeedback";
 
 export function PayButtons({
   orderId,
@@ -20,10 +20,11 @@ export function PayButtons({
   const dialogId = useId().replace(/:/g, "");
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<"cash" | "card" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [tone, setTone] = useState<ActionFeedbackTone>("info");
+  const [message, setMessage] = useState<string | null>(null);
 
   function askConfirm(method: "cash" | "card") {
-    setError(null);
+    setMessage(null);
     setSelected(method);
     const dialog = document.getElementById(dialogId) as HTMLDialogElement | null;
     dialog?.showModal();
@@ -37,25 +38,26 @@ export function PayButtons({
 
   function confirmPay() {
     if (!selected) return;
+    setTone("pending");
+    setMessage("جاري الدفع والطباعة...");
     startTransition(async () => {
-      setError(null);
       const result = await payOrder(orderId, selected);
 
       if ("error" in result) {
-        setError(result.error);
+        setTone("error");
+        setMessage(result.error);
         return;
       }
 
       closeModal();
+      setTone(result.printOk ? "success" : "warning");
+      setMessage(result.message);
 
-      try {
-        await printHtmlReceipt(buildCheckoutReceiptHtml(result.receipt));
-      } catch {
-        // Payment succeeded — still leave the paid order page
-      }
-
-      router.replace(result.nextUrl);
-      router.refresh();
+      // Give the cashier a moment to read feedback, then leave paid order
+      window.setTimeout(() => {
+        router.replace(result.nextUrl);
+        router.refresh();
+      }, result.printOk ? 600 : 1800);
     });
   }
 
@@ -84,9 +86,7 @@ export function PayButtons({
         </button>
       </div>
 
-      {error ? (
-        <p className="mt-2 text-center text-sm font-bold text-error">{error}</p>
-      ) : null}
+      <ActionFeedback tone={tone} message={message} />
 
       <dialog id={dialogId} className="modal modal-bottom sm:modal-middle">
         <div className="modal-box max-w-md rounded-t-3xl sm:rounded-3xl">
@@ -136,13 +136,18 @@ export function PayButtons({
               {pending ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />
-                  جاري الدفع...
+                  جاري الدفع والطباعة...
                 </>
               ) : (
                 `تأكيد الدفع ${methodLabel}`
               )}
             </button>
           </div>
+          {pending || message ? (
+            <div className="mt-4">
+              <ActionFeedback tone={tone} message={message} />
+            </div>
+          ) : null}
         </div>
         <form method="dialog" className="modal-backdrop">
           <button

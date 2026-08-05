@@ -61,7 +61,7 @@ export default async function PinPage({
               {getVenueName(venue)}
             </h2>
             <p className="mt-5 max-w-md text-lg leading-8 text-base-content/55">
-              أدخل رمزك للوصول إلى شاشة النادل أو الكاشير. سيتم تحديد دورك
+              أدخل رمزك للوصول إلى شاشة السفرادجي أو الكاشير. سيتم تحديد دورك
               تلقائياً.
             </p>
           </section>

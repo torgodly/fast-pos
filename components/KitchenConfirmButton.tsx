@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import { ChefHat, LoaderCircle, Printer } from "lucide-react";
 import { confirmKitchenOrder } from "@/app/actions/orders";
 import {
-  buildKitchenReceiptHtml,
-  printHtmlReceipt,
-} from "@/lib/print/receipts";
+  ActionFeedback,
+  type ActionFeedbackTone,
+} from "@/components/ActionFeedback";
 
 export function KitchenConfirmButton({
   orderId,
@@ -16,24 +16,21 @@ export function KitchenConfirmButton({
   disabled?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [okMessage, setOkMessage] = useState<string | null>(null);
+  const [tone, setTone] = useState<ActionFeedbackTone>("info");
+  const [message, setMessage] = useState<string | null>(null);
 
   function confirm() {
-    setError(null);
-    setOkMessage(null);
+    setTone("pending");
+    setMessage("جاري الإرسال للمطبخ...");
     startTransition(async () => {
       const result = await confirmKitchenOrder(orderId);
       if ("error" in result) {
-        setError(result.error);
+        setTone("error");
+        setMessage(result.error);
         return;
       }
-      try {
-        await printHtmlReceipt(buildKitchenReceiptHtml(result.receipt));
-        setOkMessage("تم إرسال الطلب للمطبخ وطباعة الإيصال");
-      } catch {
-        setError("تم تأكيد الطلب لكن فشلت الطباعة — تحقق من الطابعة");
-      }
+      setTone(result.failed.length > 0 ? "warning" : "success");
+      setMessage(result.message);
     });
   }
 
@@ -51,14 +48,9 @@ export function KitchenConfirmButton({
           <Printer className="size-5" />
         )}
         <ChefHat className="size-5" />
-        تأكيد الطلب وطباعة للمطبخ
+        {pending ? "جاري الإرسال للمطبخ..." : "تأكيد الطلب وطباعة للمطبخ"}
       </button>
-      {error ? (
-        <p className="text-center text-sm font-bold text-error">{error}</p>
-      ) : null}
-      {okMessage ? (
-        <p className="text-center text-sm font-bold text-success">{okMessage}</p>
-      ) : null}
+      <ActionFeedback tone={tone} message={message} />
     </div>
   );
 }

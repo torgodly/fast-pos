@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { Boxes, FolderPlus, PackagePlus, Power, Tag } from "lucide-react";
 import {
   setCategoryActive,
@@ -10,7 +10,7 @@ import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
-import { categories, items } from "@/lib/db/schema";
+import { categories, items, printers } from "@/lib/db/schema";
 import { formatMoney, getVenueName } from "@/lib/venues";
 
 export default async function AdminItemsPage({
@@ -33,6 +33,26 @@ export default async function AdminItemsPage({
     .select()
     .from(items)
     .where(eq(items.venueId, venue))
+    .all();
+
+  const kitchenPrinters = db
+    .select()
+    .from(printers)
+    .where(
+      and(
+        eq(printers.venueId, venue),
+        eq(printers.role, "kitchen"),
+        eq(printers.active, true),
+      ),
+    )
+    .orderBy(asc(printers.name))
+    .all();
+
+  // Include inactive printers still linked to items for display names
+  const allKitchenPrinters = db
+    .select()
+    .from(printers)
+    .where(and(eq(printers.venueId, venue), eq(printers.role, "kitchen")))
     .all();
 
   return (
@@ -129,7 +149,7 @@ export default async function AdminItemsPage({
                         >
                           <Power className="size-4" />
                           <span className="sr-only">
-                          {cat.active ? "تعطيل" : "تفعيل"}
+                            {cat.active ? "تعطيل" : "تفعيل"}
                           </span>
                         </button>
                       </form>
@@ -158,13 +178,13 @@ export default async function AdminItemsPage({
             <div>
               <h3 className="font-black">قائمة الأصناف</h3>
               <p className="text-xs text-base-content/45">
-                أضف الأسعار واربطها بالتصنيفات
+                اربط كل صنف بطابعة المطبخ المناسبة
               </p>
             </div>
           </div>
           <form
             action={upsertItem}
-            className="grid gap-3 rounded-2xl bg-base-200/60 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[1fr_1fr_150px_auto]"
+            className="grid gap-3 rounded-2xl bg-base-200/60 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[1fr_1fr_140px_1fr_auto]"
           >
             <input type="hidden" name="venueId" value={venue} />
             <input
@@ -199,6 +219,18 @@ export default async function AdminItemsPage({
               className="input input-bordered w-full bg-base-100"
               required
             />
+            <select
+              name="kitchenPrinterId"
+              className="select select-bordered w-full bg-base-100"
+              defaultValue=""
+            >
+              <option value="">بدون طابعة مطبخ</option>
+              {kitchenPrinters.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
             <button type="submit" className="btn btn-primary gap-2">
               <PackagePlus className="size-4" />
               إضافة صنف
@@ -211,6 +243,7 @@ export default async function AdminItemsPage({
                 <tr>
                   <th>الاسم</th>
                   <th>التصنيف</th>
+                  <th>طابعة المطبخ</th>
                   <th>السعر</th>
                   <th>الحالة</th>
                   <th></th>
@@ -219,6 +252,9 @@ export default async function AdminItemsPage({
               <tbody>
                 {allItems.map((item) => {
                   const cat = cats.find((c) => c.id === item.categoryId);
+                  const printer = allKitchenPrinters.find(
+                    (p) => p.id === item.kitchenPrinterId,
+                  );
                   return (
                     <tr
                       key={item.id}
@@ -226,6 +262,11 @@ export default async function AdminItemsPage({
                     >
                       <td>{item.name}</td>
                       <td>{cat?.name ?? "-"}</td>
+                      <td>
+                        {printer?.name ?? (
+                          <span className="text-warning">غير مربوطة</span>
+                        )}
+                      </td>
                       <td>{formatMoney(item.price)}</td>
                       <td>
                         <span
@@ -252,7 +293,7 @@ export default async function AdminItemsPage({
                           >
                             <Power className="size-4" />
                             <span className="sr-only">
-                            {item.active ? "تعطيل" : "تفعيل"}
+                              {item.active ? "تعطيل" : "تفعيل"}
                             </span>
                           </button>
                         </form>
@@ -262,7 +303,7 @@ export default async function AdminItemsPage({
                 })}
                 {allItems.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center opacity-60">
+                    <td colSpan={6} className="text-center opacity-60">
                       لا توجد أصناف بعد
                     </td>
                   </tr>

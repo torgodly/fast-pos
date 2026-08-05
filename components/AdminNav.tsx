@@ -7,6 +7,7 @@ import {
   Boxes,
   LayoutDashboard,
   LogOut,
+  Printer,
   Sparkles,
   TableProperties,
   UsersRound,
@@ -18,6 +19,7 @@ const links = [
   { href: "/admin/items", label: "الأصناف", icon: Boxes },
   { href: "/admin/tables", label: "الطاولات", icon: TableProperties },
   { href: "/admin/staff", label: "الموظفون", icon: UsersRound },
+  { href: "/admin/printers", label: "الطابعات", icon: Printer },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
 ];
 

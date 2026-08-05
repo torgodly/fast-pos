@@ -17,7 +17,7 @@ export default async function HomePage() {
   const session = await getSession();
   const roleLabel =
     session?.role === "waiter"
-      ? "نادل"
+      ? "سفرادجي"
       : session?.role === "cashier"
         ? "كاشير"
         : session?.role === "admin"

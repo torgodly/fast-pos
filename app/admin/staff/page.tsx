@@ -59,7 +59,7 @@ export default async function AdminStaffPage() {
               className="select select-bordered w-full bg-base-100"
               required
             >
-              <option value="waiter">نادل</option>
+              <option value="waiter">سفرادجي</option>
               <option value="cashier">كاشير</option>
             </select>
             <input
@@ -108,7 +108,7 @@ export default async function AdminStaffPage() {
                         ) : (
                           <WalletCards className="size-3.5" />
                         )}
-                        {person.role === "waiter" ? "نادل" : "كاشير"}
+                        {person.role === "waiter" ? "سفرادجي" : "كاشير"}
                       </span>
                     </td>
                     <td>

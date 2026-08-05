@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   ArrowLeft,
@@ -12,9 +12,11 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
+import { getSelectedStationId } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
+import { StationPicker } from "@/components/StationPicker";
 import { db } from "@/lib/db";
-import { orders, tables, users } from "@/lib/db/schema";
+import { cashierStations, orders, printers, tables, users } from "@/lib/db/schema";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierHomePage({
@@ -26,6 +28,26 @@ export default async function CashierHomePage({
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
   const waiter = alias(users, "waiter");
+  const selectedStationId = await getSelectedStationId(venue);
+
+  const stations = db
+    .select({
+      id: cashierStations.id,
+      name: cashierStations.name,
+      printerName: printers.name,
+      printerHost: printers.host,
+    })
+    .from(cashierStations)
+    .innerJoin(printers, eq(cashierStations.printerId, printers.id))
+    .where(
+      and(
+        eq(cashierStations.venueId, venue),
+        eq(cashierStations.active, true),
+        eq(printers.active, true),
+      ),
+    )
+    .orderBy(asc(cashierStations.name))
+    .all();
 
   const openOrders = db
     .select({
@@ -42,41 +64,80 @@ export default async function CashierHomePage({
     .where(and(eq(orders.venueId, venue), eq(orders.status, "open")))
     .all();
 
+  const hasStation = selectedStationId != null &&
+    stations.some((s) => s.id === selectedStationId);
+
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
       <main className="page-shell flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-5 text-neutral-content shadow-xl sm:p-7">
           <div className="absolute -bottom-24 -left-12 size-56 rounded-full bg-white/5" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-sm font-bold text-white/60">
-                <WalletCards className="size-4" />
-                شاشة الكاشير
+          <div className="relative space-y-5">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="mb-2 flex items-center gap-2 text-sm font-bold text-white/60">
+                  <WalletCards className="size-4" />
+                  شاشة الكاشير
+                </div>
+                <h2 className="text-2xl font-black sm:text-3xl">
+                  الفواتير المفتوحة
+                </h2>
+                <p className="mt-1 text-sm text-white/55">
+                  {openOrders.length} فاتورة بانتظار التحصيل
+                </p>
               </div>
-              <h2 className="text-2xl font-black sm:text-3xl">
-                الفواتير المفتوحة
-              </h2>
-              <p className="mt-1 text-sm text-white/55">
-                {openOrders.length} فاتورة بانتظار التحصيل
-              </p>
+              {hasStation ? (
+                <Link
+                  href={`/cashier/${venue}/quick`}
+                  className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
+                >
+                  <Plus className="size-4" />
+                  بيع سريع
+                </Link>
+              ) : (
+                <button
+                  type="button"
+                  className="btn border-white/15 bg-white/40 text-neutral"
+                  disabled
+                  title="اختر محطة أولاً"
+                >
+                  <Plus className="size-4" />
+                  بيع سريع
+                </button>
+              )}
             </div>
-            <Link
-              href={`/cashier/${venue}/quick`}
-              className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
-            >
-              <Plus className="size-4" />
-              بيع سريع
-            </Link>
+
+            <StationPicker
+              venueId={venue}
+              stations={stations}
+              selectedStationId={hasStation ? selectedStationId : null}
+            />
           </div>
         </section>
+
+        {!hasStation ? (
+          <div className="alert alert-warning rounded-2xl">
+            <span className="font-bold">
+              اختر محطة الكاشير أعلاه قبل التحصيل أو البيع السريع
+            </span>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
           {openOrders.map((order) => (
             <Link
               key={order.id}
-              href={`/cashier/${venue}/order/${order.id}`}
-              className="premium-card group card transition duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg"
+              href={
+                hasStation
+                  ? `/cashier/${venue}/order/${order.id}`
+                  : `/cashier/${venue}`
+              }
+              className={`premium-card group card transition duration-200 ${
+                hasStation
+                  ? "hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg"
+                  : "pointer-events-none opacity-50"
+              }`}
             >
               <div className="card-body gap-4 p-5">
                 <div className="flex items-start justify-between">
@@ -97,7 +158,7 @@ export default async function CashierHomePage({
                   </h3>
                   <p className="mt-1 flex items-center gap-1 text-xs text-base-content/45">
                     <UserRound className="size-3" />
-                    {order.waiterName ?? "بدون نادل"}
+                    {order.waiterName ?? "بدون سفرادجي"}
                   </p>
                 </div>
                 <div className="flex items-end justify-between border-t border-base-300/60 pt-4">
@@ -124,7 +185,7 @@ export default async function CashierHomePage({
             </span>
             <p className="text-lg font-black">لا توجد فواتير مفتوحة حالياً</p>
             <p className="mt-1 text-sm text-base-content/45">
-              يمكنك بدء بيع سريع من الزر أعلاه
+              يمكنك بدء بيع سريع من الزر أعلاه بعد اختيار المحطة
             </p>
           </div>
         )}

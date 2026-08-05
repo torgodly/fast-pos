@@ -51,7 +51,7 @@ export default async function WaiterFloorPage({
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="نادل" />
+      <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
       <main className="page-shell flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
         <section className="premium-card flex flex-col gap-5 rounded-3xl p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>

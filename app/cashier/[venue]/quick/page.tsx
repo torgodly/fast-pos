@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { ArrowRight, Zap } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
+import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
 import { QuickSaleBoard } from "@/components/QuickSaleBoard";
 import { db } from "@/lib/db";
@@ -17,6 +18,11 @@ export default async function CashierQuickPage({
   const { venue } = await params;
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
+
+  const stationCtx = await getCashierStationContext(venue);
+  if ("error" in stationCtx) {
+    redirect(`/cashier/${venue}`);
+  }
 
   const cats = db
     .select()
@@ -43,7 +49,8 @@ export default async function CashierQuickPage({
             <div>
               <h2 className="text-xl font-black sm:text-2xl">بيع سريع</h2>
               <p className="text-xs text-base-content/45 sm:text-sm">
-                أضف الأصناف واستلم الدفع مباشرة — تُسجّل الفاتورة عند الدفع فقط
+                المحطة: {stationCtx.station.name} — الطباعة على{" "}
+                {stationCtx.printer.name}
               </p>
             </div>
           </div>

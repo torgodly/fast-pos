@@ -83,7 +83,7 @@ export default async function CashierOrderPage({
             </h2>
             <p className="text-xs text-base-content/45 sm:text-sm">
               {table?.name ?? "بيع سريع"}
-              {waiter ? ` — النادل: ${waiter.name}` : ""}
+              {waiter ? ` — السفرادجي: ${waiter.name}` : ""}
             </p>
             </div>
           </div>

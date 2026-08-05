@@ -52,10 +52,11 @@ export default async function WaiterOrderPage({
     .orderBy(asc(categories.sortOrder))
     .all();
 
+  // Show inactive items too so staff can tell guests they're unavailable
   const menuItems = db
     .select()
     .from(items)
-    .where(and(eq(items.venueId, venue), eq(items.active, true)))
+    .where(eq(items.venueId, venue))
     .all();
 
   const lines = db
@@ -66,7 +67,7 @@ export default async function WaiterOrderPage({
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="نادل" />
+      <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
       <main className="page-shell flex flex-1 flex-col gap-5 p-4 sm:p-6 lg:p-8">
         <div className="premium-card flex flex-col gap-4 rounded-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-3">

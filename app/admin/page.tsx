@@ -73,7 +73,7 @@ export default async function AdminHomePage() {
     {
       label: "الموظفون",
       value: String(staffCount),
-      hint: "نادل وكاشير",
+      hint: "سفرادجي وكاشير",
       href: "/admin/staff",
       icon: UsersRound,
       color: "text-accent-content bg-accent/15",

@@ -3,12 +3,14 @@
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
   items,
   orderItems,
   orders,
+  printers,
   tables,
   users,
 } from "@/lib/db/schema";
@@ -18,10 +20,12 @@ import {
   getVenueName,
   isVenueId,
 } from "@/lib/venues";
-import type {
-  CheckoutReceiptData,
-  KitchenReceiptData,
-} from "@/lib/print/receipts";
+import type { CheckoutReceiptData } from "@/lib/print/receipts";
+import {
+  buildCheckoutEscPos,
+  buildKitchenEscPos,
+} from "@/lib/print/escpos";
+import { printToPrinter } from "@/lib/print/network";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -188,9 +192,20 @@ export async function removeOrderItem(orderItemId: number) {
   return updateOrderItemQty(orderItemId, 0);
 }
 
+export type PrintTargetResult = {
+  printerId: number;
+  printerName: string;
+  host: string;
+};
+
 export async function confirmKitchenOrder(orderId: number): Promise<
   | { error: string }
-  | { ok: true; receipt: KitchenReceiptData; alreadySent?: boolean }
+  | {
+      ok: true;
+      printedTo: PrintTargetResult[];
+      failed: Array<PrintTargetResult & { reason: string }>;
+      message: string;
+    }
 > {
   const session = await getSession();
   if (!session || session.role !== "waiter") {
@@ -211,23 +226,125 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     .where(eq(orderItems.orderId, orderId))
     .all();
 
-  const pendingLines = lines
-    .map((line) => ({
-      name: line.itemName,
-      qty: line.qty - (line.kitchenSentQty ?? 0),
-    }))
-    .filter((line) => line.qty > 0);
-
   if (lines.length === 0) {
     return { error: "أضف أصنافاً قبل الإرسال للمطبخ" };
   }
 
-  if (pendingLines.length === 0) {
+  type Pending = {
+    lineId: number;
+    name: string;
+    qty: number;
+    printerId: number;
+    printerName: string;
+    host: string;
+    port: number;
+  };
+
+  const pending: Pending[] = [];
+
+  for (const line of lines) {
+    const qty = line.qty - (line.kitchenSentQty ?? 0);
+    if (qty <= 0) continue;
+
+    if (!line.itemId) {
+      return { error: `الصنف "${line.itemName}" غير مربوط بقائمة الأصناف` };
+    }
+
+    const item = db.select().from(items).where(eq(items.id, line.itemId)).get();
+    if (!item?.kitchenPrinterId) {
+      return {
+        error: `الصنف "${line.itemName}" بدون طابعة مطبخ — اربطه من الإدارة`,
+      };
+    }
+
+    const printer = db
+      .select()
+      .from(printers)
+      .where(
+        and(
+          eq(printers.id, item.kitchenPrinterId),
+          eq(printers.role, "kitchen"),
+          eq(printers.active, true),
+        ),
+      )
+      .get();
+
+    if (!printer) {
+      return {
+        error: `طابعة المطبخ للصنف "${line.itemName}" غير متاحة`,
+      };
+    }
+
+    pending.push({
+      lineId: line.id,
+      name: line.itemName,
+      qty,
+      printerId: printer.id,
+      printerName: printer.name,
+      host: printer.host,
+      port: printer.port,
+    });
+  }
+
+  if (pending.length === 0) {
     return { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" };
   }
 
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
+
+  const createdAt = formatDateTime(
+    new Date().toISOString().slice(0, 19).replace("T", " "),
+  );
+
+  const groups = new Map<number, Pending[]>();
+  for (const row of pending) {
+    const list = groups.get(row.printerId) ?? [];
+    list.push(row);
+    groups.set(row.printerId, list);
+  }
+
+  const printedTo: PrintTargetResult[] = [];
+  const failed: Array<PrintTargetResult & { reason: string }> = [];
+  const succeededLineIds = new Set<number>();
+
+  for (const [printerId, group] of groups) {
+    const sample = group[0]!;
+    const target = {
+      printerId,
+      printerName: sample.printerName,
+      host: sample.host,
+    };
+    try {
+      const payload = buildKitchenEscPos({
+        venueName: getVenueName(order.venueId),
+        orderId: order.id,
+        tableName: table?.name ?? "بدون طاولة",
+        waiterName: session.name,
+        createdAt,
+        lines: group.map((g) => ({ name: g.name, qty: g.qty })),
+      });
+      await printToPrinter({
+        host: sample.host,
+        port: sample.port,
+        data: payload,
+      });
+      printedTo.push(target);
+      for (const g of group) succeededLineIds.add(g.lineId);
+    } catch (error) {
+      failed.push({
+        ...target,
+        reason:
+          error instanceof Error
+            ? error.message
+            : `تعذر الاتصال بالطابعة ${sample.printerName}`,
+      });
+    }
+  }
+
   for (const line of lines) {
-    if (line.qty > (line.kitchenSentQty ?? 0)) {
+    if (succeededLineIds.has(line.id) && line.qty > (line.kitchenSentQty ?? 0)) {
       db.update(orderItems)
         .set({ kitchenSentQty: line.qty })
         .where(eq(orderItems.id, line.id))
@@ -235,25 +352,47 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     }
   }
 
-  const table = order.tableId
-    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
-    : null;
-
   revalidateOrderPaths(order.venueId, orderId, "waiter");
 
-  return {
-    ok: true,
-    receipt: {
-      venueName: getVenueName(order.venueId),
-      orderId: order.id,
-      tableName: table?.name ?? "بدون طاولة",
-      waiterName: session.name,
-      createdAt: formatDateTime(
-        new Date().toISOString().slice(0, 19).replace("T", " "),
-      ),
-      lines: pendingLines,
-    },
-  };
+  if (printedTo.length === 0) {
+    return {
+      error: failed
+        .map((f) => `${f.printerName} (${f.host}): ${f.reason}`)
+        .join(" — "),
+    };
+  }
+
+  let message = `تم الإرسال إلى: ${printedTo.map((p) => p.printerName).join("، ")}`;
+  if (failed.length > 0) {
+    message += ` — فشلت: ${failed
+      .map((f) => `${f.printerName} (${f.host})`)
+      .join("، ")}`;
+  }
+
+  return { ok: true, printedTo, failed, message };
+}
+
+async function printCheckoutReceipt(
+  receipt: CheckoutReceiptData,
+  host: string,
+  port: number,
+): Promise<{ printOk: true } | { printOk: false; printError: string }> {
+  try {
+    await printToPrinter({
+      host,
+      port,
+      data: buildCheckoutEscPos(receipt),
+    });
+    return { printOk: true };
+  } catch (error) {
+    return {
+      printOk: false,
+      printError:
+        error instanceof Error
+          ? error.message
+          : "تعذر طباعة فاتورة الدفع",
+    };
+  }
 }
 
 export async function payOrder(
@@ -261,7 +400,13 @@ export async function payOrder(
   paymentMethod: PaymentMethod,
 ): Promise<
   | { error: string }
-  | { ok: true; nextUrl: string; receipt: CheckoutReceiptData }
+  | {
+      ok: true;
+      nextUrl: string;
+      printOk: boolean;
+      printError?: string;
+      message: string;
+    }
 > {
   const session = await getSession();
   if (!session || session.role !== "cashier") {
@@ -274,6 +419,11 @@ export async function payOrder(
   }
   if (!isVenueId(order.venueId)) {
     return { error: "فرع غير صالح" };
+  }
+
+  const stationCtx = await getCashierStationContext(order.venueId);
+  if ("error" in stationCtx) {
+    return { error: stationCtx.error };
   }
 
   const lines = db
@@ -307,29 +457,48 @@ export async function payOrder(
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
     : null;
 
+  const receipt: CheckoutReceiptData = {
+    venueName: getVenueName(order.venueId),
+    orderId: order.id,
+    tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
+    waiterName: waiter?.name ?? null,
+    cashierName: session.name,
+    paymentMethod,
+    paidAt: formatDateTime(paidAt),
+    total,
+    lines: lines.map((line) => ({
+      name: line.itemName,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+      lineTotal: line.lineTotal,
+    })),
+  };
+
+  const printResult = await printCheckoutReceipt(
+    receipt,
+    stationCtx.printer.host,
+    stationCtx.printer.port,
+  );
+
   revalidatePath(`/cashier/${order.venueId}`);
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
 
+  if (printResult.printOk) {
+    return {
+      ok: true,
+      nextUrl: `/cashier/${order.venueId}`,
+      printOk: true,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.station.name}`,
+    };
+  }
+
   return {
     ok: true,
     nextUrl: `/cashier/${order.venueId}`,
-    receipt: {
-      venueName: getVenueName(order.venueId),
-      orderId: order.id,
-      tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
-      waiterName: waiter?.name ?? null,
-      cashierName: session.name,
-      paymentMethod,
-      paidAt: formatDateTime(paidAt),
-      total,
-      lines: lines.map((line) => ({
-        name: line.itemName,
-        qty: line.qty,
-        unitPrice: line.unitPrice,
-        lineTotal: line.lineTotal,
-      })),
-    },
+    printOk: false,
+    printError: printResult.printError,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printResult.printError}`,
   };
 }
 
@@ -340,21 +509,30 @@ export type QuickSaleLine = {
   qty: number;
 };
 
-/**
- * Quick sales live only in the cashier's browser until payment, so the open
- * invoices list never fills up with empty draft orders.
- */
 export async function payQuickSale(
   venueId: string,
   cart: QuickSaleLine[],
   paymentMethod: PaymentMethod,
-): Promise<{ error: string } | { ok: true; receipt: CheckoutReceiptData }> {
+): Promise<
+  | { error: string }
+  | {
+      ok: true;
+      printOk: boolean;
+      printError?: string;
+      message: string;
+    }
+> {
   const session = await getSession();
   if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
     return { error: "غير مصرح" };
   }
   if (cart.length === 0) {
     return { error: "الفاتورة فارغة" };
+  }
+
+  const stationCtx = await getCashierStationContext(venueId);
+  if ("error" in stationCtx) {
+    return { error: stationCtx.error };
   }
 
   const priced = cart.map((line) => {
@@ -413,27 +591,45 @@ export async function payQuickSale(
       .run();
   }
 
+  const receipt: CheckoutReceiptData = {
+    venueName: getVenueName(venueId),
+    orderId: order.id,
+    tableName: "بيع سريع",
+    waiterName: null,
+    cashierName: session.name,
+    paymentMethod,
+    paidAt: formatDateTime(paidAt),
+    total,
+    lines: validLines.map((line) => ({
+      name: line.item.name,
+      qty: line.qty,
+      unitPrice: line.item.price,
+      lineTotal: line.item.price * line.qty,
+    })),
+  };
+
+  const printResult = await printCheckoutReceipt(
+    receipt,
+    stationCtx.printer.host,
+    stationCtx.printer.port,
+  );
+
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
 
+  if (printResult.printOk) {
+    return {
+      ok: true,
+      printOk: true,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.station.name}`,
+    };
+  }
+
   return {
     ok: true,
-    receipt: {
-      venueName: getVenueName(venueId),
-      orderId: order.id,
-      tableName: "بيع سريع",
-      waiterName: null,
-      cashierName: session.name,
-      paymentMethod,
-      paidAt: formatDateTime(paidAt),
-      total,
-      lines: validLines.map((line) => ({
-        name: line.item.name,
-        qty: line.qty,
-        unitPrice: line.item.price,
-        lineTotal: line.item.price * line.qty,
-      })),
-    },
+    printOk: false,
+    printError: printResult.printError,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printResult.printError}`,
   };
 }
 
@@ -454,7 +650,6 @@ export async function cancelOpenOrder(orderId: number) {
     .where(eq(orderItems.orderId, orderId))
     .all();
 
-  // Only allow cancel if empty, or cashier can cancel
   if (lines.length > 0 && session.role !== "cashier") {
     return { error: "لا يمكن إلغاء فاتورة تحتوي أصنافاً" };
   }

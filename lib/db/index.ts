@@ -61,12 +61,31 @@ function ensureSchema(sqlite: Database.Database) {
       active INTEGER NOT NULL DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS printers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id TEXT NOT NULL REFERENCES venues(id),
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 9100,
+      active INTEGER NOT NULL DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS cashier_stations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id TEXT NOT NULL REFERENCES venues(id),
+      name TEXT NOT NULL,
+      printer_id INTEGER NOT NULL REFERENCES printers(id),
+      active INTEGER NOT NULL DEFAULT 1
+    );
+
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
       category_id INTEGER NOT NULL REFERENCES categories(id),
       name TEXT NOT NULL,
       price REAL NOT NULL,
+      kitchen_printer_id INTEGER REFERENCES printers(id),
       active INTEGER NOT NULL DEFAULT 1
     );
 
@@ -106,6 +125,14 @@ function ensureSchema(sqlite: Database.Database) {
   try {
     sqlite.exec(
       `ALTER TABLE order_items ADD COLUMN kitchen_sent_qty INTEGER NOT NULL DEFAULT 0`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE items ADD COLUMN kitchen_printer_id INTEGER REFERENCES printers(id)`,
     );
   } catch {
     // column already exists

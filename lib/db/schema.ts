@@ -40,6 +40,30 @@ export const categories = sqliteTable("categories", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
+export const printers = sqliteTable("printers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  name: text("name").notNull(),
+  role: text("role", { enum: ["kitchen", "checkout"] }).notNull(),
+  host: text("host").notNull(),
+  port: integer("port").notNull().default(9100),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
+export const cashierStations = sqliteTable("cashier_stations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  venueId: text("venue_id")
+    .notNull()
+    .references(() => venues.id),
+  name: text("name").notNull(),
+  printerId: integer("printer_id")
+    .notNull()
+    .references(() => printers.id),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+});
+
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   venueId: text("venue_id")
@@ -50,6 +74,7 @@ export const items = sqliteTable("items", {
     .references(() => categories.id),
   name: text("name").notNull(),
   price: real("price").notNull(),
+  kitchenPrinterId: integer("kitchen_printer_id").references(() => printers.id),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
@@ -100,6 +125,8 @@ export const venuesRelations = relations(venues, ({ many }) => ({
   items: many(items),
   tables: many(tables),
   orders: many(orders),
+  printers: many(printers),
+  cashierStations: many(cashierStations),
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({
@@ -117,6 +144,29 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   items: many(items),
 }));
 
+export const printersRelations = relations(printers, ({ one, many }) => ({
+  venue: one(venues, {
+    fields: [printers.venueId],
+    references: [venues.id],
+  }),
+  stations: many(cashierStations),
+  kitchenItems: many(items),
+}));
+
+export const cashierStationsRelations = relations(
+  cashierStations,
+  ({ one }) => ({
+    venue: one(venues, {
+      fields: [cashierStations.venueId],
+      references: [venues.id],
+    }),
+    printer: one(printers, {
+      fields: [cashierStations.printerId],
+      references: [printers.id],
+    }),
+  }),
+);
+
 export const itemsRelations = relations(items, ({ one }) => ({
   venue: one(venues, {
     fields: [items.venueId],
@@ -125,6 +175,10 @@ export const itemsRelations = relations(items, ({ one }) => ({
   category: one(categories, {
     fields: [items.categoryId],
     references: [categories.id],
+  }),
+  kitchenPrinter: one(printers, {
+    fields: [items.kitchenPrinterId],
+    references: [printers.id],
   }),
 }));
 
