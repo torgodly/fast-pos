@@ -119,7 +119,10 @@ export default async function CashierHomePage({
               selectedStationId={hasStation ? selectedStationId : null}
             />
 
-            <LocalPrintAgentBanner needsLocalPrint={!!needsLocalPrint} />
+            <LocalPrintAgentBanner
+              venueId={venue}
+              needsLocalPrint={!!needsLocalPrint}
+            />
           </div>
         </section>
 

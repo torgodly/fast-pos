@@ -65,6 +65,7 @@ export default async function CashierQuickPage({
         </div>
 
         <LocalPrintAgentBanner
+          venueId={venue}
           needsLocalPrint={stationCtx.printer.connectionType === "local"}
         />
 

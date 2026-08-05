@@ -9,16 +9,64 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configPath = path.join(__dirname, "config.json");
 
 function loadConfig() {
-  if (!fs.existsSync(configPath)) {
-    console.error("Missing config.json — copy config.example.json and set printerName");
-    process.exit(1);
+  const defaults = { port: 9288, printerName: "" };
+  if (!fs.existsSync(configPath)) return defaults;
+  try {
+    return { ...defaults, ...JSON.parse(fs.readFileSync(configPath, "utf8")) };
+  } catch {
+    return defaults;
   }
-  return JSON.parse(fs.readFileSync(configPath, "utf8"));
 }
 
 const config = loadConfig();
 const PORT = config.port ?? 9288;
-const DEFAULT_PRINTER = config.printerName;
+let activePrinter = String(config.printerName || "").trim();
+
+function runPowerShell(script) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+      { windowsHide: true },
+    );
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (c) => {
+      stdout += c.toString();
+    });
+    child.stderr.on("data", (c) => {
+      stderr += c.toString();
+    });
+    child.on("close", (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(stderr.trim() || `PowerShell exit ${code}`));
+    });
+  });
+}
+
+async function resolveDefaultPrinter() {
+  if (process.platform !== "win32") return null;
+  try {
+    const name = await runPowerShell(
+      "(Get-Printer | Where-Object { $_.Default -eq $true } | Select-Object -First 1 -ExpandProperty Name)",
+    );
+    return name || null;
+  } catch {
+    return null;
+  }
+}
+
+async function ensurePrinter(requested) {
+  const wanted = String(requested || "").trim();
+  if (wanted && wanted.toLowerCase() !== "default") {
+    return wanted;
+  }
+  if (activePrinter && activePrinter.toLowerCase() !== "default") {
+    return activePrinter;
+  }
+  activePrinter = (await resolveDefaultPrinter()) || "";
+  return activePrinter;
+}
 
 function corsHeaders() {
   return {
@@ -38,7 +86,7 @@ function sendJson(res, status, body) {
 
 function printRawWindows(buffer, printerName) {
   if (process.platform !== "win32") {
-    return Promise.reject(new Error("Local USB printing agent supports Windows only"));
+    return Promise.reject(new Error("Windows only"));
   }
 
   const tmp = path.join(os.tmpdir(), `fastpos-${Date.now()}.bin`);
@@ -130,27 +178,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && req.url === "/health") {
-    sendJson(res, 200, { ok: true, printer: DEFAULT_PRINTER, platform: process.platform });
-    return;
-  }
-
-  if (req.method === "GET" && req.url === "/printers" && process.platform === "win32") {
-    const listScript =
-      "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress";
-    const child = spawn("powershell.exe", ["-NoProfile", "-Command", listScript], {
-      windowsHide: true,
-    });
-    let stdout = "";
-    child.stdout.on("data", (c) => {
-      stdout += c.toString();
-    });
-    child.on("close", () => {
-      try {
-        const names = JSON.parse(stdout || "[]");
-        sendJson(res, 200, { printers: Array.isArray(names) ? names : [names] });
-      } catch {
-        sendJson(res, 200, { printers: [] });
-      }
+    const printer = await ensurePrinter();
+    sendJson(res, 200, {
+      ok: true,
+      printer: printer || null,
+      mode: "default Windows printer — no config needed",
     });
     return;
   }
@@ -164,14 +196,19 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body);
         const data = payload?.data;
-        const printerName = String(payload?.printerName || DEFAULT_PRINTER || "").trim();
-        if (!data || !printerName) {
-          sendJson(res, 400, { error: "Missing print data or printer name" });
+        if (!data) {
+          sendJson(res, 400, { error: "Missing print data" });
           return;
         }
-        const buffer = Buffer.from(data, "base64");
-        await printRawWindows(buffer, printerName);
-        sendJson(res, 200, { ok: true });
+        const printerName = await ensurePrinter(payload?.printerName);
+        if (!printerName) {
+          sendJson(res, 500, {
+            error: "No default printer in Windows — set a default receipt printer",
+          });
+          return;
+        }
+        await printRawWindows(Buffer.from(data, "base64"), printerName);
+        sendJson(res, 200, { ok: true, printer: printerName });
       } catch (error) {
         sendJson(res, 500, {
           error: error instanceof Error ? error.message : "Print failed",
@@ -184,8 +221,13 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: "Not found" });
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Fast POS Print Agent — http://127.0.0.1:${PORT}`);
-  console.log(`Default printer: ${DEFAULT_PRINTER || "(set in config.json)"}`);
-  console.log("Silent RAW printing — no browser dialog");
+ensurePrinter().then((printer) => {
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log(`Fast POS Print — http://127.0.0.1:${PORT}`);
+    console.log(
+      printer
+        ? `Using printer: ${printer}`
+        : "Warning: no default printer — set one in Windows Settings",
+    );
+  });
 });

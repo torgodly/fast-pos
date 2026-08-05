@@ -18,7 +18,10 @@ export async function finishCheckoutPrint(
 
   const local = await printViaLocalAgent({
     data: result.printData,
-    printerName: result.localPrinterName,
+    printerName:
+      result.localPrinterName === "default"
+        ? undefined
+        : result.localPrinterName,
   });
 
   if ("error" in local) {

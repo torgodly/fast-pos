@@ -33,6 +33,31 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
   const targetH = Math.max(1, Math.round(png.height * scale));
   const bytesPerRow = Math.ceil(targetW / 8);
 
+  let lumMin = 255;
+  let lumMax = 0;
+  let opaque = 0;
+
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const idx = (png.width * y + x) << 2;
+      const a = png.data[idx + 3];
+      if (a <= 40) continue;
+      opaque += 1;
+      const lum =
+        0.299 * png.data[idx] +
+        0.587 * png.data[idx + 1] +
+        0.114 * png.data[idx + 2];
+      lumMin = Math.min(lumMin, lum);
+      lumMax = Math.max(lumMax, lum);
+    }
+  }
+
+  // Dark grey logo on black background (Maison Kayser style)
+  const darkOnDark = opaque > 0 && lumMax < 120;
+  const inkThreshold = darkOnDark
+    ? Math.max(lumMin + 12, 18)
+    : 210;
+
   const raster = new Uint8Array(bytesPerRow * targetH);
 
   for (let y = 0; y < targetH; y += 1) {
@@ -45,7 +70,9 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
       const b = png.data[idx + 2];
       const a = png.data[idx + 3];
       const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      const ink = a > 40 && lum < 210;
+      const ink = darkOnDark
+        ? a > 40 && lum >= inkThreshold
+        : a > 40 && lum < inkThreshold;
 
       if (ink) {
         const byteIndex = y * bytesPerRow + (x >> 3);

@@ -177,7 +177,9 @@ export function PrintersAdmin({
                     </td>
                     <td className="font-mono text-xs sm:text-sm">
                       {printer.connectionType === "local"
-                        ? printer.host
+                        ? printer.host === "default"
+                          ? "USB — افتراضي"
+                          : printer.host
                         : `${printer.host}:${printer.port}`}
                     </td>
                     <td>
@@ -393,23 +395,26 @@ export function PrintersAdmin({
               className="select select-bordered w-full"
               defaultValue={editingPrinter?.connectionType ?? "network"}
             >
-              <option value="network">شبكة (IP — للمطبخ أو طابعة شبكية)</option>
-              <option value="local">USB محلي (جهاز الكاشير Windows)</option>
+              <option value="network">شبكة (IP)</option>
+              <option value="local">USB على PC الكاشير</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              USB محلي: ثبّت وكيل الطباعة على PC الكاشير — لا يطبع من السيرفر
+              USB: شغّل SETUP.bat مرة واحدة على PC الكاشير — يستخدم الطابعة الافتراضية
             </span>
           </label>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">
-              عنوان IP أو اسم الطابعة في Windows
+              IP (شبكة) — اتركه فارغاً لـ USB
             </span>
             <input
               name="host"
-              defaultValue={editingPrinter?.host ?? ""}
-              placeholder="192.168.1.40 أو XP-80C"
+              defaultValue={
+                editingPrinter?.host === "default"
+                  ? ""
+                  : (editingPrinter?.host ?? "")
+              }
+              placeholder="192.168.1.40 — أو فارغ لـ USB"
               className="input input-bordered w-full font-mono"
-              required
             />
           </label>
           <label className="form-control w-full">

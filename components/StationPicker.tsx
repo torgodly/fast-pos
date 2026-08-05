@@ -18,6 +18,9 @@ type Station = {
 
 function printerLabel(station: Station) {
   if (station.printerConnection === "local") {
+    if (!station.printerHost || station.printerHost === "default") {
+      return `${station.printerName} — USB (الطابعة الافتراضية)`;
+    }
     return `${station.printerName} — USB: ${station.printerHost}`;
   }
   return `${station.printerName} — ${station.printerHost}`;

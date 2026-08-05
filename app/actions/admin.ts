@@ -18,8 +18,7 @@ import {
   tables,
   users,
 } from "@/lib/db/schema";
-import { buildTestEscPos } from "@/lib/print/escpos";
-import { getReceiptLogoEscPos } from "@/lib/print/logo";
+import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import { setReceiptFooterMessage, clearReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
 import type { PrinterRole, PrinterConnectionType } from "@/lib/types";
@@ -300,9 +299,16 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
   const resolvedConnection: PrinterConnectionType =
     role === "kitchen" ? "network" : connectionType;
 
-  if (!isVenueId(venueId) || !name || !host) {
+  if (!isVenueId(venueId) || !name) {
     return { error: "بيانات الطابعة غير مكتملة" };
   }
+
+  if (resolvedConnection === "network" && !host) {
+    return { error: "عنوان IP مطلوب لطابعة الشبكة" };
+  }
+
+  const resolvedHost =
+    resolvedConnection === "local" ? host.trim() || "default" : host;
 
   if (role !== "kitchen" && role !== "checkout") {
     return { error: "بيانات الطابعة غير مكتملة" };
@@ -318,7 +324,7 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     venueId,
     name,
     role,
-    host,
+    host: resolvedHost,
     port: resolvedConnection === "local" ? 0 : port,
     connectionType: resolvedConnection,
   };
@@ -376,11 +382,11 @@ export async function testPrinter(
   }
 
   try {
-    const logo = await getReceiptLogoEscPos();
+    const data = await buildTestPrintBytes(printer.name);
     await printToPrinter({
       host: printer.host,
       port: printer.port,
-      data: buildTestEscPos(printer.name, logo),
+      data,
     });
     return {
       ok: true,

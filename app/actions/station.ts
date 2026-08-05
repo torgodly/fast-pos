@@ -7,6 +7,7 @@ import { authCookieOptions } from "@/lib/auth/cookie-options";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { cashierStations, printers } from "@/lib/db/schema";
+import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import { isVenueId } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
@@ -118,4 +119,34 @@ export async function clearCashierStation(venueId: string) {
   store.delete(cookieName(venueId));
   revalidatePath(`/cashier/${venueId}`);
   return { ok: true as const };
+}
+
+export async function getLocalTestPrintPayload(
+  venueId: string,
+): Promise<
+  | { error: string }
+  | { ok: true; printData: string; localPrinterName: string; printerName: string }
+> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
+    return { error: "غير مصرح" };
+  }
+
+  const ctx = await getCashierStationContext(venueId);
+  if ("error" in ctx) {
+    return { error: ctx.error };
+  }
+
+  if (ctx.printer.connectionType !== "local") {
+    return { error: "اختبار USB متاح فقط لطابعات USB المحلية" };
+  }
+
+  const data = await buildTestPrintBytes(ctx.printer.name);
+
+  return {
+    ok: true,
+    printData: Buffer.from(data).toString("base64"),
+    localPrinterName: ctx.printer.host.trim(),
+    printerName: ctx.printer.name,
+  };
 }
