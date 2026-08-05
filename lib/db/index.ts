@@ -1,12 +1,65 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
+import { count } from "drizzle-orm";
 import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
+import { venues } from "./schema";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
 const dbPath = path.join(dataDir, "pos.db");
+const seedLockPath = path.join(dataDir, ".seed.lock");
+
+let sqliteRef: Database.Database | null = null;
+
+export function getSqlite(): Database.Database {
+  if (!sqliteRef) {
+    createDb();
+  }
+  return sqliteRef!;
+}
+
+function sleepMs(ms: number) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    /* wait */
+  }
+}
+
+function runSeedSafely(db: ReturnType<typeof drizzle<typeof schema>>) {
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return;
+  }
+
+  let ownsLock = false;
+  try {
+    fs.writeFileSync(seedLockPath, String(process.pid), { flag: "wx" });
+    ownsLock = true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "EEXIST") throw error;
+
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const [{ value }] = db.select({ value: count() }).from(venues).all();
+      if (value > 0) return;
+      sleepMs(100);
+    }
+    return;
+  }
+
+  try {
+    seedIfNeeded(db);
+  } finally {
+    if (ownsLock) {
+      try {
+        fs.unlinkSync(seedLockPath);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
 
 function createDb() {
   if (!fs.existsSync(dataDir)) {
@@ -14,13 +67,14 @@ function createDb() {
   }
 
   const sqlite = new Database(dbPath);
+  sqliteRef = sqlite;
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
 
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
   migrateSharedStaff(sqlite);
-  seedIfNeeded(db);
+  runSeedSafely(db);
   return db;
 }
 
@@ -144,9 +198,6 @@ const globalForDb = globalThis as unknown as {
 };
 
 export const db = globalForDb.__posDb ?? createDb();
-
-if (process.env.NODE_ENV !== "production") {
-  globalForDb.__posDb = db;
-}
+globalForDb.__posDb = db;
 
 export type Db = typeof db;

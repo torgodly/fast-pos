@@ -39,10 +39,27 @@ type MenuLine = {
   active?: boolean;
 };
 
+type SeedOptions = {
+  demoStaff: boolean;
+  sampleOrders: boolean;
+};
+
 export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
   const [{ value }] = db.select({ value: count() }).from(venues).all();
   if (value > 0) return;
 
+  runSeed(db, { demoStaff: true, sampleOrders: true });
+}
+
+/** Fresh starter data: admin only, full menu, no sales. */
+export function seedFactoryDatabase(db: BetterSQLite3Database<typeof schema>) {
+  runSeed(db, { demoStaff: false, sampleOrders: false });
+}
+
+function runSeed(
+  db: BetterSQLite3Database<typeof schema>,
+  opts: SeedOptions,
+) {
   const adminPass = bcrypt.hashSync("admin123", 10);
 
   db.insert(venues)
@@ -52,67 +69,75 @@ export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
     ])
     .run();
 
-  const staff = db
-    .insert(users)
-    .values([
-      {
-        name: "المدير",
-        role: "admin",
-        username: "admin",
-        passwordHash: adminPass,
-        active: true,
-      },
-      {
-        name: "أحمد",
-        role: "waiter",
-        venueId: null,
-        pinHash: pin("1111"),
-        active: true,
-      },
-      {
-        name: "يوسف",
-        role: "waiter",
-        venueId: null,
-        pinHash: pin("3333"),
-        active: true,
-      },
-      {
-        name: "مريم",
-        role: "waiter",
-        venueId: null,
-        pinHash: pin("4444"),
-        active: true,
-      },
-      {
-        name: "سارة",
-        role: "cashier",
-        venueId: null,
-        pinHash: pin("2222"),
-        active: true,
-      },
-      {
-        name: "خالد",
-        role: "cashier",
-        venueId: null,
-        pinHash: pin("5555"),
-        active: true,
-      },
-      {
-        name: "ليلى",
-        role: "waiter",
-        venueId: null,
-        pinHash: pin("6666"),
-        active: false,
-      },
-    ])
-    .returning()
-    .all();
+  const staffValues = opts.demoStaff
+    ? [
+        {
+          name: "المدير",
+          role: "admin" as const,
+          username: "admin",
+          passwordHash: adminPass,
+          active: true,
+        },
+        {
+          name: "أحمد",
+          role: "waiter" as const,
+          venueId: null,
+          pinHash: pin("1111"),
+          active: true,
+        },
+        {
+          name: "يوسف",
+          role: "waiter" as const,
+          venueId: null,
+          pinHash: pin("3333"),
+          active: true,
+        },
+        {
+          name: "مريم",
+          role: "waiter" as const,
+          venueId: null,
+          pinHash: pin("4444"),
+          active: true,
+        },
+        {
+          name: "سارة",
+          role: "cashier" as const,
+          venueId: null,
+          pinHash: pin("2222"),
+          active: true,
+        },
+        {
+          name: "خالد",
+          role: "cashier" as const,
+          venueId: null,
+          pinHash: pin("5555"),
+          active: true,
+        },
+        {
+          name: "ليلى",
+          role: "waiter" as const,
+          venueId: null,
+          pinHash: pin("6666"),
+          active: false,
+        },
+      ]
+    : [
+        {
+          name: "المدير",
+          role: "admin" as const,
+          username: "admin",
+          passwordHash: adminPass,
+          active: true,
+        },
+      ];
 
-  const waiterAhmed = staff.find((u) => u.name === "أحمد")!;
-  const waiterYousef = staff.find((u) => u.name === "يوسف")!;
-  const waiterMaryam = staff.find((u) => u.name === "مريم")!;
-  const cashierSara = staff.find((u) => u.name === "سارة")!;
-  const cashierKhaled = staff.find((u) => u.name === "خالد")!;
+  const staff = db.insert(users).values(staffValues).returning().all();
+
+  const waiterAhmed = staff.find((u) => u.name === "أحمد");
+  const waiterYousef = staff.find((u) => u.name === "يوسف");
+  const waiterMaryam = staff.find((u) => u.name === "مريم");
+  const cashierSara = staff.find((u) => u.name === "سارة");
+  const cashierKhaled = staff.find((u) => u.name === "خالد");
 
   const seededPrinters = db
     .insert(printers)
@@ -500,6 +525,10 @@ export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
 
   const tableOf = (list: typeof restTables, name: string) =>
     list.find((row) => row.name === name)!;
+
+  if (!opts.sampleOrders || !waiterAhmed || !waiterYousef || !waiterMaryam || !cashierSara || !cashierKhaled) {
+    return;
+  }
 
   function addOrder(opts: {
     venueId: "restaurant" | "cafe";

@@ -13,6 +13,7 @@ import {
   UsersRound,
 } from "lucide-react";
 import { logout } from "@/app/actions/auth";
+import { FactoryResetPanel } from "@/components/FactoryResetPanel";
 
 const links = [
   { href: "/admin", label: "الرئيسية", icon: LayoutDashboard },
@@ -80,8 +81,9 @@ export function AdminNav({ name }: { name: string }) {
           >
             <LogOut className="size-4.5" />
           تسجيل الخروج
-        </button>
-      </form>
+          </button>
+        </form>
+        <FactoryResetPanel />
       </div>
     </aside>
   );

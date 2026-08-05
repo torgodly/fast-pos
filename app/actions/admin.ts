@@ -3,8 +3,10 @@
 import bcrypt from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { getSession } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
+import { clearSession, getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { resetDatabaseToFactory } from "@/lib/db/reset";
 import {
   cashierStations,
   categories,
@@ -324,4 +326,32 @@ export async function setCashierStationActive(id: number, active: boolean) {
     .where(eq(cashierStations.id, id))
     .run();
   revalidatePrinters();
+}
+
+export async function factoryResetDatabase(
+  password: string,
+): Promise<{ error: string } | { ok: true }> {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    return { error: "غير مصرح" };
+  }
+
+  const trimmed = password.trim();
+  if (!trimmed) {
+    return { error: "أدخل كلمة المرور للتأكيد" };
+  }
+
+  const user = db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, session.userId), eq(users.role, "admin")))
+    .get();
+
+  if (!user?.passwordHash || !bcrypt.compareSync(trimmed, user.passwordHash)) {
+    return { error: "كلمة المرور غير صحيحة" };
+  }
+
+  resetDatabaseToFactory();
+  await clearSession();
+  redirect("/admin/login?reset=1");
 }

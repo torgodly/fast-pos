@@ -92,10 +92,16 @@ export default async function HomePage() {
           <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
             {VENUES.map((venue, index) => {
               const Icon = venue.id === "restaurant" ? ChefHat : Coffee;
+              const venueHref =
+                session?.role === "waiter"
+                  ? `/waiter/${venue.id}`
+                  : session?.role === "cashier"
+                    ? `/cashier/${venue.id}`
+                    : `/pin/${venue.id}`;
               return (
                 <Link
                   key={venue.id}
-                  href={`/pin/${venue.id}`}
+                  href={venueHref}
                   className={`group card min-h-64 overflow-hidden border-0 text-white shadow-2xl transition duration-300 hover:-translate-y-1 ${
                     index === 0
                       ? "bg-gradient-to-br from-primary via-blue-600 to-indigo-700 shadow-primary/20"

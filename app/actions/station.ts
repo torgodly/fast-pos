@@ -3,6 +3,7 @@
 import { cookies } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { authCookieOptions } from "@/lib/auth/cookie-options";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { cashierStations, printers } from "@/lib/db/schema";
@@ -97,13 +98,11 @@ export async function selectCashierStation(venueId: string, stationId: number) {
   }
 
   const store = await cookies();
-  store.set(cookieName(venueId), String(stationId), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  store.set(
+    cookieName(venueId),
+    String(stationId),
+    authCookieOptions(60 * 60 * 24 * 30),
+  );
 
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);

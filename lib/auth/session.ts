@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { authCookieOptions } from "./cookie-options";
 import {
   COOKIE_NAME,
   SESSION_DAYS,
@@ -13,13 +14,11 @@ export { COOKIE_NAME, verifyToken };
 export async function createSession(payload: SessionPayload) {
   const token = await signSessionToken(payload);
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: SESSION_DAYS * 24 * 60 * 60,
-  });
+  cookieStore.set(
+    COOKIE_NAME,
+    token,
+    authCookieOptions(SESSION_DAYS * 24 * 60 * 60),
+  );
 }
 
 export async function clearSession() {

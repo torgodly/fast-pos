@@ -3,9 +3,18 @@ import { BarChart3, Boxes, Sparkles, UsersRound } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
 import { AdminLoginForm } from "@/components/AdminLoginForm";
 
-export default async function AdminLoginPage() {
+export default async function AdminLoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reset?: string }>;
+}) {
   const session = await getSession();
+  const { reset } = await searchParams;
+
   if (session?.role === "admin") redirect("/admin");
+  if (session?.role === "waiter" || session?.role === "cashier") {
+    redirect("/");
+  }
 
   return (
     <main className="relative flex min-h-dvh flex-1 overflow-hidden p-4 sm:p-6 lg:p-10">
@@ -46,7 +55,7 @@ export default async function AdminLoginPage() {
             ))}
           </div>
         </section>
-        <AdminLoginForm />
+        <AdminLoginForm resetNotice={reset === "1"} />
       </div>
     </main>
   );

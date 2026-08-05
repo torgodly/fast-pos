@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { loginAdmin } from "@/app/actions/auth";
 
-export function AdminLoginForm() {
+export function AdminLoginForm({ resetNotice = false }: { resetNotice?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [showPassword, setShowPassword] = useState(false);
@@ -40,6 +40,15 @@ export function AdminLoginForm() {
         <p className="text-sm leading-6 text-base-content/55">
           سجّل الدخول لإدارة الأصناف والموظفين ومتابعة المبيعات
         </p>
+
+        {resetNotice ? (
+          <div className="alert alert-success alert-soft mt-4 text-sm">
+            <span>
+              تمت إعادة تهيئة النظام. سجّل الدخول باستخدام admin / admin123
+              ثم غيّر كلمة المرور.
+            </span>
+          </div>
+        ) : null}
 
         <form action={onSubmit} className="mt-5 flex flex-col gap-4">
           <label className="form-control w-full">
