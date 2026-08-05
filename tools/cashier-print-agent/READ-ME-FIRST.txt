@@ -1,0 +1,10 @@
+@echo off
+echo.
+echo  *** DO NOT RUN ON THE SERVER ***
+echo.
+echo  Copy this folder to each CASHIER Windows PC
+echo  (the PC where the USB receipt printer is plugged in).
+echo.
+echo  Then double-click SETUP.bat ON THAT PC.
+echo.
+pause

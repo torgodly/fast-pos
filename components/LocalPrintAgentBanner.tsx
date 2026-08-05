@@ -99,10 +99,13 @@ export function LocalPrintAgentBanner({
     <div className="alert alert-warning rounded-2xl text-sm">
       <AlertTriangle className="size-5 shrink-0" />
       <div>
-        <p className="font-bold">خطوة واحدة على هذا الجهاز:</p>
-        <p className="mt-1">
-          شغّل <strong>SETUP.bat</strong> من مجلد{" "}
-          <code className="text-xs">tools\cashier-print-agent</code>
+        <p className="font-bold">شغّل SETUP.bat على PC الكاشير — ليس على السيرفر!</p>
+        <p className="mt-1 text-base-content/70">
+          انسخ مجلد <code className="text-xs">tools\cashier-print-agent</code> إلى
+          جهاز الكاشير (حيث USB موصول)، ثم شغّل SETUP.bat هناك.
+        </p>
+        <p className="mt-1 text-xs text-base-content/50">
+          افتح شاشة الكاشير من متصفح ذلك الجهاز، ليس من iPad.
         </p>
       </div>
     </div>

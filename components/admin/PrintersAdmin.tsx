@@ -399,7 +399,7 @@ export function PrintersAdmin({
               <option value="local">USB على PC الكاشير</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              USB: شغّل SETUP.bat مرة واحدة على PC الكاشير — يستخدم الطابعة الافتراضية
+              USB: شغّل SETUP.bat على PC الكاشير (ليس السيرفر) — طابعة Windows الافتراضية
             </span>
           </label>
           <label className="form-control w-full">
