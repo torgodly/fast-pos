@@ -21,12 +21,9 @@ import {
   isVenueId,
 } from "@/lib/venues";
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
-import {
-  buildCheckoutEscPos,
-  buildKitchenEscPos,
-} from "@/lib/print/escpos";
+import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
+import { buildKitchenEscPos } from "@/lib/print/escpos";
 import { getReceiptLogoEscPos } from "@/lib/print/logo";
-import { getReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
 
 function recalcOrderTotal(orderId: number) {
@@ -381,19 +378,37 @@ export async function confirmKitchenOrder(orderId: number): Promise<
 
 async function printCheckoutReceipt(
   receipt: CheckoutReceiptData,
-  host: string,
-  port: number,
-): Promise<{ printOk: true } | { printOk: false; printError: string }> {
+  printer: typeof printers.$inferSelect,
+): Promise<
+  | { printOk: true }
+  | {
+      printOk: false;
+      printError: string;
+      localPrint?: false;
+    }
+  | {
+      printOk: false;
+      localPrint: true;
+      printData: string;
+      localPrinterName: string;
+    }
+> {
   try {
-    const logo = await getReceiptLogoEscPos();
-    const footerMessage = getReceiptFooterMessage();
+    const data = await buildCheckoutPrintBytes(receipt);
+
+    if (printer.connectionType === "local") {
+      return {
+        printOk: false,
+        localPrint: true,
+        printData: Buffer.from(data).toString("base64"),
+        localPrinterName: printer.host.trim(),
+      };
+    }
+
     await printToPrinter({
-      host,
-      port,
-      data: buildCheckoutEscPos(
-        { ...receipt, footerMessage },
-        logo,
-      ),
+      host: printer.host,
+      port: printer.port,
+      data,
     });
     return { printOk: true };
   } catch (error) {
@@ -417,6 +432,9 @@ export async function payOrder(
       nextUrl: string;
       printOk: boolean;
       printError?: string;
+      localPrint?: boolean;
+      printData?: string;
+      localPrinterName?: string;
       message: string;
     }
 > {
@@ -488,13 +506,24 @@ export async function payOrder(
 
   const printResult = await printCheckoutReceipt(
     receipt,
-    stationCtx.printer.host,
-    stationCtx.printer.port,
+    stationCtx.printer,
   );
 
   revalidatePath(`/cashier/${order.venueId}`);
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
+
+  if ("localPrint" in printResult && printResult.localPrint) {
+    return {
+      ok: true,
+      nextUrl: `/cashier/${order.venueId}`,
+      printOk: false,
+      localPrint: true,
+      printData: printResult.printData,
+      localPrinterName: printResult.localPrinterName,
+      message: `تم الدفع — جاري الطباعة على ${stationCtx.station.name}`,
+    };
+  }
 
   if (printResult.printOk) {
     return {
@@ -531,6 +560,9 @@ export async function payQuickSale(
       ok: true;
       printOk: boolean;
       printError?: string;
+      localPrint?: boolean;
+      printData?: string;
+      localPrinterName?: string;
       message: string;
     }
 > {
@@ -622,12 +654,22 @@ export async function payQuickSale(
 
   const printResult = await printCheckoutReceipt(
     receipt,
-    stationCtx.printer.host,
-    stationCtx.printer.port,
+    stationCtx.printer,
   );
 
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
+
+  if ("localPrint" in printResult && printResult.localPrint) {
+    return {
+      ok: true,
+      printOk: false,
+      localPrint: true,
+      printData: printResult.printData,
+      localPrinterName: printResult.localPrinterName,
+      message: `تم الدفع — جاري الطباعة على ${stationCtx.station.name}`,
+    };
+  }
 
   if (printResult.printOk) {
     return {

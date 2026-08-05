@@ -56,6 +56,7 @@ export default async function AdminPrintersPage({
           role: p.role,
           host: p.host,
           port: p.port,
+          connectionType: p.connectionType,
           active: p.active,
         }))}
         stations={stations.map((s) => ({

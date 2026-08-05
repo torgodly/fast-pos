@@ -13,6 +13,7 @@ import {
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getSelectedStationId } from "@/app/actions/station";
+import { LocalPrintAgentBanner } from "@/components/LocalPrintAgentBanner";
 import { PosHeader } from "@/components/PosHeader";
 import { StationPicker } from "@/components/StationPicker";
 import { db } from "@/lib/db";
@@ -36,6 +37,7 @@ export default async function CashierHomePage({
       name: cashierStations.name,
       printerName: printers.name,
       printerHost: printers.host,
+      printerConnection: printers.connectionType,
     })
     .from(cashierStations)
     .innerJoin(printers, eq(cashierStations.printerId, printers.id))
@@ -66,6 +68,9 @@ export default async function CashierHomePage({
 
   const hasStation = selectedStationId != null &&
     stations.some((s) => s.id === selectedStationId);
+
+  const selectedStation = stations.find((s) => s.id === selectedStationId);
+  const needsLocalPrint = selectedStation?.printerConnection === "local";
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
@@ -113,6 +118,8 @@ export default async function CashierHomePage({
               stations={stations}
               selectedStationId={hasStation ? selectedStationId : null}
             />
+
+            <LocalPrintAgentBanner needsLocalPrint={!!needsLocalPrint} />
           </div>
         </section>
 

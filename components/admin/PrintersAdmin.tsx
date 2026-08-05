@@ -24,6 +24,7 @@ type PrinterRow = {
   role: string;
   host: string;
   port: number;
+  connectionType: string;
   active: boolean;
 };
 
@@ -148,6 +149,7 @@ export function PrintersAdmin({
                 <tr>
                   <th>الاسم</th>
                   <th>النوع</th>
+                  <th>الاتصال</th>
                   <th>العنوان</th>
                   <th>الحالة</th>
                   <th>اختبار</th>
@@ -164,8 +166,19 @@ export function PrintersAdmin({
                     <td>
                       {printer.role === "kitchen" ? "مطبخ" : "فاتورة كاشير"}
                     </td>
+                    <td>
+                      {printer.connectionType === "local" ? (
+                        <span className="badge badge-info badge-soft badge-sm">
+                          USB محلي
+                        </span>
+                      ) : (
+                        <span className="badge badge-ghost badge-sm">شبكة</span>
+                      )}
+                    </td>
                     <td className="font-mono text-xs sm:text-sm">
-                      {printer.host}:{printer.port}
+                      {printer.connectionType === "local"
+                        ? printer.host
+                        : `${printer.host}:${printer.port}`}
                     </td>
                     <td>
                       <span
@@ -179,8 +192,10 @@ export function PrintersAdmin({
                       </span>
                     </td>
                     <td>
-                      {printer.active ? (
+                      {printer.active && printer.connectionType === "network" ? (
                         <TestPrintButton printerId={printer.id} />
+                      ) : printer.connectionType === "local" ? (
+                        <span className="text-xs text-base-content/45">USB</span>
                       ) : (
                         "-"
                       )}
@@ -214,7 +229,7 @@ export function PrintersAdmin({
                 ))}
                 {allPrinters.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="text-center opacity-60">
+                    <td colSpan={7} className="text-center opacity-60">
                       لا توجد طابعات بعد
                     </td>
                   </tr>
@@ -372,23 +387,40 @@ export function PrintersAdmin({
             </select>
           </label>
           <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">عنوان IP</span>
+            <span className="label-text mb-2 font-bold">طريقة الاتصال</span>
+            <select
+              name="connectionType"
+              className="select select-bordered w-full"
+              defaultValue={editingPrinter?.connectionType ?? "network"}
+            >
+              <option value="network">شبكة (IP — للمطبخ أو طابعة شبكية)</option>
+              <option value="local">USB محلي (جهاز الكاشير Windows)</option>
+            </select>
+            <span className="label-text-alt mt-2 text-base-content/45">
+              USB محلي: ثبّت وكيل الطباعة على PC الكاشير — لا يطبع من السيرفر
+            </span>
+          </label>
+          <label className="form-control w-full">
+            <span className="label-text mb-2 font-bold">
+              عنوان IP أو اسم الطابعة في Windows
+            </span>
             <input
               name="host"
               defaultValue={editingPrinter?.host ?? ""}
-              placeholder="192.168.1.40"
+              placeholder="192.168.1.40 أو XP-80C"
               className="input input-bordered w-full font-mono"
               required
             />
           </label>
           <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">المنفذ</span>
+            <span className="label-text mb-2 font-bold">
+              المنفذ (شبكة فقط — اترك 9100)
+            </span>
             <input
               name="port"
               type="number"
-              defaultValue={editingPrinter?.port ?? 9100}
+              defaultValue={editingPrinter?.port || 9100}
               className="input input-bordered w-full"
-              required
             />
           </label>
           <ActionFeedback tone="error" message={error} />

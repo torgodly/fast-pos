@@ -13,7 +13,15 @@ type Station = {
   name: string;
   printerName: string;
   printerHost: string;
+  printerConnection?: string;
 };
+
+function printerLabel(station: Station) {
+  if (station.printerConnection === "local") {
+    return `${station.printerName} — USB: ${station.printerHost}`;
+  }
+  return `${station.printerName} — ${station.printerHost}`;
+}
 
 export function StationPicker({
   venueId,
@@ -54,7 +62,7 @@ export function StationPicker({
             <p className="text-xs text-white/60">المحطة الحالية</p>
             <p className="font-black">{selected.name}</p>
             <p className="text-xs text-white/55">
-              طابعة: {selected.printerName} ({selected.printerHost})
+              طابعة: {printerLabel(selected)}
             </p>
           </div>
         </div>
@@ -91,7 +99,7 @@ export function StationPicker({
           >
             <span className="font-black">{station.name}</span>
             <span className="text-xs font-normal text-base-content/45">
-              {station.printerName} — {station.printerHost}
+              {printerLabel(station)}
             </span>
           </button>
         ))}

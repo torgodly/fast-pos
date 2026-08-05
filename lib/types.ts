@@ -3,3 +3,4 @@ export type UserRole = "admin" | "waiter" | "cashier";
 export type OrderStatus = "open" | "paid" | "cancelled";
 export type PaymentMethod = "cash" | "card";
 export type PrinterRole = "kitchen" | "checkout";
+export type PrinterConnectionType = "network" | "local";

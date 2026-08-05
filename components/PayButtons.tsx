@@ -4,6 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Banknote, CreditCard, LoaderCircle } from "lucide-react";
 import { payOrder } from "@/app/actions/orders";
+import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 
 export function PayButtons({
@@ -42,12 +43,26 @@ export function PayButtons({
       }
 
       closeModal();
-      showToast(result.printOk ? "success" : "warning", result.message);
+
+      let printOk = result.printOk;
+      let message = result.message;
+
+      if (result.localPrint && result.printData) {
+        const local = await finishCheckoutPrint({
+          localPrint: true,
+          printData: result.printData,
+          localPrinterName: result.localPrinterName,
+        });
+        printOk = local.printOk;
+        message = local.message;
+      }
+
+      showToast(printOk ? "success" : "warning", message);
 
       window.setTimeout(() => {
         router.replace(result.nextUrl);
         router.refresh();
-      }, result.printOk ? 600 : 1800);
+      }, printOk ? 600 : 1800);
     });
   }
 

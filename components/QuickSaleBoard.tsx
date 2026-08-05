@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
+import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 import { formatMoney } from "@/lib/venues";
 
@@ -116,7 +117,21 @@ export function QuickSaleBoard({
       closeModal();
       setCart([]);
       setCartOpen(false);
-      showToast(result.printOk ? "success" : "warning", result.message);
+
+      let printOk = result.printOk;
+      let message = result.message;
+
+      if (result.localPrint && result.printData) {
+        const local = await finishCheckoutPrint({
+          localPrint: true,
+          printData: result.printData,
+          localPrinterName: result.localPrinterName,
+        });
+        printOk = local.printOk;
+        message = local.message;
+      }
+
+      showToast(printOk ? "success" : "warning", message);
       router.refresh();
     });
   }

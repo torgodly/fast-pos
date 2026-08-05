@@ -22,7 +22,7 @@ import { buildTestEscPos } from "@/lib/print/escpos";
 import { getReceiptLogoEscPos } from "@/lib/print/logo";
 import { setReceiptFooterMessage, clearReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
-import type { PrinterRole } from "@/lib/types";
+import type { PrinterRole, PrinterConnectionType } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
 
 async function assertAdmin() {
@@ -291,28 +291,43 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
   const venueId = String(formData.get("venueId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "") as PrinterRole;
+  const connectionType = String(
+    formData.get("connectionType") ?? "network",
+  ) as PrinterConnectionType;
   const host = String(formData.get("host") ?? "").trim();
   const port = Number(formData.get("port") ?? 9100);
 
-  if (
-    !isVenueId(venueId) ||
-    !name ||
-    !host ||
-    (role !== "kitchen" && role !== "checkout") ||
-    !Number.isFinite(port) ||
-    port < 1
-  ) {
+  const resolvedConnection: PrinterConnectionType =
+    role === "kitchen" ? "network" : connectionType;
+
+  if (!isVenueId(venueId) || !name || !host) {
     return { error: "بيانات الطابعة غير مكتملة" };
   }
 
+  if (role !== "kitchen" && role !== "checkout") {
+    return { error: "بيانات الطابعة غير مكتملة" };
+  }
+
+  if (resolvedConnection === "network") {
+    if (!Number.isFinite(port) || port < 1) {
+      return { error: "منفذ الطابعة غير صالح" };
+    }
+  }
+
+  const values = {
+    venueId,
+    name,
+    role,
+    host,
+    port: resolvedConnection === "local" ? 0 : port,
+    connectionType: resolvedConnection,
+  };
+
   if (id) {
-    db.update(printers)
-      .set({ venueId, name, role, host, port })
-      .where(eq(printers.id, id))
-      .run();
+    db.update(printers).set(values).where(eq(printers.id, id)).run();
   } else {
     db.insert(printers)
-      .values({ venueId, name, role, host, port, active: true })
+      .values({ ...values, active: true })
       .run();
   }
 
@@ -351,6 +366,13 @@ export async function testPrinter(
     .get();
   if (!printer || !printer.active) {
     return { error: "الطابعة غير موجودة أو معطّلة" };
+  }
+
+  if (printer.connectionType === "local") {
+    return {
+      error:
+        "طابعة USB محلية — ثبّت وكيل الطباعة على جهاز الكاشير واختبر من شاشة الكاشير",
+    };
   }
 
   try {

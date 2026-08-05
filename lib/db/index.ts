@@ -196,6 +196,14 @@ function ensureSchema(sqlite: Database.Database) {
   } catch {
     // column already exists
   }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE printers ADD COLUMN connection_type TEXT NOT NULL DEFAULT 'network'`,
+    );
+  } catch {
+    // column already exists
+  }
 }
 
 const globalForDb = globalThis as unknown as {
