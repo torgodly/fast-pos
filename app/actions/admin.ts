@@ -3,7 +3,6 @@
 import bcrypt from "bcryptjs";
 import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { clearSession, getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { resetDatabaseToFactory } from "@/lib/db/reset";
@@ -353,5 +352,5 @@ export async function factoryResetDatabase(
 
   resetDatabaseToFactory();
   await clearSession();
-  redirect("/admin/login?reset=1");
+  return { ok: true as const };
 }

@@ -6,7 +6,7 @@ import {
   LogOut,
   UserRound,
 } from "lucide-react";
-import { logout } from "@/app/actions/auth";
+import { LogoutButton } from "@/components/LogoutButton";
 import { getVenueName } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
@@ -57,15 +57,10 @@ export function PosHeader({
             <Home className="size-4.5" />
             <span className="hidden sm:inline">الرئيسية</span>
           </Link>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="btn btn-error btn-sm gap-2 rounded-xl sm:btn-md"
-            >
-              <LogOut className="size-4.5" />
-              <span>خروج</span>
-            </button>
-          </form>
+          <LogoutButton className="btn btn-error btn-sm gap-2 rounded-xl sm:btn-md">
+            <LogOut className="size-4.5" />
+            <span>خروج</span>
+          </LogoutButton>
         </div>
       </div>
     </header>

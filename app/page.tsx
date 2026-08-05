@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
@@ -9,12 +10,15 @@ import {
   Sparkles,
   UserRound,
 } from "lucide-react";
-import { logout } from "@/app/actions/auth";
+import { LogoutButton } from "@/components/LogoutButton";
 import { getSession } from "@/lib/auth/session";
 import { VENUES } from "@/lib/venues";
 
 export default async function HomePage() {
   const session = await getSession();
+  if (session?.role === "admin") {
+    redirect("/admin");
+  }
   const roleLabel =
     session?.role === "waiter"
       ? "سفرادجي"
@@ -135,15 +139,12 @@ export default async function HomePage() {
           </div>
 
           {session ? (
-            <form action={logout} className="mt-8 sm:mt-10">
-              <button
-                type="submit"
-                className="btn btn-error btn-lg h-16 w-full rounded-2xl text-lg font-black shadow-lg shadow-error/20 sm:h-20 sm:text-xl"
-              >
+            <div className="mt-8 sm:mt-10">
+              <LogoutButton className="btn btn-error btn-lg h-16 w-full rounded-2xl text-lg font-black shadow-lg shadow-error/20 sm:h-20 sm:text-xl">
                 <LogOut className="size-6" />
                 تسجيل الخروج — {session.name}
-              </button>
-            </form>
+              </LogoutButton>
+            </div>
           ) : null}
         </section>
 

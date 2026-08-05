@@ -46,6 +46,10 @@ export function FactoryResetPanel() {
     startTransition(async () => {
       setError(null);
       const result = await factoryResetDatabase(password);
+      if (result && "ok" in result && result.ok) {
+        window.location.href = "/admin/login?reset=1";
+        return;
+      }
       if (result && "error" in result) {
         setError(result.error);
       }

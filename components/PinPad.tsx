@@ -34,6 +34,10 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
   function submit() {
     startTransition(async () => {
       const result = await loginWithPin(venueId, pin);
+      if (result && "ok" in result && result.ok) {
+        window.location.href = result.redirectTo;
+        return;
+      }
       if (result?.error) {
         setError(result.error);
         setPin("");

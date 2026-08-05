@@ -25,6 +25,10 @@ export function AdminLoginForm({ resetNotice = false }: { resetNotice?: boolean 
         String(formData.get("username") ?? ""),
         String(formData.get("password") ?? ""),
       );
+      if (result && "ok" in result && result.ok) {
+        window.location.href = result.redirectTo;
+        return;
+      }
       if (result?.error) setError(result.error);
     });
   }

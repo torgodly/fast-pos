@@ -43,10 +43,13 @@ export async function loginWithPin(venueId: string, pin: string) {
     venueId,
   });
 
-  if (match.role === "waiter") {
-    redirect(`/waiter/${venueId}`);
-  }
-  redirect(`/cashier/${venueId}`);
+  return {
+    ok: true as const,
+    redirectTo:
+      match.role === "waiter"
+        ? `/waiter/${venueId}`
+        : `/cashier/${venueId}`,
+  };
 }
 
 export async function loginAdmin(username: string, password: string) {
@@ -73,12 +76,12 @@ export async function loginAdmin(username: string, password: string) {
     venueId: null,
   });
 
-  redirect("/admin");
+  return { ok: true as const, redirectTo: "/admin" };
 }
 
 export async function logout() {
   await clearSession();
-  redirect("/");
+  return { ok: true as const };
 }
 
 export async function requireSession() {

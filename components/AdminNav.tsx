@@ -12,8 +12,8 @@ import {
   TableProperties,
   UsersRound,
 } from "lucide-react";
-import { logout } from "@/app/actions/auth";
 import { FactoryResetPanel } from "@/components/FactoryResetPanel";
+import { LogoutButton, LogoutIconButton } from "@/components/LogoutButton";
 
 const links = [
   { href: "/admin", label: "الرئيسية", icon: LayoutDashboard },
@@ -39,15 +39,7 @@ export function AdminNav({ name }: { name: string }) {
             <p className="text-xs text-base-content/45">لوحة الإدارة</p>
           </div>
         </div>
-        <form action={logout} className="lg:hidden">
-          <button
-            type="submit"
-            className="btn btn-circle btn-ghost btn-sm text-base-content/55"
-            aria-label="تسجيل الخروج"
-          >
-            <LogOut className="size-4" />
-          </button>
-        </form>
+        <LogoutIconButton className="btn btn-circle btn-ghost btn-sm text-base-content/55 lg:hidden" />
       </div>
 
       <div className="mobile-scroll-x mt-3 lg:mt-8 lg:overflow-visible">
@@ -74,15 +66,10 @@ export function AdminNav({ name }: { name: string }) {
           <p className="text-xs text-base-content/45">تم تسجيل الدخول باسم</p>
           <p className="mt-0.5 font-bold">{name}</p>
         </div>
-        <form action={logout}>
-          <button
-            type="submit"
-            className="btn btn-ghost w-full justify-start gap-3 rounded-xl text-error"
-          >
-            <LogOut className="size-4.5" />
+        <LogoutButton className="btn btn-ghost w-full justify-start gap-3 rounded-xl text-error">
+          <LogOut className="size-4.5" />
           تسجيل الخروج
-          </button>
-        </form>
+        </LogoutButton>
         <FactoryResetPanel />
       </div>
     </aside>
