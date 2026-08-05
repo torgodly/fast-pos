@@ -4,7 +4,6 @@ import { ArrowRight, Zap } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
-import { LocalPrintAgentBanner } from "@/components/LocalPrintAgentBanner";
 import { PosHeader } from "@/components/PosHeader";
 import { QuickSaleBoard } from "@/components/QuickSaleBoard";
 import { db } from "@/lib/db";
@@ -63,11 +62,6 @@ export default async function CashierQuickPage({
             رجوع
           </Link>
         </div>
-
-        <LocalPrintAgentBanner
-          venueId={venue}
-          needsLocalPrint={stationCtx.printer.connectionType === "local"}
-        />
 
         <QuickSaleBoard
           venueId={venue}

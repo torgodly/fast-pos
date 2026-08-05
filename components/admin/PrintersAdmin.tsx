@@ -169,7 +169,7 @@ export function PrintersAdmin({
                     <td>
                       {printer.connectionType === "local" ? (
                         <span className="badge badge-info badge-soft badge-sm">
-                          USB محلي
+                          Chrome
                         </span>
                       ) : (
                         <span className="badge badge-ghost badge-sm">شبكة</span>
@@ -177,9 +177,7 @@ export function PrintersAdmin({
                     </td>
                     <td className="font-mono text-xs sm:text-sm">
                       {printer.connectionType === "local"
-                        ? printer.host === "default"
-                          ? "USB — افتراضي"
-                          : printer.host
+                        ? "Chrome — جهاز الكاشير"
                         : `${printer.host}:${printer.port}`}
                     </td>
                     <td>
@@ -197,7 +195,7 @@ export function PrintersAdmin({
                       {printer.active && printer.connectionType === "network" ? (
                         <TestPrintButton printerId={printer.id} />
                       ) : printer.connectionType === "local" ? (
-                        <span className="text-xs text-base-content/45">USB</span>
+                        <span className="text-xs text-base-content/45">Chrome</span>
                       ) : (
                         "-"
                       )}
@@ -399,15 +397,15 @@ export function PrintersAdmin({
               defaultValue={editingPrinter?.connectionType ?? "network"}
             >
               <option value="network">شبكة (IP)</option>
-              <option value="local">USB على PC الكاشير</option>
+              <option value="local">Chrome على جهاز الكاشير</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              USB: شغّل SETUP.bat على PC الكاشير (ليس السيرفر) — طابعة Windows الافتراضية
+              Chrome: يفتح نافذة طباعة المتصفح على PC الكاشير عند الدفع
             </span>
           </label>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">
-              IP (شبكة) — اتركه فارغاً لـ USB
+              IP (شبكة) — اتركه فارغاً لـ Chrome
             </span>
             <input
               name="host"
@@ -416,7 +414,7 @@ export function PrintersAdmin({
                   ? ""
                   : (editingPrinter?.host ?? "")
               }
-              placeholder="192.168.1.40 — أو فارغ لـ USB"
+              placeholder="192.168.1.40 — أو فارغ لـ Chrome"
               className="input input-bordered w-full font-mono"
             />
           </label>

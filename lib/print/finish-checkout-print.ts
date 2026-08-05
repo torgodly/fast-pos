@@ -1,39 +1,34 @@
 "use client";
 
-import { printViaLocalAgent } from "@/lib/print/local-client";
+import { printHtmlReceipt } from "@/lib/print/receipts";
 
-type LocalPrintInput = {
-  localPrint?: boolean;
-  printData?: string;
-  localPrinterName?: string;
+type BrowserPrintInput = {
+  browserPrint?: boolean;
+  receiptHtml?: string;
   stationName?: string;
 };
 
 export async function finishCheckoutPrint(
-  result: LocalPrintInput,
+  result: BrowserPrintInput,
 ): Promise<{ printOk: boolean; message: string }> {
-  if (!result.localPrint || !result.printData) {
+  if (!result.browserPrint || !result.receiptHtml) {
     return { printOk: true, message: "" };
   }
 
-  const local = await printViaLocalAgent({
-    data: result.printData,
-    printerName:
-      result.localPrinterName === "default"
-        ? undefined
-        : result.localPrinterName,
-  });
-
-  if ("error" in local) {
+  try {
+    await printHtmlReceipt(result.receiptHtml);
+    const station = result.stationName ? ` (${result.stationName})` : "";
+    return {
+      printOk: true,
+      message: `تم الدفع وطباعة الفاتورة${station}`,
+    };
+  } catch (error) {
     return {
       printOk: false,
-      message: `تم الدفع — فشلت الطباعة المحلية: ${local.error}`,
+      message:
+        error instanceof Error
+          ? `تم الدفع — فشلت الطباعة: ${error.message}`
+          : "تم الدفع — فشلت الطباعة من المتصفح",
     };
   }
-
-  const station = result.stationName ? ` (${result.stationName})` : "";
-  return {
-    printOk: true,
-    message: `تم الدفع وطباعة الفاتورة على الطابعة المحلية${station}`,
-  };
 }

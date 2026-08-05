@@ -21,10 +21,12 @@ import {
   isVenueId,
 } from "@/lib/venues";
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
+import { buildCheckoutReceiptHtml } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos } from "@/lib/print/escpos";
 import { getReceiptLogoEscPos } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
+import { getReceiptFooterMessage } from "@/lib/settings";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -384,27 +386,24 @@ async function printCheckoutReceipt(
   | {
       printOk: false;
       printError: string;
-      localPrint?: false;
     }
   | {
       printOk: false;
-      localPrint: true;
-      printData: string;
-      localPrinterName: string;
+      browserPrint: true;
+      receiptHtml: string;
     }
 > {
   try {
-    const data = await buildCheckoutPrintBytes(receipt);
-
     if (printer.connectionType === "local") {
+      const footerMessage = getReceiptFooterMessage();
       return {
         printOk: false,
-        localPrint: true,
-        printData: Buffer.from(data).toString("base64"),
-        localPrinterName: printer.host.trim(),
+        browserPrint: true,
+        receiptHtml: buildCheckoutReceiptHtml({ ...receipt, footerMessage }),
       };
     }
 
+    const data = await buildCheckoutPrintBytes(receipt);
     await printToPrinter({
       host: printer.host,
       port: printer.port,
@@ -432,9 +431,8 @@ export async function payOrder(
       nextUrl: string;
       printOk: boolean;
       printError?: string;
-      localPrint?: boolean;
-      printData?: string;
-      localPrinterName?: string;
+      browserPrint?: boolean;
+      receiptHtml?: string;
       message: string;
     }
 > {
@@ -513,15 +511,14 @@ export async function payOrder(
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
 
-  if ("localPrint" in printResult && printResult.localPrint) {
+  if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
       nextUrl: `/cashier/${order.venueId}`,
       printOk: false,
-      localPrint: true,
-      printData: printResult.printData,
-      localPrinterName: printResult.localPrinterName,
-      message: `تم الدفع — جاري الطباعة على ${stationCtx.station.name}`,
+      browserPrint: true,
+      receiptHtml: printResult.receiptHtml,
+      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
     };
   }
 
@@ -534,12 +531,15 @@ export async function payOrder(
     };
   }
 
+  const printError =
+    "printError" in printResult ? printResult.printError : "تعذر الطباعة";
+
   return {
     ok: true,
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
-    printError: printResult.printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printResult.printError}`,
+    printError,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printError}`,
   };
 }
 
@@ -560,9 +560,8 @@ export async function payQuickSale(
       ok: true;
       printOk: boolean;
       printError?: string;
-      localPrint?: boolean;
-      printData?: string;
-      localPrinterName?: string;
+      browserPrint?: boolean;
+      receiptHtml?: string;
       message: string;
     }
 > {
@@ -660,14 +659,13 @@ export async function payQuickSale(
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
 
-  if ("localPrint" in printResult && printResult.localPrint) {
+  if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
       printOk: false,
-      localPrint: true,
-      printData: printResult.printData,
-      localPrinterName: printResult.localPrinterName,
-      message: `تم الدفع — جاري الطباعة على ${stationCtx.station.name}`,
+      browserPrint: true,
+      receiptHtml: printResult.receiptHtml,
+      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
     };
   }
 
@@ -679,11 +677,14 @@ export async function payQuickSale(
     };
   }
 
+  const printError =
+    "printError" in printResult ? printResult.printError : "تعذر الطباعة";
+
   return {
     ok: true,
     printOk: false,
-    printError: printResult.printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printResult.printError}`,
+    printError,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printError}`,
   };
 }
 

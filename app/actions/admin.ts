@@ -380,7 +380,7 @@ export async function testPrinter(
   if (printer.connectionType === "local") {
     return {
       error:
-        "طابعة USB محلية — ثبّت وكيل الطباعة على جهاز الكاشير واختبر من شاشة الكاشير",
+        "طابعة Chrome — تُطبع من جهاز الكاشير عند الدفع (نافذة طباعة المتصفح)",
     };
   }
 

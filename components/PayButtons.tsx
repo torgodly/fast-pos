@@ -47,14 +47,13 @@ export function PayButtons({
       let printOk = result.printOk;
       let message = result.message;
 
-      if (result.localPrint && result.printData) {
-        const local = await finishCheckoutPrint({
-          localPrint: true,
-          printData: result.printData,
-          localPrinterName: result.localPrinterName,
+      if (result.browserPrint && result.receiptHtml) {
+        const printed = await finishCheckoutPrint({
+          browserPrint: true,
+          receiptHtml: result.receiptHtml,
         });
-        printOk = local.printOk;
-        message = local.message;
+        printOk = printed.printOk;
+        message = printed.message;
       }
 
       showToast(printOk ? "success" : "warning", message);
