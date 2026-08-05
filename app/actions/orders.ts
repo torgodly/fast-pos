@@ -24,7 +24,7 @@ import type { CheckoutReceiptData } from "@/lib/print/receipts";
 import { buildCheckoutReceiptHtml } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos } from "@/lib/print/escpos";
-import { getReceiptLogoEscPos } from "@/lib/print/logo";
+import { getReceiptLogoEscPos, getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
 import { getReceiptFooterMessage } from "@/lib/settings";
 
@@ -396,10 +396,14 @@ async function printCheckoutReceipt(
   try {
     if (printer.connectionType === "local") {
       const footerMessage = getReceiptFooterMessage();
+      const logoDataUrl = getReceiptLogoPrintDataUrl();
       return {
         printOk: false,
         browserPrint: true,
-        receiptHtml: buildCheckoutReceiptHtml({ ...receipt, footerMessage }),
+        receiptHtml: buildCheckoutReceiptHtml(
+          { ...receipt, footerMessage },
+          logoDataUrl,
+        ),
       };
     }
 

@@ -264,8 +264,14 @@ export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
   );
 }
 
-export function buildCheckoutReceiptHtml(data: CheckoutReceiptData) {
+export function buildCheckoutReceiptHtml(
+  data: CheckoutReceiptData,
+  logoDataUrl?: string | null,
+) {
   const method = data.paymentMethod === "cash" ? "نقداً" : "بطاقة";
+  const logoHtml = logoDataUrl
+    ? `<img class="logo" src="${logoDataUrl}" alt="الشعار" />`
+    : "";
   const lines = data.lines
     .map(
       (line) => `
@@ -284,7 +290,7 @@ export function buildCheckoutReceiptHtml(data: CheckoutReceiptData) {
     `إيصال رقم ${data.orderId}`,
     `
     <div class="center">
-      <img class="logo" src="/receipt-logo.png" alt="الشعار" />
+      ${logoHtml}
       <p class="brand">${escapeHtml(data.venueName)}</p>
       <p class="subtitle">إيصال الدفع</p>
     </div>
