@@ -25,6 +25,8 @@ import {
   buildCheckoutEscPos,
   buildKitchenEscPos,
 } from "@/lib/print/escpos";
+import { getReceiptLogoEscPos } from "@/lib/print/logo";
+import { getReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
 
 function recalcOrderTotal(orderId: number) {
@@ -309,6 +311,8 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   const failed: Array<PrintTargetResult & { reason: string }> = [];
   const succeededLineIds = new Set<number>();
 
+  const logo = await getReceiptLogoEscPos();
+
   for (const [printerId, group] of groups) {
     const sample = group[0]!;
     const target = {
@@ -317,14 +321,17 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       host: sample.host,
     };
     try {
-      const payload = buildKitchenEscPos({
-        venueName: getVenueName(order.venueId),
-        orderId: order.id,
-        tableName: table?.name ?? "بدون طاولة",
-        waiterName: session.name,
-        createdAt,
-        lines: group.map((g) => ({ name: g.name, qty: g.qty })),
-      });
+      const payload = buildKitchenEscPos(
+        {
+          venueName: getVenueName(order.venueId),
+          orderId: order.id,
+          tableName: table?.name ?? "بدون طاولة",
+          waiterName: session.name,
+          createdAt,
+          lines: group.map((g) => ({ name: g.name, qty: g.qty })),
+        },
+        logo,
+      );
       await printToPrinter({
         host: sample.host,
         port: sample.port,
@@ -378,10 +385,15 @@ async function printCheckoutReceipt(
   port: number,
 ): Promise<{ printOk: true } | { printOk: false; printError: string }> {
   try {
+    const logo = await getReceiptLogoEscPos();
+    const footerMessage = getReceiptFooterMessage();
     await printToPrinter({
       host,
       port,
-      data: buildCheckoutEscPos(receipt),
+      data: buildCheckoutEscPos(
+        { ...receipt, footerMessage },
+        logo,
+      ),
     });
     return { printOk: true };
   } catch (error) {

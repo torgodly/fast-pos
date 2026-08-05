@@ -1,7 +1,13 @@
+import iconv from "iconv-lite";
 import type { CheckoutReceiptData, KitchenReceiptData } from "./receipts";
+import { appendLogo } from "./logo";
 
 const ESC = 0x1b;
 const GS = 0x1d;
+const FS = 0x1c;
+
+/** Windows Arabic — matches most XPrinter firmware in Libya. */
+const CODE_PAGE_WPC1256 = 46;
 
 function concat(...parts: Uint8Array[]): Uint8Array {
   const total = parts.reduce((sum, p) => sum + p.length, 0);
@@ -19,7 +25,7 @@ function cmd(...bytes: number[]) {
 }
 
 function text(value: string) {
-  return new TextEncoder().encode(value);
+  return new Uint8Array(iconv.encode(value, "win1256"));
 }
 
 function line(value = "") {
@@ -32,10 +38,10 @@ function money(amount: number) {
 
 function init() {
   return concat(
-    cmd(ESC, 0x40), // initialize
-    cmd(ESC, 0x74, 0x00), // code page
-    // UTF-8 / multilingual where supported by many XPrinter firmware builds
-    cmd(ESC, 0x61, 0x01), // center
+    cmd(ESC, 0x40),
+    cmd(ESC, 0x74, CODE_PAGE_WPC1256),
+    cmd(FS, 0x26),
+    cmd(ESC, 0x61, 0x01),
   );
 }
 
@@ -53,7 +59,7 @@ function doubleSize(on: boolean) {
 }
 
 function cut() {
-  return concat(line(), line(), cmd(GS, 0x56, 0x00));
+  return concat(line(), line(), cmd(GS, 0x56, 0x00), cmd(FS, 0x2e));
 }
 
 function separator() {
@@ -66,9 +72,13 @@ function row(left: string, right: string) {
   return line(`${left}${" ".repeat(gap)}${right}`);
 }
 
-export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
-  const parts: Uint8Array[] = [
-    init(),
+export function buildKitchenEscPos(
+  data: KitchenReceiptData,
+  logo: Uint8Array | null = null,
+): Uint8Array {
+  const parts: Uint8Array[] = [init()];
+  appendLogo(parts, logo);
+  parts.push(
     doubleSize(true),
     bold(true),
     line("طلب المطبخ"),
@@ -82,7 +92,7 @@ export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
     row("السفرادجي", data.waiterName),
     row("الوقت", data.createdAt),
     separator(),
-  ];
+  );
 
   for (const item of data.lines) {
     parts.push(doubleSize(true), bold(true));
@@ -100,10 +110,15 @@ export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
   return concat(...parts);
 }
 
-export function buildCheckoutEscPos(data: CheckoutReceiptData): Uint8Array {
+export function buildCheckoutEscPos(
+  data: CheckoutReceiptData,
+  logo: Uint8Array | null = null,
+): Uint8Array {
   const method = data.paymentMethod === "cash" ? "نقدي" : "بطاقة";
-  const parts: Uint8Array[] = [
-    init(),
+  const footer = data.footerMessage?.trim() || "شكراً لزيارتكم";
+  const parts: Uint8Array[] = [init()];
+  appendLogo(parts, logo);
+  parts.push(
     doubleSize(true),
     bold(true),
     line(data.venueName),
@@ -114,14 +129,16 @@ export function buildCheckoutEscPos(data: CheckoutReceiptData): Uint8Array {
     separator(),
     row("فاتورة", `#${data.orderId}`),
     row("الطاولة", data.tableName),
-  ];
+  );
 
   if (data.waiterName) {
     parts.push(row("السفرادجي", data.waiterName));
   }
 
   parts.push(
+    bold(true),
     row("الكاشير", data.cashierName),
+    bold(false),
     row("الدفع", method),
     row("الوقت", data.paidAt),
     separator(),
@@ -140,25 +157,47 @@ export function buildCheckoutEscPos(data: CheckoutReceiptData): Uint8Array {
     doubleSize(false),
     bold(false),
     align("center"),
-    line("شكراً لزيارتكم"),
+    line(footer),
     cut(),
   );
 
   return concat(...parts);
 }
 
-export function buildTestEscPos(printerName: string): Uint8Array {
-  return concat(
-    init(),
+export function buildTestEscPos(
+  printerName: string,
+  logo: Uint8Array | null = null,
+): Uint8Array {
+  const now = new Date()
+    .toLocaleString("ar-LY", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(/\u200f/g, "");
+
+  const parts: Uint8Array[] = [init()];
+  appendLogo(parts, logo);
+  parts.push(
     doubleSize(true),
     bold(true),
     line("اختبار طباعة"),
     doubleSize(false),
     bold(false),
-    line(printerName),
+    line("Fast POS"),
     align("left"),
     separator(),
-    line("Fast POS — الطابعة تعمل"),
+    row("الطابعة", printerName),
+    row("الحالة", "تعمل بنجاح"),
+    row("الوقت", now),
+    separator(),
+    align("center"),
+    line("Maison Kayser Tripoli"),
+    line("تم الاتصال بالطابعة"),
     cut(),
   );
+
+  return concat(...parts);
 }

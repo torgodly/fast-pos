@@ -173,6 +173,11 @@ function ensureSchema(sqlite: Database.Database) {
       line_total REAL NOT NULL,
       kitchen_sent_qty INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
 
   // Existing databases created before kitchen receipts

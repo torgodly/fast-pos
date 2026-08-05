@@ -23,6 +23,7 @@ export type CheckoutReceiptData = {
   paymentMethod: "cash" | "card";
   paidAt: string;
   total: number;
+  footerMessage?: string;
   lines: Array<ReceiptLine & { unitPrice: number; lineTotal: number }>;
 };
 
@@ -140,7 +141,7 @@ export function buildCheckoutReceiptHtml(data: CheckoutReceiptData) {
         ? `<div class="row"><span>السفرادجي</span><span>${escapeHtml(data.waiterName)}</span></div>`
         : ""
     }
-    <div class="row"><span>الكاشير</span><span>${escapeHtml(data.cashierName)}</span></div>
+    <div class="row"><span>الكاشير</span><span class="bold">${escapeHtml(data.cashierName)}</span></div>
     <div class="row"><span>الدفع</span><span class="bold">${method}</span></div>
     <div class="row"><span>الوقت</span><span>${escapeHtml(data.paidAt)}</span></div>
     <div class="line"></div>
@@ -150,7 +151,7 @@ export function buildCheckoutReceiptHtml(data: CheckoutReceiptData) {
       <span>الإجمالي</span>
       <span>${money(data.total)}</span>
     </div>
-    <p class="foot">شكراً لزيارتكم</p>
+    <p class="foot">${escapeHtml(data.footerMessage?.trim() || "شكراً لزيارتكم")}</p>
   `,
   );
 }

@@ -4,10 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Banknote, CreditCard, LoaderCircle } from "lucide-react";
 import { payOrder } from "@/app/actions/orders";
-import {
-  ActionFeedback,
-  type ActionFeedbackTone,
-} from "@/components/ActionFeedback";
+import { useToast } from "@/components/ToastProvider";
 
 export function PayButtons({
   orderId,
@@ -17,14 +14,12 @@ export function PayButtons({
   totalLabel?: string;
 }) {
   const router = useRouter();
+  const { showToast } = useToast();
   const dialogId = useId().replace(/:/g, "");
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<"cash" | "card" | null>(null);
-  const [tone, setTone] = useState<ActionFeedbackTone>("info");
-  const [message, setMessage] = useState<string | null>(null);
 
   function askConfirm(method: "cash" | "card") {
-    setMessage(null);
     setSelected(method);
     const dialog = document.getElementById(dialogId) as HTMLDialogElement | null;
     dialog?.showModal();
@@ -38,22 +33,17 @@ export function PayButtons({
 
   function confirmPay() {
     if (!selected) return;
-    setTone("pending");
-    setMessage("جاري الدفع والطباعة...");
     startTransition(async () => {
       const result = await payOrder(orderId, selected);
 
       if ("error" in result) {
-        setTone("error");
-        setMessage(result.error);
+        showToast("error", result.error);
         return;
       }
 
       closeModal();
-      setTone(result.printOk ? "success" : "warning");
-      setMessage(result.message);
+      showToast(result.printOk ? "success" : "warning", result.message);
 
-      // Give the cashier a moment to read feedback, then leave paid order
       window.setTimeout(() => {
         router.replace(result.nextUrl);
         router.refresh();
@@ -85,8 +75,6 @@ export function PayButtons({
           <span className="font-black">دفع بالبطاقة</span>
         </button>
       </div>
-
-      <ActionFeedback tone={tone} message={message} />
 
       <dialog id={dialogId} className="modal modal-bottom sm:modal-middle">
         <div className="modal-box max-w-md rounded-t-3xl sm:rounded-3xl">
@@ -143,11 +131,6 @@ export function PayButtons({
               )}
             </button>
           </div>
-          {pending || message ? (
-            <div className="mt-4">
-              <ActionFeedback tone={tone} message={message} />
-            </div>
-          ) : null}
         </div>
         <form method="dialog" className="modal-backdrop">
           <button

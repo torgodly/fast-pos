@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRef, useState } from "react";
 import {
   BarChart3,
   Boxes,
   LayoutDashboard,
   LogOut,
   Printer,
+  Settings2,
   Sparkles,
   TableProperties,
   UsersRound,
@@ -22,10 +24,26 @@ const links = [
   { href: "/admin/staff", label: "الموظفون", icon: UsersRound },
   { href: "/admin/printers", label: "الطابعات", icon: Printer },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
+  { href: "/admin/settings", label: "إعدادات الإيصال", icon: Settings2 },
 ];
 
 export function AdminNav({ name }: { name: string }) {
   const pathname = usePathname();
+  const [resetOpen, setResetOpen] = useState(false);
+  const secretClicks = useRef({ count: 0, timer: 0 });
+
+  function onSecretClick() {
+    secretClicks.current.count += 1;
+    window.clearTimeout(secretClicks.current.timer);
+    if (secretClicks.current.count >= 3) {
+      secretClicks.current.count = 0;
+      setResetOpen(true);
+      return;
+    }
+    secretClicks.current.timer = window.setTimeout(() => {
+      secretClicks.current.count = 0;
+    }, 1500);
+  }
 
   return (
     <aside className="z-30 flex w-full shrink-0 flex-col border-b border-base-300/60 bg-base-100/90 p-3 backdrop-blur-xl lg:sticky lg:top-0 lg:h-dvh lg:w-72 lg:border-b-0 lg:border-l lg:p-5">
@@ -36,7 +54,13 @@ export function AdminNav({ name }: { name: string }) {
           </span>
           <div>
             <h1 className="text-lg font-black leading-tight">فاست بوس</h1>
-            <p className="text-xs text-base-content/45">لوحة الإدارة</p>
+            <p
+              className="cursor-default select-none text-xs text-base-content/45"
+              onClick={onSecretClick}
+              title=""
+            >
+              لوحة الإدارة
+            </p>
           </div>
         </div>
         <LogoutIconButton className="btn btn-circle btn-ghost btn-sm text-base-content/55 lg:hidden" />
@@ -70,7 +94,10 @@ export function AdminNav({ name }: { name: string }) {
           <LogOut className="size-4.5" />
           تسجيل الخروج
         </LogoutButton>
-        <FactoryResetPanel />
+        <FactoryResetPanel
+          open={resetOpen}
+          onClose={() => setResetOpen(false)}
+        />
       </div>
     </aside>
   );
