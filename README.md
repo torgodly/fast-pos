@@ -9,6 +9,29 @@
 - طباعة صامتة عبر الشبكة لطابعات XPrinter (بدون حوار المتصفح)
 - لوحة إدارة للأصناف والطاولات والموظفين والطابعات والتقارير
 
+## التشغيل على Windows (السيرفر)
+
+**مهم:** استخدم **Node.js 22 LTS** — ليس Node 26.  
+`better-sqlite3` يحتاج نسخة جاهزة (prebuild) أو Python + أدوات بناء. Node 26 غير مدعوم حالياً.
+
+1. حمّل Node **22 LTS** من [nodejs.org](https://nodejs.org/) (أزل Node 26 إن وُجد).
+2. في PowerShell:
+
+```powershell
+node -v
+# يجب أن يظهر v22.x — وليس v26
+
+cd C:\fast-pos
+Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+npm install
+npm run build
+npm start
+```
+
+إذا فشل `npm install` حتى مع Node 22، ثبّت **Python 3** + **Visual Studio Build Tools** (Desktop development with C++), ثم أعد `npm install`.
+
+أو انسخ مجلد `node_modules` كاملاً من جهاز Mac/Linux بعد `npm install` هناك (نفس إصدار Node 22).
+
 ## التشغيل (محلي على الشبكة)
 
 شغّل السيرفر على جهاز دائم داخل المطعم/الكافيه (mini PC) على نفس شبكة Wi‑Fi الخاصة بالأجهزة والطابعات:
