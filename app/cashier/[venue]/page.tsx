@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   ArrowLeft,
@@ -18,7 +18,8 @@ import { PosHeader } from "@/components/PosHeader";
 import { StationPicker } from "@/components/StationPicker";
 import { db } from "@/lib/db";
 import { cashierStations, orders, printers, tables, users } from "@/lib/db/schema";
-import { formatMoney, isVenueId } from "@/lib/venues";
+import { formatMoney, getVenueName, isVenueId } from "@/lib/venues";
+import type { VenueId } from "@/lib/types";
 
 export default async function CashierHomePage({
   params,
@@ -46,9 +47,25 @@ export default async function CashierHomePage({
         eq(cashierStations.venueId, venue),
         eq(cashierStations.active, true),
         eq(printers.active, true),
+        eq(printers.role, "checkout"),
       ),
     )
     .orderBy(asc(cashierStations.name))
+    .all();
+
+  const otherVenue: VenueId = venue === "restaurant" ? "cafe" : "restaurant";
+  const [{ value: otherVenueStationCount }] = db
+    .select({ value: sql<number>`count(*)` })
+    .from(cashierStations)
+    .innerJoin(printers, eq(cashierStations.printerId, printers.id))
+    .where(
+      and(
+        eq(cashierStations.venueId, otherVenue),
+        eq(cashierStations.active, true),
+        eq(printers.active, true),
+        eq(printers.role, "checkout"),
+      ),
+    )
     .all();
 
   const openOrders = db
@@ -115,8 +132,14 @@ export default async function CashierHomePage({
 
             <StationPicker
               venueId={venue}
+              venueName={getVenueName(venue)}
               stations={stations}
               selectedStationId={hasStation ? selectedStationId : null}
+              otherVenueName={
+                stations.length === 0 && otherVenueStationCount > 0
+                  ? getVenueName(otherVenue)
+                  : undefined
+              }
             />
 
             <LocalPrintAgentBanner

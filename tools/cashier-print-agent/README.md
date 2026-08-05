@@ -1,20 +1,15 @@
-# USB Cashier Printer — 3 steps
+# USB Cashier Printer — no Node.js
 
-## On the cashier Windows PC
+PowerShell only. Works on normal Windows user — no Administrator password needed for setup.
 
-### 1. Set default printer
-Windows Settings → Printers → right-click your receipt printer → **Set as default**
+## Cashier PC (where USB is plugged)
 
-### 2. Run setup (once)
-Double-click **`SETUP.bat`**
+1. Default printer in Windows Settings  
+2. Double-click **SETUP.bat**  
+3. Cashier in browser on **this PC**: `http://192.168.1.122:3000`
 
-Done. It starts automatically every time Windows starts.
+Copy folder `tools/cashier-print-agent` via USB stick if needed.
 
-### 3. In Fast POS Admin
-- Add printer → **فاتورة كاشير** → **USB محلي**
-- Leave printer name **empty** (uses Windows default)
-- Add a cashier station → link to that printer
+## Server
 
-Open cashier on **this same PC** → pay or click **اختبار طباعة + شعار**
-
-No config.json. No IP. No printer name typing.
+Do **not** run SETUP.bat on the server.

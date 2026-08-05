@@ -12,21 +12,31 @@ export async function printViaLocalAgent({
   try {
     const response = await fetch(`${agentUrl}/print`, {
       method: "POST",
+      mode: "cors",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data, printerName }),
     });
 
-    const payload = (await response.json()) as { ok?: boolean; error?: string };
+    let payload: { ok?: boolean; error?: string } = {};
+    try {
+      payload = (await response.json()) as typeof payload;
+    } catch {
+      payload = {};
+    }
+
     if (!response.ok || payload.error) {
       return {
         error: payload.error ?? "تعذر إرسال الفاتورة للطابعة المحلية",
       };
     }
     return { ok: true };
-  } catch {
+  } catch (error) {
+    const hint =
+      error instanceof TypeError
+        ? " — افتح شاشة الكاشير من Chrome على PC الكاشير (ليس iPad) وشغّل SETUP.bat"
+        : "";
     return {
-      error:
-        "تعذر الاتصال بوكيل الطباعة على جهاز الكاشير — شغّل Fast POS Print Agent",
+      error: `تعذر الاتصال بوكيل الطباعة على جهاز الكاشير${hint}`,
     };
   }
 }

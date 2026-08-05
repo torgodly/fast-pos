@@ -46,6 +46,11 @@ export default async function AdminPrintersPage({
           </div>
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
+        <p className="mt-3 text-sm text-base-content/55">
+          المحطات والطابعات مرتبطة بـ <strong>{getVenueName(venue)}</strong> فقط.
+          الكاشير يرى محطات {getVenueName(venue)} عند الدخول من نفس المكان في
+          الصفحة الرئيسية.
+        </p>
       </div>
 
       <PrintersAdmin

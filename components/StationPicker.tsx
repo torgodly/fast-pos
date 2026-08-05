@@ -28,12 +28,16 @@ function printerLabel(station: Station) {
 
 export function StationPicker({
   venueId,
+  venueName,
   stations,
   selectedStationId,
+  otherVenueName,
 }: {
   venueId: string;
+  venueName: string;
   stations: Station[];
   selectedStationId: number | null;
+  otherVenueName?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -85,7 +89,9 @@ export function StationPicker({
   return (
     <div className="space-y-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
       <div>
-        <p className="font-black text-warning-content">اختر محطة الكاشير</p>
+        <p className="font-black text-warning-content">
+          اختر محطة الكاشير — {venueName}
+        </p>
         <p className="text-sm text-base-content/60">
           يجب اختيار المحطة قبل التحصيل أو البيع السريع لطباعة الفاتورة على
           الطابعة الصحيحة
@@ -108,9 +114,23 @@ export function StationPicker({
         ))}
       </div>
       {stations.length === 0 ? (
-        <p className="text-sm font-bold text-error">
-          لا توجد محطات نشطة — أضفها من لوحة الإدارة ← الطابعات
-        </p>
+        <div className="space-y-2 text-sm">
+          <p className="font-bold text-error">
+            لا توجد محطات نشطة لـ {venueName} — أضفها من لوحة الإدارة ← الطابعات
+          </p>
+          <p className="text-base-content/70">
+            في الإدارة اختر تبويب <strong>{venueName}</strong> أعلى الصفحة (مطعم
+            / كافيه)، ثم أضف طابعة نوعها{" "}
+            <strong>فاتورة كاشير</strong> ومحطة مربوطة بها.
+          </p>
+          {otherVenueName ? (
+            <p className="font-bold text-warning">
+              توجد محطات مسجّلة تحت {otherVenueName} وليس {venueName}. من
+              الصفحة الرئيسية افتح {otherVenueName}، أو أضف محطة جديدة تحت{" "}
+              {venueName} من الإدارة.
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

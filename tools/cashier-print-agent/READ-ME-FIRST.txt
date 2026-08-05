@@ -1,10 +1,17 @@
-@echo off
-echo.
-echo  *** DO NOT RUN ON THE SERVER ***
-echo.
-echo  Copy this folder to each CASHIER Windows PC
-echo  (the PC where the USB receipt printer is plugged in).
-echo.
-echo  Then double-click SETUP.bat ON THAT PC.
-echo.
-pause
+FAST POS — USB Cashier Printer
+===============================
+
+NO Node.js. NO admin password needed (usually).
+Just Windows + PowerShell (already on every PC).
+
+ON THE CASHIER PC (not the server):
+------------------------------------
+1. Windows Settings → Printers → set receipt printer as DEFAULT
+2. Double-click SETUP.bat
+3. Open Chrome on THIS PC → http://192.168.1.122:3000 → cashier → test print
+
+Copy this whole folder to the cashier PC (USB stick).
+
+IN ADMIN (once):
+----------------
+Add printer → Cashier receipt → USB → leave IP empty → add station

@@ -27,11 +27,18 @@ export function LocalPrintAgentBanner({
   useEffect(() => {
     if (!needsLocalPrint) return;
     let active = true;
-    checkLocalPrintAgent().then((ok) => {
-      if (active) setStatus(ok ? "ok" : "missing");
-    });
+
+    function probe() {
+      checkLocalPrintAgent().then((ok) => {
+        if (active) setStatus(ok ? "ok" : "missing");
+      });
+    }
+
+    probe();
+    const timer = window.setInterval(probe, 5000);
     return () => {
       active = false;
+      window.clearInterval(timer);
     };
   }, [needsLocalPrint]);
 

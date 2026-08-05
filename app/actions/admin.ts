@@ -35,7 +35,10 @@ async function assertAdmin() {
 function revalidatePrinters() {
   revalidatePath("/admin/printers");
   revalidatePath("/admin/items");
-  revalidatePath("/cashier");
+  for (const venueId of ["restaurant", "cafe"] as const) {
+    revalidatePath(`/cashier/${venueId}`);
+    revalidatePath(`/cashier/${venueId}/quick`);
+  }
 }
 
 type ActionResult = { ok: true } | { error: string };

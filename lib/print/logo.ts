@@ -1,24 +1,55 @@
 import fs from "fs";
 import path from "path";
+import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 
 const MAX_WIDTH = 384;
+const LOGO_PATH = path.join(process.cwd(), "public", "receipt-logo.png");
 
 let cachedLogo: Uint8Array | null | undefined;
 
-/** ESC/POS raster bitmap for the receipt logo (cached). */
+function readLogoPixels(): PNG | null {
+  if (!fs.existsSync(LOGO_PATH)) return null;
+
+  const buffer = fs.readFileSync(LOGO_PATH);
+  if (buffer.length < 4) return null;
+
+  const isPng =
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47;
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8;
+
+  try {
+    if (isPng) {
+      return PNG.sync.read(buffer);
+    }
+    if (isJpeg) {
+      const decoded = jpeg.decode(buffer, { useTArray: true });
+      const png = new PNG({ width: decoded.width, height: decoded.height });
+      png.data = Buffer.from(decoded.data);
+      return png;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function clearReceiptLogoCache() {
+  cachedLogo = undefined;
+}
+
 export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
   if (cachedLogo !== undefined) return cachedLogo;
 
-  const logoPath = path.join(process.cwd(), "public", "receipt-logo.png");
-  if (!fs.existsSync(logoPath)) {
-    cachedLogo = null;
-    return null;
-  }
-
   try {
-    const buffer = fs.readFileSync(logoPath);
-    const png = PNG.sync.read(buffer);
+    const png = readLogoPixels();
+    if (!png) {
+      cachedLogo = null;
+      return null;
+    }
     cachedLogo = pngToEscPosRaster(png, MAX_WIDTH);
     return cachedLogo;
   } catch {
@@ -33,30 +64,36 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
   const targetH = Math.max(1, Math.round(png.height * scale));
   const bytesPerRow = Math.ceil(targetW / 8);
 
-  let lumMin = 255;
-  let lumMax = 0;
-  let opaque = 0;
-
-  for (let y = 0; y < png.height; y += 1) {
-    for (let x = 0; x < png.width; x += 1) {
-      const idx = (png.width * y + x) << 2;
-      const a = png.data[idx + 3];
-      if (a <= 40) continue;
-      opaque += 1;
-      const lum =
-        0.299 * png.data[idx] +
-        0.587 * png.data[idx + 1] +
-        0.114 * png.data[idx + 2];
-      lumMin = Math.min(lumMin, lum);
-      lumMax = Math.max(lumMax, lum);
-    }
+  function lumAt(x: number, y: number) {
+    const idx = (png.width * y + x) << 2;
+    return (
+      0.299 * png.data[idx] +
+      0.587 * png.data[idx + 1] +
+      0.114 * png.data[idx + 2]
+    );
   }
 
-  // Dark grey logo on black background (Maison Kayser style)
-  const darkOnDark = opaque > 0 && lumMax < 120;
-  const inkThreshold = darkOnDark
-    ? Math.max(lumMin + 12, 18)
-    : 210;
+  function alphaAt(x: number, y: number) {
+    return png.data[((png.width * y + x) << 2) + 3];
+  }
+
+  // Background from corners — works for dark-on-black and light logos
+  const corners = [
+    [0, 0],
+    [png.width - 1, 0],
+    [0, png.height - 1],
+    [png.width - 1, png.height - 1],
+  ];
+  let bgSum = 0;
+  let bgN = 0;
+  for (const [cx, cy] of corners) {
+    if (alphaAt(cx, cy) > 40) {
+      bgSum += lumAt(cx, cy);
+      bgN += 1;
+    }
+  }
+  const bgLum = bgN ? bgSum / bgN : 255;
+  const contrastThreshold = 18;
 
   const raster = new Uint8Array(bytesPerRow * targetH);
 
@@ -64,15 +101,12 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
     const srcY = Math.min(png.height - 1, Math.floor(y / scale));
     for (let x = 0; x < targetW; x += 1) {
       const srcX = Math.min(png.width - 1, Math.floor(x / scale));
-      const idx = (png.width * srcY + srcX) << 2;
-      const r = png.data[idx];
-      const g = png.data[idx + 1];
-      const b = png.data[idx + 2];
-      const a = png.data[idx + 3];
-      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
-      const ink = darkOnDark
-        ? a > 40 && lum >= inkThreshold
-        : a > 40 && lum < inkThreshold;
+      const a = alphaAt(srcX, srcY);
+      if (a <= 40) continue;
+
+      const lum = lumAt(srcX, srcY);
+      const diff = Math.abs(lum - bgLum);
+      const ink = diff >= contrastThreshold;
 
       if (ink) {
         const byteIndex = y * bytesPerRow + (x >> 3);
@@ -101,5 +135,8 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
 
 export function appendLogo(parts: Uint8Array[], logo: Uint8Array | null) {
   if (!logo) return;
-  parts.push(logo, new Uint8Array([0x0a]));
+  const ESC = 0x1b;
+  parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
+  parts.push(logo);
+  parts.push(new Uint8Array([0x0a, 0x0a]));
 }

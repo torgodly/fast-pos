@@ -381,12 +381,15 @@ export function PrintersAdmin({
             <select
               name="role"
               className="select select-bordered w-full"
-              defaultValue={editingPrinter?.role ?? "kitchen"}
+              defaultValue={editingPrinter?.role ?? "checkout"}
               required
             >
               <option value="kitchen">مطبخ</option>
               <option value="checkout">فاتورة كاشير</option>
             </select>
+            <span className="label-text-alt mt-2 text-base-content/45">
+              طابعة USB للكاشير يجب أن تكون «فاتورة كاشير»، ثم أضف محطة مربوطة بها
+            </span>
           </label>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">طريقة الاتصال</span>
