@@ -5,7 +5,7 @@ import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { resetDatabaseToFactory } from "@/lib/db/reset";
+import { resetSalesPrintersAndUsers } from "@/lib/db/reset";
 import {
   cashierStations,
   categories,
@@ -327,6 +327,17 @@ export async function setCashierStationActive(id: number, active: boolean) {
   revalidatePrinters();
 }
 
+function revalidateAfterSystemReset() {
+  revalidatePath("/admin");
+  revalidatePath("/admin/staff");
+  revalidatePath("/admin/printers");
+  revalidatePath("/admin/items");
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin/tables");
+  revalidatePath("/cashier", "layout");
+  revalidatePath("/waiter", "layout");
+}
+
 export async function factoryResetDatabase(
   password: string,
 ): Promise<{ error: string } | { ok: true }> {
@@ -350,6 +361,7 @@ export async function factoryResetDatabase(
     return { error: "كلمة المرور غير صحيحة" };
   }
 
-  resetDatabaseToFactory();
+  resetSalesPrintersAndUsers();
+  revalidateAfterSystemReset();
   return { ok: true as const };
 }

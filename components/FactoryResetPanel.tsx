@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { AlertTriangle, LoaderCircle, RotateCcw } from "lucide-react";
 import { factoryResetDatabase } from "@/app/actions/admin";
 import { ActionFeedback } from "@/components/ActionFeedback";
@@ -11,22 +11,6 @@ export function FactoryResetPanel() {
   const [confirmText, setConfirmText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const tapCount = useRef(0);
-  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  function revealPanel() {
-    tapCount.current += 1;
-    if (tapTimer.current) clearTimeout(tapTimer.current);
-    tapTimer.current = setTimeout(() => {
-      tapCount.current = 0;
-    }, 2000);
-
-    if (tapCount.current >= 5) {
-      tapCount.current = 0;
-      setOpen(true);
-      setError(null);
-    }
-  }
 
   function closePanel() {
     if (pending) return;
@@ -39,7 +23,7 @@ export function FactoryResetPanel() {
   function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (confirmText.trim() !== "RESET") {
-      setError('اكتب RESET بالحروف الإنجليزية للتأكيد');
+      setError("اكتب RESET بالحروف الإنجليزية للتأكيد");
       return;
     }
 
@@ -47,8 +31,7 @@ export function FactoryResetPanel() {
       setError(null);
       const result = await factoryResetDatabase(password);
       if (result && "ok" in result && result.ok) {
-        await fetch("/api/auth/logout", { method: "POST" });
-        window.location.href = "/admin/login?reset=1";
+        window.location.reload();
         return;
       }
       if (result && "error" in result) {
@@ -61,11 +44,14 @@ export function FactoryResetPanel() {
     <>
       <button
         type="button"
-        onClick={revealPanel}
-        className="mx-auto mt-2 block text-[10px] text-base-content/20 transition hover:text-base-content/40"
-        aria-label="إعدادات متقدمة"
+        onClick={() => {
+          setOpen(true);
+          setError(null);
+        }}
+        className="btn btn-ghost btn-sm mt-2 w-full justify-start gap-2 rounded-xl text-base-content/45 hover:text-error"
       >
-        ···
+        <RotateCcw className="size-4" />
+        تهيئة المبيعات والطابعات
       </button>
 
       {open ? (
@@ -73,12 +59,18 @@ export function FactoryResetPanel() {
           <div className="modal-box max-w-lg">
             <h3 className="flex items-center gap-2 text-lg font-black text-error">
               <RotateCcw className="size-5" />
-              إعادة تهيئة النظام
+              تهيئة المبيعات والطابعات
             </h3>
             <p className="mt-3 text-sm leading-7 text-base-content/65">
-              سيتم حذف جميع المبيعات والموظفين والإعدادات الحالية، واستبدالها
-              ببيانات البداية: مدير واحد، قائمة الأصناف الكاملة، طاولات
-              وطابعات افتراضية — بدون أي مبيعات.
+              سيتم حذف:
+            </p>
+            <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-base-content/65">
+              <li>جميع المبيعات والفواتير</li>
+              <li>جميع الطابعات ومحطات الكاشير</li>
+              <li>جميع الموظفين (السفرادجية والكاشير)</li>
+            </ul>
+            <p className="mt-3 text-sm font-bold text-success">
+              لن يتم المساس بالأصناف أو التصنيفات أو الطاولات.
             </p>
 
             <div className="alert alert-warning mt-4 text-sm">
@@ -137,7 +129,7 @@ export function FactoryResetPanel() {
                       جاري التهيئة...
                     </>
                   ) : (
-                    "تأكيد إعادة التهيئة"
+                    "تأكيد التهيئة"
                   )}
                 </button>
               </div>

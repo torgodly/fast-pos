@@ -61,8 +61,8 @@ export function AdminNav({ name }: { name: string }) {
         </nav>
       </div>
 
-      <div className="mt-auto hidden lg:block">
-        <div className="mb-3 rounded-2xl bg-base-200/70 p-3.5">
+      <div className="mt-4 border-t border-base-300/60 pt-3 lg:mt-auto lg:border-t-0 lg:pt-0">
+        <div className="mb-3 hidden rounded-2xl bg-base-200/70 p-3.5 lg:block">
           <p className="text-xs text-base-content/45">تم تسجيل الدخول باسم</p>
           <p className="mt-0.5 font-bold">{name}</p>
         </div>
