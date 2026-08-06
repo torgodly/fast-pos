@@ -3,9 +3,74 @@ import iconv from "iconv-lite";
 const ESC = 0x1b;
 const GS = 0x1d;
 
-/** ESC/POS code page — 46 = WPC1256 on most XPrinters. Override via PRINTER_CODE_PAGE. */
-export const PRINTER_CODE_PAGE = Number(process.env.PRINTER_CODE_PAGE ?? 46);
-export const PRINTER_CHARSET = process.env.PRINTER_CHARSET ?? "win1256";
+export type PrinterProfile = {
+  id: string;
+  label: string;
+  codePage: number;
+  charset: string;
+  /** Render Arabic as bitmap — required on POS Flex and many 80mm clones. */
+  arabicRaster: boolean;
+};
+
+/** POS Flex / Epson-standard: WPC1256 Arabic = code page 50 (NOT 46 — that is Cyrillic). */
+const PROFILES: Record<string, PrinterProfile> = {
+  posflex: {
+    id: "posflex",
+    label: "POS Flex / Epson",
+    codePage: 50,
+    charset: "win1256",
+    arabicRaster: true,
+  },
+  xprinter: {
+    id: "xprinter",
+    label: "XPrinter clone",
+    codePage: 46,
+    charset: "win1256",
+    arabicRaster: false,
+  },
+  pc864: {
+    id: "pc864",
+    label: "PC864 Arabic",
+    codePage: 37,
+    charset: "iso-8859-6",
+    arabicRaster: false,
+  },
+};
+
+export function getPrinterProfile(): PrinterProfile {
+  const key = (process.env.PRINTER_PROFILE ?? "posflex").toLowerCase();
+  const base = PROFILES[key] ?? PROFILES.posflex;
+
+  if (process.env.PRINTER_CODE_PAGE) {
+    return {
+      ...base,
+      codePage: Number(process.env.PRINTER_CODE_PAGE),
+    };
+  }
+  if (process.env.PRINTER_CHARSET) {
+    return { ...base, charset: process.env.PRINTER_CHARSET };
+  }
+  if (process.env.PRINTER_ARABIC_RASTER === "0") {
+    return { ...base, arabicRaster: false };
+  }
+  if (process.env.PRINTER_ARABIC_RASTER === "1") {
+    return { ...base, arabicRaster: true };
+  }
+
+  return base;
+}
+
+export const printerProfile = getPrinterProfile();
+export const PRINTER_CODE_PAGE = printerProfile.codePage;
+export const PRINTER_CHARSET = printerProfile.charset;
+
+export function useArabicRaster() {
+  return printerProfile.arabicRaster;
+}
+
+export function hasArabicText(value: string) {
+  return /[\u0600-\u06FF]/.test(value);
+}
 
 /** Strip bidi marks that confuse some firmware. */
 export function normalizePrinterText(value: string) {
@@ -18,7 +83,7 @@ export function encodePrinterText(value: string): Uint8Array {
   );
 }
 
-/** Restore text mode after raster logo — do NOT send FS & (breaks Arabic on many XPrinters). */
+/** Restore text mode after raster image. */
 export function restorePrinterTextMode(
   align: "left" | "center" | "right" = "right",
 ): Uint8Array {
@@ -26,10 +91,10 @@ export function restorePrinterTextMode(
   return new Uint8Array([
     GS,
     0x21,
-    0x00, // normal char size
+    0x00,
     ESC,
     0x45,
-    0x00, // bold off
+    0x00,
     ESC,
     0x74,
     PRINTER_CODE_PAGE,
@@ -42,12 +107,12 @@ export function restorePrinterTextMode(
 export function printerInitBytes(): Uint8Array {
   return new Uint8Array([
     ESC,
-    0x40, // reset
+    0x40,
     ESC,
     0x74,
     PRINTER_CODE_PAGE,
     ESC,
     0x61,
-    2, // right — correct for Arabic RTL on 80mm
+    2,
   ]);
 }

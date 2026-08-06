@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { PNG } from "pngjs";
+import { restorePrinterTextMode } from "./encoding";
 
 const MAX_WIDTH = 384;
 const PRINT_MAX_WIDTH = 320;
@@ -143,7 +144,7 @@ export function getReceiptLogoPrintDataUrl(
   }
 }
 
-function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
+export function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
   const scale = png.width > maxWidth ? maxWidth / png.width : 1;
   const targetW = Math.max(1, Math.round(png.width * scale));
   const targetH = Math.max(1, Math.round(png.height * scale));
@@ -178,8 +179,6 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
   out.set(raster, header.length);
   return out;
 }
-
-import { restorePrinterTextMode } from "./encoding";
 
 export function appendLogo(parts: Uint8Array[], logo: Uint8Array | null) {
   if (!logo) return;

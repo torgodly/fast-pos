@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["better-sqlite3"],
+  serverExternalPackages: ["better-sqlite3", "@napi-rs/canvas"],
   async headers() {
     if (process.env.NODE_ENV !== "production") {
       return [];
