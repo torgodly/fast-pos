@@ -1,4 +1,8 @@
-import type { CheckoutReceiptData, KitchenReceiptData } from "./receipts";
+import type {
+  CheckoutReceiptData,
+  KitchenReceiptData,
+  ReportSummaryPrintData,
+} from "./receipts";
 import {
   encodePrinterText,
   hasArabicText,
@@ -37,6 +41,10 @@ function textLine(value = "") {
 
 function money(amount: number) {
   return `${amount.toFixed(2)} د.ل`;
+}
+
+function reportSep(parts: Uint8Array[]) {
+  parts.push(separator());
 }
 
 function init() {
@@ -207,6 +215,75 @@ export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
   }
 
   kitchenSep(parts);
+  parts.push(cut());
+
+  return concat(...parts);
+}
+
+export function buildReportSummaryEscPos(data: ReportSummaryPrintData): Uint8Array {
+  const parts: Uint8Array[] = [init()];
+
+  headerBlock(parts, "تقرير المبيعات", data.venueName);
+  reportSep(parts);
+  fieldLine(parts, "من", data.fromLabel);
+  fieldLine(parts, "إلى", data.toLabel);
+  fieldLine(parts, "طباعة", data.printedAt);
+  reportSep(parts);
+
+  fieldLine(parts, "الفواتير", String(data.invoiceCount));
+  printLine(parts, `الإجمالي: ${money(data.totalSales)}`, {
+    bold: true,
+    fontSize: 32,
+  });
+  fieldLine(parts, "نقدي", money(data.cashTotal));
+  fieldLine(parts, "بطاقة", money(data.cardTotal));
+  fieldLine(parts, "متوسط الفاتورة", money(data.averageTicket));
+  fieldLine(parts, "قطع مباعة", String(data.totalItems));
+  fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
+  fieldLine(parts, "ملغاة", String(data.cancelledCount));
+  fieldLine(parts, "مفتوحة الآن", `${data.openCount} (${money(data.openTotal)})`);
+
+  if (data.categorySales.length > 0) {
+    reportSep(parts);
+    printLine(parts, "حسب المجموعة", { bold: true });
+    for (const row of data.categorySales) {
+      printLine(parts, `${row.name}: ${row.qty} = ${money(row.revenue)}`);
+    }
+  }
+
+  if (data.itemSales.length > 0) {
+    reportSep(parts);
+    printLine(parts, "أكثر الأصناف", { bold: true });
+    for (const row of data.itemSales) {
+      printLine(parts, `${row.name}: ${row.qty} = ${money(row.revenue)}`);
+    }
+  }
+
+  if (data.waiterPerformance.length > 0) {
+    reportSep(parts);
+    printLine(parts, "السفرادجية", { bold: true });
+    for (const row of data.waiterPerformance) {
+      printLine(
+        parts,
+        `${row.name}: ${row.invoices} فاتورة = ${money(row.sales)}`,
+      );
+    }
+  }
+
+  if (data.cashierPerformance.length > 0) {
+    reportSep(parts);
+    printLine(parts, "الكاشير", { bold: true });
+    for (const row of data.cashierPerformance) {
+      printLine(
+        parts,
+        `${row.name}: ${money(row.cash)} ن / ${money(row.card)} ب`,
+      );
+    }
+  }
+
+  reportSep(parts);
+  parts.push(align("center"));
+  printLine(parts, "— نهاية التقرير —", { center: true });
   parts.push(cut());
 
   return concat(...parts);

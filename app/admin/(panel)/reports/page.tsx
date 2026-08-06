@@ -1,17 +1,4 @@
-import {
-  and,
-  desc,
-  eq,
-  gte,
-  isNotNull,
-  isNull,
-  like,
-  lte,
-  or,
-  sql,
-  type SQL,
-} from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { eq } from "drizzle-orm";
 import {
   AlertTriangle,
   Banknote,
@@ -33,30 +20,18 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { requireAdmin } from "@/app/actions/auth";
+import { PrintReportButton } from "@/components/PrintReportButton";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
+import { categories, users } from "@/lib/db/schema";
 import {
-  categories,
-  items,
-  orderItems,
-  orders,
-  tables,
-  users,
-} from "@/lib/db/schema";
+  defaultReportRange,
+  inputDate,
+  toDateTimeLocalValue,
+} from "@/lib/reports/filters";
+import { getReportSummary } from "@/lib/reports/summary";
 import { formatDateTime, formatMoney, getVenueName } from "@/lib/venues";
-
-function inputDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function parseId(value?: string) {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-}
 
 export default async function AdminReportsPage({
   searchParams,
@@ -76,16 +51,57 @@ export default async function AdminReportsPage({
   await requireAdmin();
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
-  const q = (sp.q ?? "").trim();
-  const waiterId = parseId(sp.waiter);
-  const cashierId = parseId(sp.cashier);
-  const categoryId = parseId(sp.category);
-  const payment =
-    sp.payment === "cash" || sp.payment === "card" ? sp.payment : "all";
-  const saleType =
-    sp.saleType === "table" || sp.saleType === "quick"
-      ? sp.saleType
-      : "all";
+  const summary = getReportSummary({
+    venue,
+    from: sp.from,
+    to: sp.to,
+    q: sp.q,
+    waiter: sp.waiter,
+    cashier: sp.cashier,
+    payment: sp.payment,
+    saleType: sp.saleType,
+    category: sp.category,
+  });
+
+  const {
+    from,
+    to,
+    fromSql,
+    toSql,
+    q,
+    waiterId,
+    cashierId,
+    categoryId,
+    payment,
+    saleType,
+    rows,
+    itemSales,
+    categorySales,
+    totalSales,
+    totalItems,
+    cashTotal,
+    cardTotal,
+    averageTicket,
+    tableSales,
+    quickSales,
+    openCount,
+    openTotal,
+    cancelledCount,
+    waiterPerformance,
+    cashierPerformance,
+  } = summary;
+
+  const printFilters = {
+    venue,
+    from,
+    to,
+    q,
+    waiter: sp.waiter,
+    cashier: sp.cashier,
+    payment: sp.payment,
+    saleType: sp.saleType,
+    category: sp.category,
+  };
 
   const now = new Date();
   const today = inputDate(now);
@@ -95,183 +111,23 @@ export default async function AdminReportsPage({
   const last7Date = new Date(now);
   last7Date.setDate(last7Date.getDate() - 6);
   const last7 = inputDate(last7Date);
-  const from = sp.from || today;
-  const to = sp.to || today;
 
-  const waiter = alias(users, "waiter");
-  const cashier = alias(users, "cashier");
-
-  const staff = db
-    .select({
-      id: users.id,
-      name: users.name,
-      role: users.role,
-      active: users.active,
-    })
-    .from(users)
-    .where(or(eq(users.role, "waiter"), eq(users.role, "cashier")))
-    .all();
-  const waiters = staff.filter((person) => person.role === "waiter");
-  const cashiers = staff.filter((person) => person.role === "cashier");
   const reportCategories = db
     .select()
     .from(categories)
     .where(eq(categories.venueId, venue))
     .all();
 
-  const orderConditions: SQL[] = [
-    eq(orders.venueId, venue),
-    eq(orders.status, "paid"),
-    gte(orders.paidAt, `${from} 00:00:00`),
-    lte(orders.paidAt, `${to} 23:59:59`),
-  ];
-  if (waiterId) orderConditions.push(eq(orders.waiterId, waiterId));
-  if (cashierId) orderConditions.push(eq(orders.cashierId, cashierId));
-  if (payment !== "all") {
-    orderConditions.push(eq(orders.paymentMethod, payment));
-  }
-  if (saleType === "table") orderConditions.push(isNotNull(orders.tableId));
-  if (saleType === "quick") orderConditions.push(isNull(orders.tableId));
-
-  const itemConditions: SQL[] = [...orderConditions];
-  if (categoryId) itemConditions.push(eq(items.categoryId, categoryId));
-  if (q) itemConditions.push(like(orderItems.itemName, `%${q}%`));
-
-  const matchingOrderIds =
-    categoryId || q
-      ? new Set(
-          db
-            .selectDistinct({ orderId: orderItems.orderId })
-            .from(orderItems)
-            .innerJoin(orders, eq(orderItems.orderId, orders.id))
-            .leftJoin(items, eq(orderItems.itemId, items.id))
-            .where(and(...itemConditions))
-            .all()
-            .map((row) => row.orderId),
-        )
-      : null;
-
-  const allPaidRows = db
-    .select({
-      id: orders.id,
-      total: orders.total,
-      paymentMethod: orders.paymentMethod,
-      paidAt: orders.paidAt,
-      createdAt: orders.createdAt,
-      tableName: tables.name,
-      waiterName: waiter.name,
-      cashierName: cashier.name,
-      waiterId: orders.waiterId,
-      cashierId: orders.cashierId,
-      tableId: orders.tableId,
-    })
-    .from(orders)
-    .leftJoin(tables, eq(orders.tableId, tables.id))
-    .leftJoin(waiter, eq(orders.waiterId, waiter.id))
-    .leftJoin(cashier, eq(orders.cashierId, cashier.id))
-    .where(and(...orderConditions))
-    .orderBy(desc(orders.paidAt))
+  const waiters = db
+    .select({ id: users.id, name: users.name, active: users.active })
+    .from(users)
+    .where(eq(users.role, "waiter"))
     .all();
-
-  const rows = matchingOrderIds
-    ? allPaidRows.filter((row) => matchingOrderIds.has(row.id))
-    : allPaidRows;
-
-  const itemSales = db
-    .select({
-      itemId: orderItems.itemId,
-      itemName: orderItems.itemName,
-      qty: sql<number>`sum(${orderItems.qty})`.mapWith(Number),
-      revenue: sql<number>`sum(${orderItems.lineTotal})`.mapWith(Number),
-    })
-    .from(orderItems)
-    .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .leftJoin(items, eq(orderItems.itemId, items.id))
-    .where(and(...itemConditions))
-    .groupBy(orderItems.itemId, orderItems.itemName)
-    .orderBy(desc(sql`sum(${orderItems.qty})`))
+  const cashiers = db
+    .select({ id: users.id, name: users.name, active: users.active })
+    .from(users)
+    .where(eq(users.role, "cashier"))
     .all();
-
-  const categorySales = db
-    .select({
-      categoryId: categories.id,
-      categoryName: sql<string>`coalesce(${categories.name}, 'غير مصنف')`,
-      qty: sql<number>`sum(${orderItems.qty})`.mapWith(Number),
-      revenue: sql<number>`sum(${orderItems.lineTotal})`.mapWith(Number),
-    })
-    .from(orderItems)
-    .innerJoin(orders, eq(orderItems.orderId, orders.id))
-    .leftJoin(items, eq(orderItems.itemId, items.id))
-    .leftJoin(categories, eq(items.categoryId, categories.id))
-    .where(and(...itemConditions))
-    .groupBy(categories.id, categories.name)
-    .orderBy(desc(sql`sum(${orderItems.qty})`))
-    .all();
-
-  const totalSales = rows.reduce((s, r) => s + r.total, 0);
-  const totalItems = itemSales.reduce((sum, row) => sum + row.qty, 0);
-  const cashTotal = rows
-    .filter((r) => r.paymentMethod === "cash")
-    .reduce((s, r) => s + r.total, 0);
-  const cardTotal = rows
-    .filter((r) => r.paymentMethod === "card")
-    .reduce((s, r) => s + r.total, 0);
-  const averageTicket = rows.length ? totalSales / rows.length : 0;
-  const tableSales = rows.filter((row) => row.tableId !== null).length;
-  const quickSales = rows.length - tableSales;
-
-  const openRows = db
-    .select({ total: orders.total })
-    .from(orders)
-    .where(and(eq(orders.venueId, venue), eq(orders.status, "open")))
-    .all();
-  const openTotal = openRows.reduce((sum, row) => sum + row.total, 0);
-
-  const cancelledConditions: SQL[] = [
-    eq(orders.venueId, venue),
-    eq(orders.status, "cancelled"),
-    gte(orders.createdAt, `${from} 00:00:00`),
-    lte(orders.createdAt, `${to} 23:59:59`),
-  ];
-  if (waiterId) cancelledConditions.push(eq(orders.waiterId, waiterId));
-  if (cashierId) cancelledConditions.push(eq(orders.cashierId, cashierId));
-  const cancelledCount = db
-    .select({ count: sql<number>`count(*)`.mapWith(Number) })
-    .from(orders)
-    .where(and(...cancelledConditions))
-    .get()?.count ?? 0;
-
-  const waiterPerformance = waiters
-    .map((person) => {
-      const personRows = rows.filter((row) => row.waiterId === person.id);
-      return {
-        id: person.id,
-        name: person.name,
-        invoices: personRows.length,
-        sales: personRows.reduce((sum, row) => sum + row.total, 0),
-      };
-    })
-    .filter((person) => person.invoices > 0)
-    .sort((a, b) => b.sales - a.sales);
-
-  const cashierPerformance = cashiers
-    .map((person) => {
-      const personRows = rows.filter((row) => row.cashierId === person.id);
-      return {
-        id: person.id,
-        name: person.name,
-        invoices: personRows.length,
-        sales: personRows.reduce((sum, row) => sum + row.total, 0),
-        cash: personRows
-          .filter((row) => row.paymentMethod === "cash")
-          .reduce((sum, row) => sum + row.total, 0),
-        card: personRows
-          .filter((row) => row.paymentMethod === "card")
-          .reduce((sum, row) => sum + row.total, 0),
-      };
-    })
-    .filter((person) => person.invoices > 0)
-    .sort((a, b) => b.sales - a.sales);
 
   const activeFilterCount = [
     waiterId,
@@ -282,8 +138,16 @@ export default async function AdminReportsPage({
     q,
   ].filter(Boolean).length;
 
-  const presetHref = (presetFrom: string, presetTo: string) =>
-    `/admin/reports?venue=${venue}&from=${presetFrom}&to=${presetTo}`;
+  const presetHref = (presetFrom: string, presetTo: string) => {
+    const params = new URLSearchParams({ venue, from: presetFrom, to: presetTo });
+    return `/admin/reports?${params.toString()}`;
+  };
+
+  const todayRange = defaultReportRange(now);
+  const isTodayPreset =
+    from === todayRange.from && to === todayRange.to;
+  const isYesterdayPreset =
+    from === `${yesterday}T00:00` && to === `${yesterday}T23:59`;
 
   return (
     <div className="space-y-6 pb-10">
@@ -299,14 +163,16 @@ export default async function AdminReportsPage({
               تقرير {getVenueName(venue)}
             </h2>
             <p className="mt-1 text-sm text-white/60">
-              من {from} إلى {to} — {rows.length} فاتورة مدفوعة
+              من {formatDateTime(fromSql)} إلى {formatDateTime(toSql)} —{" "}
+              {rows.length} فاتورة مدفوعة
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <PrintReportButton filters={printFilters} />
             <Link
-              href={presetHref(today, today)}
+              href={presetHref(`${today}T00:00`, `${today}T23:59`)}
               className={`btn btn-sm rounded-xl ${
-                from === today && to === today
+                isTodayPreset
                   ? "border-white bg-white text-neutral"
                   : "border-white/15 bg-white/10 text-white hover:bg-white/20"
               }`}
@@ -314,9 +180,9 @@ export default async function AdminReportsPage({
               اليوم
             </Link>
             <Link
-              href={presetHref(yesterday, yesterday)}
+              href={presetHref(`${yesterday}T00:00`, `${yesterday}T23:59`)}
               className={`btn btn-sm rounded-xl ${
-                from === yesterday && to === yesterday
+                isYesterdayPreset
                   ? "border-white bg-white text-neutral"
                   : "border-white/15 bg-white/10 text-white hover:bg-white/20"
               }`}
@@ -324,7 +190,7 @@ export default async function AdminReportsPage({
               أمس
             </Link>
             <Link
-              href={presetHref(last7, today)}
+              href={presetHref(`${last7}T00:00`, `${today}T23:59`)}
               className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
             >
               آخر 7 أيام
@@ -351,7 +217,7 @@ export default async function AdminReportsPage({
             <span>
               <span className="block font-black">فلاتر التقرير</span>
               <span className="block text-xs text-base-content/45">
-                التاريخ، الموظف، طريقة الدفع، ونوع البيع
+                التاريخ والوقت، الموظف، طريقة الدفع، ونوع البيع
               </span>
             </span>
           </span>
@@ -366,20 +232,20 @@ export default async function AdminReportsPage({
         <form className="grid gap-3 border-t border-base-300/60 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4">
           <input type="hidden" name="venue" value={venue} />
           <label className="form-control">
-            <span className="label-text mb-1.5 font-bold">من تاريخ</span>
+            <span className="label-text mb-1.5 font-bold">من تاريخ ووقت</span>
             <input
-              type="date"
+              type="datetime-local"
               name="from"
-              defaultValue={from}
+              defaultValue={toDateTimeLocalValue(from, "start")}
               className="input input-bordered w-full"
             />
           </label>
           <label className="form-control">
-            <span className="label-text mb-1.5 font-bold">إلى تاريخ</span>
+            <span className="label-text mb-1.5 font-bold">إلى تاريخ ووقت</span>
             <input
-              type="date"
+              type="datetime-local"
               name="to"
-              defaultValue={to}
+              defaultValue={toDateTimeLocalValue(to, "end")}
               className="input input-bordered w-full"
             />
           </label>
@@ -549,7 +415,7 @@ export default async function AdminReportsPage({
             <p className="text-xs font-bold text-base-content/45">
               فواتير مفتوحة الآن
             </p>
-            <p className="text-xl font-black">{openRows.length} فاتورة</p>
+            <p className="text-xl font-black">{openCount} فاتورة</p>
             <p className="text-xs text-base-content/45">{formatMoney(openTotal)}</p>
           </div>
         </div>
@@ -576,11 +442,11 @@ export default async function AdminReportsPage({
         </div>
       </section>
 
-      {openRows.length > 0 ? (
+      {openCount > 0 ? (
         <div className="alert alert-warning rounded-2xl">
           <AlertTriangle className="size-5" />
           <div>
-            <p className="font-black">يوجد {openRows.length} فاتورة مفتوحة</p>
+            <p className="font-black">يوجد {openCount} فاتورة مفتوحة</p>
             <p className="text-sm">
               راجعها قبل إقفال اليوم. قيمتها الحالية {formatMoney(openTotal)}.
             </p>

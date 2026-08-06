@@ -5,6 +5,34 @@ export type ReceiptLine = {
   lineTotal?: number;
 };
 
+export type ReportSummaryPrintData = {
+  venueName: string;
+  fromLabel: string;
+  toLabel: string;
+  printedAt: string;
+  invoiceCount: number;
+  totalSales: number;
+  cashTotal: number;
+  cardTotal: number;
+  averageTicket: number;
+  totalItems: number;
+  tableSales: number;
+  quickSales: number;
+  cancelledCount: number;
+  openCount: number;
+  openTotal: number;
+  categorySales: Array<{ name: string; qty: number; revenue: number }>;
+  itemSales: Array<{ name: string; qty: number; revenue: number }>;
+  waiterPerformance: Array<{ name: string; invoices: number; sales: number }>;
+  cashierPerformance: Array<{
+    name: string;
+    invoices: number;
+    cash: number;
+    card: number;
+    sales: number;
+  }>;
+};
+
 export type KitchenReceiptData = {
   venueName: string;
   orderId: number;
