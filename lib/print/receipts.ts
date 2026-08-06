@@ -12,6 +12,8 @@ export type KitchenReceiptData = {
   waiterName: string;
   createdAt: string;
   lines: ReceiptLine[];
+  /** e.g. "2/3" when order is split across multiple kitchen tickets */
+  ticketPart?: string;
 };
 
 export type CheckoutReceiptData = {
@@ -254,6 +256,7 @@ function shell(title: string, body: string) {
 }
 
 export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
+  const partTag = data.ticketPart ? ` ${escapeHtml(data.ticketPart)}` : "";
   const lines = data.lines
     .map(
       (line) => `
@@ -265,31 +268,14 @@ export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
     .join("");
 
   return shell(
-    `طلب مطبخ رقم ${data.orderId}`,
+    `طلب مطبخ #${data.orderId}`,
     `
-    <div class="center">
-      <p class="brand">طلب المطبخ</p>
-      <p class="subtitle">${escapeHtml(data.venueName)}</p>
-    </div>
-    <hr class="divider" />
-    <table class="meta">
-      ${metaRow("رقم الفاتورة", `#${data.orderId}`)}
-      ${metaRow("الطاولة", data.tableName)}
-      ${metaRow("السفرادجي", data.waiterName)}
-      ${metaRow("الوقت", data.createdAt)}
-    </table>
+    <p class="brand">#${data.orderId}${partTag} · ${escapeHtml(data.tableName)}</p>
+    <p class="subtitle">${escapeHtml(data.createdAt)} · ${escapeHtml(data.waiterName)}</p>
     <hr class="divider" />
     <table class="items">
-      <thead>
-        <tr>
-          <td>الصنف</td>
-          <td style="text-align:center;width:12mm">الكمية</td>
-        </tr>
-      </thead>
       <tbody>${lines}</tbody>
     </table>
-    <hr class="divider" />
-    <p class="foot">يُرجى تحضير الطلب — شكراً</p>
   `,
   );
 }

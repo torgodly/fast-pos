@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   BarChart3,
   Boxes,
   LayoutDashboard,
   LogOut,
   Printer,
+  RotateCcw,
   Settings2,
   Sparkles,
   TableProperties,
@@ -30,19 +31,11 @@ const links = [
 export function AdminNav({ name }: { name: string }) {
   const pathname = usePathname();
   const [resetOpen, setResetOpen] = useState(false);
-  const secretClicks = useRef({ count: 0, timer: 0 });
+  const [resetMode, setResetMode] = useState<"sales" | "full">("sales");
 
-  function onSecretClick() {
-    secretClicks.current.count += 1;
-    window.clearTimeout(secretClicks.current.timer);
-    if (secretClicks.current.count >= 3) {
-      secretClicks.current.count = 0;
-      setResetOpen(true);
-      return;
-    }
-    secretClicks.current.timer = window.setTimeout(() => {
-      secretClicks.current.count = 0;
-    }, 1500);
+  function openReset(mode: "sales" | "full") {
+    setResetMode(mode);
+    setResetOpen(true);
   }
 
   return (
@@ -54,13 +47,7 @@ export function AdminNav({ name }: { name: string }) {
           </span>
           <div>
             <h1 className="text-lg font-black leading-tight">فاست بوس</h1>
-            <p
-              className="cursor-default select-none text-xs text-base-content/45"
-              onClick={onSecretClick}
-              title=""
-            >
-              لوحة الإدارة
-            </p>
+            <p className="text-xs text-base-content/45">لوحة الإدارة</p>
           </div>
         </div>
         <LogoutIconButton className="btn btn-circle btn-ghost btn-sm text-base-content/55 lg:hidden" />
@@ -90,12 +77,28 @@ export function AdminNav({ name }: { name: string }) {
           <p className="text-xs text-base-content/45">تم تسجيل الدخول باسم</p>
           <p className="mt-0.5 font-bold">{name}</p>
         </div>
+        <button
+          type="button"
+          className="btn btn-outline btn-error btn-sm mb-2 w-full justify-start gap-2 rounded-xl"
+          onClick={() => openReset("sales")}
+        >
+          <RotateCcw className="size-4" />
+          حذف جميع المبيعات
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs mb-2 w-full justify-start text-base-content/45"
+          onClick={() => openReset("full")}
+        >
+          تهيئة متقدمة (طابعات، موظفون…)
+        </button>
         <LogoutButton className="btn btn-ghost w-full justify-start gap-3 rounded-xl text-error">
           <LogOut className="size-4.5" />
           تسجيل الخروج
         </LogoutButton>
         <FactoryResetPanel
           open={resetOpen}
+          mode={resetMode}
           onClose={() => setResetOpen(false)}
         />
       </div>

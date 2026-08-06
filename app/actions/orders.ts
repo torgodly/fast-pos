@@ -24,8 +24,8 @@ import {
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
 import { buildCheckoutReceiptHtml } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
-import { buildKitchenEscPos } from "@/lib/print/escpos";
-import { getReceiptLogoEscPos, getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
+import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
+import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getReceiptFooterMessage } from "@/lib/settings";
@@ -310,9 +310,9 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
     : null;
 
-  const createdAt = formatDateTime(
-    new Date().toISOString().slice(0, 19).replace("T", " "),
-  );
+  const createdAt = new Date()
+    .toLocaleTimeString("ar-LY", { hour: "2-digit", minute: "2-digit" })
+    .replace(/[\u200e\u200f\u061c]/g, "");
 
   const groups = new Map<number, Pending[]>();
   for (const row of pending) {
@@ -325,8 +325,6 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   const failed: Array<PrintTargetResult & { reason: string }> = [];
   const succeededLineIds = new Set<number>();
 
-  const logo = await getReceiptLogoEscPos();
-
   for (const [printerId, group] of groups) {
     const sample = group[0]!;
     const target = {
@@ -334,23 +332,26 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       printerName: sample.printerName,
       host: sample.host,
     };
+    const itemLines = group.map((g) => ({ name: g.name, qty: g.qty }));
+    const chunks = chunkKitchenLines(itemLines);
     try {
-      const payload = buildKitchenEscPos(
-        {
+      for (let i = 0; i < chunks.length; i++) {
+        const payload = buildKitchenEscPos({
           venueName: getVenueName(order.venueId),
           orderId: order.id,
           tableName: table?.name ?? "بدون طاولة",
           waiterName: session.name,
           createdAt,
-          lines: group.map((g) => ({ name: g.name, qty: g.qty })),
-        },
-        logo,
-      );
-      await printToPrinter({
-        host: sample.host,
-        port: sample.port,
-        data: payload,
-      });
+          ticketPart:
+            chunks.length > 1 ? `${i + 1}/${chunks.length}` : undefined,
+          lines: chunks[i]!,
+        });
+        await printToPrinter({
+          host: sample.host,
+          port: sample.port,
+          data: payload,
+        });
+      }
       printedTo.push(target);
       for (const g of group) succeededLineIds.add(g.lineId);
     } catch (error) {

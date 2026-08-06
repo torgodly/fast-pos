@@ -142,31 +142,63 @@ function headerBlock(parts: Uint8Array[], title: string, subtitle?: string) {
   parts.push(align("right"));
 }
 
-export function buildKitchenEscPos(
-  data: KitchenReceiptData,
-  logo: Uint8Array | null = null,
-): Uint8Array {
-  const parts: Uint8Array[] = [init()];
-  appendLogo(parts, logo);
-  headerBlock(parts, "طلب المطبخ", data.venueName);
-  parts.push(separator());
-  fieldLine(parts, "فاتورة", `#${data.orderId}`);
-  fieldLine(parts, "الطاولة", data.tableName);
-  fieldLine(parts, "السفرادجي", data.waiterName);
-  fieldLine(parts, "الوقت", data.createdAt);
-  parts.push(separator());
+function kitchenSep() {
+  return textLine("----------------");
+}
 
-  for (const item of data.lines) {
-    printWrappedName(parts, item.name, true);
-    printLine(parts, `الكمية: ${item.qty}`, { bold: true, fontSize: 30 });
+/** Minimal kitchen line — plain text when possible, small raster for Arabic. */
+function kitchenLine(
+  parts: Uint8Array[],
+  value: string,
+  options: { emphasis?: boolean } = {},
+) {
+  const normalized = normalizePrinterText(value);
+  if (!normalized) {
+    parts.push(textLine(""));
+    return;
   }
 
-  parts.push(
-    separator(),
-    align("center"),
-  );
-  printLine(parts, "أرسل للمطبخ — يرجى التحضير", { center: true });
-  parts.push(cut());
+  if (!hasArabicText(normalized)) {
+    if (options.emphasis) parts.push(bold(true));
+    parts.push(textLine(normalized));
+    if (options.emphasis) parts.push(bold(false));
+    return;
+  }
+
+  printLine(parts, normalized, {
+    bold: options.emphasis,
+    fontSize: 20,
+  });
+}
+
+/** Max items per kitchen ticket — avoids printer buffer overflow. */
+export const KITCHEN_ITEMS_PER_TICKET = 18;
+
+export function chunkKitchenLines<T>(lines: T[], size = KITCHEN_ITEMS_PER_TICKET): T[][] {
+  if (lines.length === 0) return [];
+  const chunks: T[][] = [];
+  for (let i = 0; i < lines.length; i += size) {
+    chunks.push(lines.slice(i, i + size));
+  }
+  return chunks;
+}
+
+export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
+  const parts: Uint8Array[] = [init()];
+
+  const partTag = data.ticketPart ? ` ${data.ticketPart}` : "";
+  kitchenLine(parts, `#${data.orderId}${partTag} · ${data.tableName}`, {
+    emphasis: true,
+  });
+  kitchenLine(parts, `${data.createdAt} · ${data.waiterName}`);
+
+  parts.push(kitchenSep());
+
+  for (const item of data.lines) {
+    kitchenLine(parts, `${item.qty}× ${item.name}`, { emphasis: true });
+  }
+
+  parts.push(kitchenSep(), cut());
 
   return concat(...parts);
 }

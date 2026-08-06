@@ -1,12 +1,51 @@
 import net from "net";
 
-const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_TIMEOUT_MS = 8000;
+const WRITE_CHUNK_BYTES = 4096;
+
+function timeoutForPayload(byteLength: number) {
+  // Large kitchen tickets need more time to spool
+  return DEFAULT_TIMEOUT_MS + Math.ceil(byteLength / WRITE_CHUNK_BYTES) * 1500;
+}
+
+function writeBuffer(socket: net.Socket, buffer: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let offset = 0;
+
+    const writeNext = () => {
+      if (offset >= buffer.length) {
+        resolve();
+        return;
+      }
+
+      const chunk = buffer.subarray(
+        offset,
+        Math.min(offset + WRITE_CHUNK_BYTES, buffer.length),
+      );
+      offset += chunk.length;
+
+      const canContinue = socket.write(chunk, (error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        writeNext();
+      });
+
+      if (!canContinue) {
+        socket.once("drain", writeNext);
+      }
+    };
+
+    writeNext();
+  });
+}
 
 export async function printToPrinter({
   host,
   port,
   data,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutMs,
 }: {
   host: string;
   port: number;
@@ -17,6 +56,9 @@ export async function printToPrinter({
   if (!cleanedHost) {
     throw new Error("عنوان الطابعة غير صالح");
   }
+
+  const buffer = Buffer.from(data);
+  const effectiveTimeout = timeoutMs ?? timeoutForPayload(buffer.length);
 
   await new Promise<void>((resolve, reject) => {
     const socket = new net.Socket();
@@ -30,21 +72,22 @@ export async function printToPrinter({
       else resolve();
     };
 
-    socket.setTimeout(timeoutMs);
+    socket.setTimeout(effectiveTimeout);
 
     socket.once("connect", () => {
-      socket.write(Buffer.from(data), (writeError) => {
-        if (writeError) {
+      void writeBuffer(socket, buffer)
+        .then(() => {
+          socket.end(() => finish());
+        })
+        .catch((writeError) => {
           finish(
-            new Error(
-              `تعذر إرسال البيانات للطابعة ${cleanedHost}:${port}`,
-            ),
+            writeError instanceof Error
+              ? writeError
+              : new Error(
+                  `تعذر إرسال البيانات للطابعة ${cleanedHost}:${port}`,
+                ),
           );
-          return;
-        }
-        // Give the printer a brief moment, then close
-        socket.end(() => finish());
-      });
+        });
     });
 
     socket.once("timeout", () => {

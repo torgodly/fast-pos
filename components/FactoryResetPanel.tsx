@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { AlertTriangle, LoaderCircle, RotateCcw } from "lucide-react";
 import {
   factoryResetDatabase,
@@ -8,7 +8,16 @@ import {
 } from "@/app/actions/admin";
 import { ActionFeedback } from "@/components/ActionFeedback";
 
-const defaultOptions: FactoryResetOptions = {
+const salesOnlyOptions: FactoryResetOptions = {
+  sales: true,
+  printers: false,
+  staff: false,
+  menu: false,
+  tables: false,
+  receiptSettings: false,
+};
+
+const fullResetOptions: FactoryResetOptions = {
   sales: true,
   printers: true,
   staff: true,
@@ -57,22 +66,35 @@ const resetChoices: {
 type FactoryResetPanelProps = {
   open: boolean;
   onClose: () => void;
+  /** sales = delete orders only (default). full = sales + printers + staff. */
+  mode?: "sales" | "full";
 };
 
-export function FactoryResetPanel({ open, onClose }: FactoryResetPanelProps) {
+export function FactoryResetPanel({
+  open,
+  onClose,
+  mode = "sales",
+}: FactoryResetPanelProps) {
   const [password, setPassword] = useState("");
   const [confirmText, setConfirmText] = useState("");
-  const [options, setOptions] =
-    useState<FactoryResetOptions>(defaultOptions);
+  const [options, setOptions] = useState<FactoryResetOptions>(salesOnlyOptions);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!open) return;
+    setOptions(mode === "full" ? fullResetOptions : salesOnlyOptions);
+    setPassword("");
+    setConfirmText("");
+    setError(null);
+  }, [open, mode]);
 
   function closePanel() {
     if (pending) return;
     onClose();
     setPassword("");
     setConfirmText("");
-    setOptions(defaultOptions);
+    setOptions(mode === "full" ? fullResetOptions : salesOnlyOptions);
     setError(null);
   }
 
@@ -117,10 +139,12 @@ export function FactoryResetPanel({ open, onClose }: FactoryResetPanelProps) {
       <div className="modal-box max-w-lg">
         <h3 className="flex items-center gap-2 text-lg font-black text-error">
           <RotateCcw className="size-5" />
-          تهيئة البيانات
+          {mode === "sales" ? "حذف جميع المبيعات" : "تهيئة البيانات"}
         </h3>
         <p className="mt-3 text-sm leading-7 text-base-content/65">
-          اختر ما تريد حذفه. لا يمكن التراجع عن هذا الإجراء.
+          {mode === "sales"
+            ? "يُحذف كل سجل المبيعات والفواتير (المفتوحة والمدفوعة والملغاة). لا يمكن التراجع."
+            : "اختر ما تريد حذفه. لا يمكن التراجع عن هذا الإجراء."}
         </p>
 
         <div className="mt-4 space-y-2 rounded-2xl border border-base-300/60 bg-base-200/40 p-3">
