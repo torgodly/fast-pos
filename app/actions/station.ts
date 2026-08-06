@@ -3,6 +3,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cashierStations, printers } from "@/lib/db/schema";
+import { checkoutPrinterRolesFilter } from "@/lib/printers";
 import { getVenueName, isVenueId } from "@/lib/venues";
 
 export async function getCashierStationContext(
@@ -24,7 +25,7 @@ export async function getCashierStationContext(
     .where(
       and(
         eq(printers.venueId, venueId),
-        eq(printers.role, "checkout"),
+        checkoutPrinterRolesFilter,
         eq(printers.active, true),
       ),
     )

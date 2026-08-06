@@ -13,6 +13,11 @@ import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { ToggleActiveButton } from "@/components/admin/ToggleActiveButton";
 import { ActionFeedback } from "@/components/ActionFeedback";
 import { TestPrintButton } from "@/components/TestPrintButton";
+import {
+  printerRoleLabel,
+  supportsCheckout,
+  supportsKitchen,
+} from "@/lib/printers";
 import type { VenueId } from "@/lib/types";
 
 type PrinterRow = {
@@ -42,9 +47,9 @@ export function PrintersAdmin({
     | null
   >(null);
 
-  const kitchenPrinters = allPrinters.filter((p) => p.role === "kitchen");
+  const kitchenPrinters = allPrinters.filter((p) => supportsKitchen(p.role));
   const checkoutPrinters = allPrinters.filter(
-    (p) => p.role === "checkout" && p.active,
+    (p) => supportsCheckout(p.role) && p.active,
   );
 
   function closeModals() {
@@ -124,9 +129,7 @@ export function PrintersAdmin({
                     className={!printer.active ? "opacity-50" : ""}
                   >
                     <td className="font-bold">{printer.name}</td>
-                    <td>
-                      {printer.role === "kitchen" ? "مطبخ" : "فاتورة كاشير"}
-                    </td>
+                    <td>{printerRoleLabel(printer.role)}</td>
                     <td>
                       {printer.connectionType === "local" ? (
                         <span className="badge badge-info badge-soft badge-sm">
@@ -243,9 +246,10 @@ export function PrintersAdmin({
             >
               <option value="kitchen">مطبخ</option>
               <option value="checkout">فاتورة كاشير</option>
+              <option value="both">مطبخ + فاتورة</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              فاتورة كاشير = طابعة هذا القسم (مطعم أو كافيه)
+              «مطبخ + فاتورة» = نفس الطابعة للمطبخ وإيصال الكاشير (شبكة فقط)
             </span>
           </label>
           <label className="form-control w-full">

@@ -47,7 +47,7 @@ export const printers = sqliteTable("printers", {
     .notNull()
     .references(() => venues.id),
   name: text("name").notNull(),
-  role: text("role", { enum: ["kitchen", "checkout"] }).notNull(),
+  role: text("role", { enum: ["kitchen", "checkout", "both"] }).notNull(),
   host: text("host").notNull(),
   port: integer("port").notNull().default(9100),
   connectionType: text("connection_type", { enum: ["network", "local"] })

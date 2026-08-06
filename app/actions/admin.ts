@@ -22,11 +22,16 @@ import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import { setReceiptFooterMessage, clearReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
 import type {
-  PrinterRole,
   PrinterConnectionType,
   VenueId,
 } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
+import {
+  isPrinterRole,
+  kitchenPrinterRolesFilter,
+  supportsCheckout,
+  supportsKitchen,
+} from "@/lib/printers";
 
 async function assertAdmin() {
   const session = await getSession();
@@ -108,7 +113,7 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
         and(
           eq(printers.id, kitchenPrinterId),
           eq(printers.venueId, venueId),
-          eq(printers.role, "kitchen"),
+          kitchenPrinterRolesFilter,
         ),
       )
       .get();
@@ -341,15 +346,26 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const venueId = String(formData.get("venueId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
-  const role = String(formData.get("role") ?? "") as PrinterRole;
+  const role = String(formData.get("role") ?? "");
   const connectionType = String(
     formData.get("connectionType") ?? "network",
   ) as PrinterConnectionType;
   const host = String(formData.get("host") ?? "").trim();
   const port = Number(formData.get("port") ?? 9100);
 
-  const resolvedConnection: PrinterConnectionType =
-    role === "kitchen" ? "network" : connectionType;
+  if (!isPrinterRole(role)) {
+    return { error: "نوع الطابعة غير صالح" };
+  }
+
+  if (role === "both" && connectionType === "local") {
+    return {
+      error: "الطابعة المشتركة (مطبخ + فاتورة) تتطلب اتصال شبكة",
+    };
+  }
+
+  const resolvedConnection: PrinterConnectionType = supportsKitchen(role)
+    ? "network"
+    : connectionType;
 
   if (!isVenueId(venueId) || !name) {
     return { error: "بيانات الطابعة غير مكتملة" };
@@ -361,10 +377,6 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
 
   const resolvedHost =
     resolvedConnection === "local" ? host.trim() || "default" : host;
-
-  if (role !== "kitchen" && role !== "checkout") {
-    return { error: "بيانات الطابعة غير مكتملة" };
-  }
 
   if (resolvedConnection === "network") {
     if (!Number.isFinite(port) || port < 1) {
@@ -394,8 +406,12 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     printerId = inserted.id;
   }
 
-  if (role === "checkout" && printerId) {
+  if (supportsCheckout(role) && printerId) {
     syncCheckoutStation(venueId as VenueId, printerId, name);
+  } else if (printerId) {
+    db.delete(cashierStations)
+      .where(eq(cashierStations.printerId, printerId))
+      .run();
   }
 
   revalidatePrinters();

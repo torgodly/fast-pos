@@ -6,6 +6,7 @@ import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { categories, items, printers } from "@/lib/db/schema";
+import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getVenueName } from "@/lib/venues";
 
 export default async function AdminItemsPage({
@@ -36,7 +37,7 @@ export default async function AdminItemsPage({
     .where(
       and(
         eq(printers.venueId, venue),
-        eq(printers.role, "kitchen"),
+        kitchenPrinterRolesFilter,
         eq(printers.active, true),
       ),
     )
@@ -46,7 +47,7 @@ export default async function AdminItemsPage({
   const allKitchenPrinters = db
     .select()
     .from(printers)
-    .where(and(eq(printers.venueId, venue), eq(printers.role, "kitchen")))
+    .where(and(eq(printers.venueId, venue), kitchenPrinterRolesFilter))
     .all();
 
   return (

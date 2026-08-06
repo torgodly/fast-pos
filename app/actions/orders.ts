@@ -27,6 +27,7 @@ import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos } from "@/lib/print/escpos";
 import { getReceiptLogoEscPos, getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
+import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getReceiptFooterMessage } from "@/lib/settings";
 
 function recalcOrderTotal(orderId: number) {
@@ -278,7 +279,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       .where(
         and(
           eq(printers.id, resolvedPrinterId),
-          eq(printers.role, "kitchen"),
+          kitchenPrinterRolesFilter,
           eq(printers.active, true),
         ),
       )
