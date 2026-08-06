@@ -1,13 +1,15 @@
-import iconv from "iconv-lite";
 import type { CheckoutReceiptData, KitchenReceiptData } from "./receipts";
+import {
+  encodePrinterText,
+  normalizePrinterText,
+  printerInitBytes,
+  restorePrinterTextMode,
+} from "./encoding";
 import { appendLogo } from "./logo";
 
 const ESC = 0x1b;
 const GS = 0x1d;
-const FS = 0x1c;
 
-/** Windows Arabic — matches most XPrinter firmware in Libya. */
-const CODE_PAGE_WPC1256 = 46;
 const LINE_WIDTH = 32;
 
 function concat(...parts: Uint8Array[]): Uint8Array {
@@ -25,12 +27,8 @@ function cmd(...bytes: number[]) {
   return new Uint8Array(bytes);
 }
 
-function text(value: string) {
-  return new Uint8Array(iconv.encode(value, "win1256"));
-}
-
 function line(value = "") {
-  return text(`${value}\n`);
+  return concat(encodePrinterText(value), new Uint8Array([0x0a]));
 }
 
 function money(amount: number) {
@@ -38,12 +36,7 @@ function money(amount: number) {
 }
 
 function init() {
-  return concat(
-    cmd(ESC, 0x40),
-    cmd(ESC, 0x74, CODE_PAGE_WPC1256),
-    cmd(FS, 0x26),
-    align("left"),
-  );
+  return printerInitBytes();
 }
 
 function align(mode: "left" | "center" | "right") {
@@ -60,21 +53,19 @@ function doubleSize(on: boolean) {
 }
 
 function cut() {
-  return concat(line(), line(), cmd(GS, 0x56, 0x00), cmd(FS, 0x2e));
+  return concat(line(), line(), cmd(GS, 0x56, 0x00));
 }
 
 function separator() {
   return line("--------------------------------");
 }
 
-/** Label + value on one line — avoids broken RTL column layout. */
 function fieldLine(label: string, value: string) {
   return line(`${label}: ${value}`);
 }
 
-/** Wrap long Arabic item names for 80mm paper. */
 function wrapText(value: string, maxLen = LINE_WIDTH): string[] {
-  const trimmed = value.trim();
+  const trimmed = normalizePrinterText(value);
   if (!trimmed) return [""];
   if (trimmed.length <= maxLen) return [trimmed];
 
@@ -102,21 +93,29 @@ function printWrappedName(parts: Uint8Array[], name: string) {
   }
 }
 
+function headerBlock(parts: Uint8Array[], title: string, subtitle?: string) {
+  parts.push(
+    align("center"),
+    doubleSize(true),
+    bold(true),
+    line(title),
+    doubleSize(false),
+    bold(false),
+  );
+  if (subtitle) {
+    parts.push(line(subtitle));
+  }
+  parts.push(align("right"));
+}
+
 export function buildKitchenEscPos(
   data: KitchenReceiptData,
   logo: Uint8Array | null = null,
 ): Uint8Array {
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
+  headerBlock(parts, "طلب المطبخ", data.venueName);
   parts.push(
-    align("center"),
-    doubleSize(true),
-    bold(true),
-    line("طلب المطبخ"),
-    doubleSize(false),
-    bold(false),
-    line(data.venueName),
-    align("left"),
     separator(),
     fieldLine("فاتورة", `#${data.orderId}`),
     fieldLine("الطاولة", data.tableName),
@@ -150,15 +149,8 @@ export function buildCheckoutEscPos(
   const footer = data.footerMessage?.trim() || "شكراً لزيارتكم";
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
+  headerBlock(parts, data.venueName, "إيصال الدفع");
   parts.push(
-    align("center"),
-    doubleSize(true),
-    bold(true),
-    line(data.venueName),
-    doubleSize(false),
-    bold(false),
-    line("إيصال الدفع"),
-    align("left"),
     separator(),
     fieldLine("فاتورة", `#${data.orderId}`),
     fieldLine("الطاولة", data.tableName),
@@ -219,19 +211,12 @@ export function buildTestEscPos(
       hour: "2-digit",
       minute: "2-digit",
     })
-    .replace(/\u200f/g, "");
+    .replace(/[\u200e\u200f\u061c]/g, "");
 
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
+  headerBlock(parts, "اختبار طباعة", "Fast POS");
   parts.push(
-    align("center"),
-    doubleSize(true),
-    bold(true),
-    line("اختبار طباعة"),
-    doubleSize(false),
-    bold(false),
-    line("Fast POS"),
-    align("left"),
     separator(),
     fieldLine("الطابعة", printerName),
     fieldLine("الحالة", "تعمل بنجاح"),
@@ -239,6 +224,7 @@ export function buildTestEscPos(
     separator(),
     bold(true),
     line("كابتشينو"),
+    line("قهوة عربية"),
     bold(false),
     line("2 x 12.00 د.ل  =  24.00 د.ل"),
     separator(),
