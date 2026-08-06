@@ -45,6 +45,7 @@
     "unrs-resolver"
   ],
   "trustedDependencies": [
+    "@napi-rs/canvas",
     "better-sqlite3",
     "sharp",
     "unrs-resolver"
