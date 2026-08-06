@@ -89,13 +89,13 @@ export function OrderMenu({
     });
   }
 
-  const cartBody = (
+  const cartItems = (
     <>
       <CategoryPickSummary
         categories={categories}
         categoryCounts={categoryCounts}
       />
-      <ul className="max-h-[42vh] space-y-2 overflow-y-auto lg:max-h-[48vh]">
+      <ul className="mt-3 space-y-2">
         {lines.map((line) => (
           <li
             key={line.id}
@@ -158,7 +158,12 @@ export function OrderMenu({
           </li>
         )}
       </ul>
-      <div className="mt-4 border-t border-dashed border-base-300 pt-4">
+    </>
+  );
+
+  const cartFooter = (
+    <>
+      <div className="border-t border-dashed border-base-300 pt-4">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-bold text-base-content/45">
@@ -188,8 +193,8 @@ export function OrderMenu({
           />
         </div>
 
-        <aside className="premium-card sticky top-20 hidden h-fit max-h-[calc(100dvh-6rem)] overflow-hidden lg:card lg:block xl:top-24">
-          <div className="flex items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
+        <aside className="premium-card sticky top-20 hidden lg:flex lg:max-h-[calc(100dvh-5rem)] lg:flex-col lg:overflow-hidden xl:top-24">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
             <div className="flex items-center gap-2">
               <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 <ShoppingBag className="size-4.5" />
@@ -201,7 +206,14 @@ export function OrderMenu({
             </div>
             <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="card-body gap-0 p-5">{cartBody}</div>
+          <div className="flex min-h-0 flex-1 flex-col p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {cartItems}
+            </div>
+            <div className="mt-4 shrink-0 border-t border-base-300/60 bg-base-100 pt-4">
+              {cartFooter}
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -239,8 +251,8 @@ export function OrderMenu({
             aria-label="إغلاق الفاتورة"
             onClick={() => setCartOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl bg-base-100 pb-[env(safe-area-inset-bottom)] shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
-            <div className="flex items-center justify-between border-b border-base-300/60 px-4 py-3">
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
+            <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
                 <p className="font-black">ملخص الفاتورة</p>
                 <p className="text-xs text-base-content/45">{itemCount} عنصر</p>
@@ -254,7 +266,12 @@ export function OrderMenu({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="overflow-y-auto p-4 pb-8">{cartBody}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              {cartItems}
+            </div>
+            <div className="shrink-0 border-t border-base-300/60 bg-base-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {cartFooter}
+            </div>
           </div>
         </div>
       ) : null}

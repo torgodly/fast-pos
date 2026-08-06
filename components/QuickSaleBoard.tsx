@@ -150,13 +150,13 @@ export function QuickSaleBoard({
 
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
-  const cartBody = (
+  const cartItems = (
     <>
       <CategoryPickSummary
         categories={categories}
         categoryCounts={categoryCounts}
       />
-      <ul className="max-h-[42vh] space-y-2 overflow-y-auto lg:max-h-[46vh]">
+      <ul className="mt-3 space-y-2">
         {cart.map((line) => (
           <li
             key={line.itemId}
@@ -216,8 +216,12 @@ export function QuickSaleBoard({
           </li>
         )}
       </ul>
+    </>
+  );
 
-      <div className="mt-4 border-t border-dashed border-base-300 pt-4">
+  const cartFooter = (
+    <>
+      <div className="border-t border-dashed border-base-300 pt-4">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-bold text-base-content/45">
@@ -269,8 +273,8 @@ export function QuickSaleBoard({
           />
         </div>
 
-        <aside className="premium-card sticky top-24 hidden h-fit overflow-hidden lg:card lg:block">
-          <div className="flex items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
+        <aside className="premium-card sticky top-24 hidden lg:flex lg:max-h-[calc(100dvh-5rem)] lg:flex-col lg:overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
             <div className="flex items-center gap-2">
               <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 <ShoppingBag className="size-4.5" />
@@ -282,7 +286,14 @@ export function QuickSaleBoard({
             </div>
             <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="card-body gap-0 p-5">{cartBody}</div>
+          <div className="flex min-h-0 flex-1 flex-col p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {cartItems}
+            </div>
+            <div className="mt-4 shrink-0 border-t border-base-300/60 bg-base-100 pt-4">
+              {cartFooter}
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -320,8 +331,8 @@ export function QuickSaleBoard({
             aria-label="إغلاق السلة"
             onClick={() => setCartOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-base-300/60 px-4 py-3">
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
                 <p className="font-black">سلة البيع السريع</p>
                 <p className="text-xs text-base-content/45">{itemCount} عنصر</p>
@@ -335,7 +346,12 @@ export function QuickSaleBoard({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="overflow-y-auto p-4 pb-8">{cartBody}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+              {cartItems}
+            </div>
+            <div className="shrink-0 border-t border-base-300/60 bg-base-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+              {cartFooter}
+            </div>
           </div>
         </div>
       ) : null}
