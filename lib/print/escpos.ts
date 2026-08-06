@@ -8,6 +8,7 @@ const FS = 0x1c;
 
 /** Windows Arabic — matches most XPrinter firmware in Libya. */
 const CODE_PAGE_WPC1256 = 46;
+const LINE_WIDTH = 32;
 
 function concat(...parts: Uint8Array[]): Uint8Array {
   const total = parts.reduce((sum, p) => sum + p.length, 0);
@@ -41,7 +42,7 @@ function init() {
     cmd(ESC, 0x40),
     cmd(ESC, 0x74, CODE_PAGE_WPC1256),
     cmd(FS, 0x26),
-    cmd(ESC, 0x61, 0x01),
+    align("left"),
   );
 }
 
@@ -66,10 +67,39 @@ function separator() {
   return line("--------------------------------");
 }
 
-function row(left: string, right: string) {
-  const width = 32;
-  const gap = Math.max(1, width - left.length - right.length);
-  return line(`${left}${" ".repeat(gap)}${right}`);
+/** Label + value on one line — avoids broken RTL column layout. */
+function fieldLine(label: string, value: string) {
+  return line(`${label}: ${value}`);
+}
+
+/** Wrap long Arabic item names for 80mm paper. */
+function wrapText(value: string, maxLen = LINE_WIDTH): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [""];
+  if (trimmed.length <= maxLen) return [trimmed];
+
+  const words = trimmed.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length > maxLen && current) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [trimmed.slice(0, maxLen)];
+}
+
+function printWrappedName(parts: Uint8Array[], name: string) {
+  for (const row of wrapText(name)) {
+    parts.push(line(row));
+  }
 }
 
 export function buildKitchenEscPos(
@@ -79,6 +109,7 @@ export function buildKitchenEscPos(
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
   parts.push(
+    align("center"),
     doubleSize(true),
     bold(true),
     line("طلب المطبخ"),
@@ -87,16 +118,17 @@ export function buildKitchenEscPos(
     line(data.venueName),
     align("left"),
     separator(),
-    row("فاتورة", `#${data.orderId}`),
-    row("الطاولة", data.tableName),
-    row("السفرادجي", data.waiterName),
-    row("الوقت", data.createdAt),
+    fieldLine("فاتورة", `#${data.orderId}`),
+    fieldLine("الطاولة", data.tableName),
+    fieldLine("السفرادجي", data.waiterName),
+    fieldLine("الوقت", data.createdAt),
     separator(),
   );
 
   for (const item of data.lines) {
     parts.push(doubleSize(true), bold(true));
-    parts.push(row(item.name, `x${item.qty}`));
+    printWrappedName(parts, item.name);
+    parts.push(line(`الكمية: ${item.qty}`));
     parts.push(doubleSize(false), bold(false));
   }
 
@@ -119,41 +151,52 @@ export function buildCheckoutEscPos(
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
   parts.push(
+    align("center"),
     doubleSize(true),
     bold(true),
     line(data.venueName),
     doubleSize(false),
-    line("إيصال الدفع"),
     bold(false),
+    line("إيصال الدفع"),
     align("left"),
     separator(),
-    row("فاتورة", `#${data.orderId}`),
-    row("الطاولة", data.tableName),
+    fieldLine("فاتورة", `#${data.orderId}`),
+    fieldLine("الطاولة", data.tableName),
   );
 
   if (data.waiterName) {
-    parts.push(row("السفرادجي", data.waiterName));
+    parts.push(fieldLine("السفرادجي", data.waiterName));
   }
 
   parts.push(
     bold(true),
-    row("الكاشير", data.cashierName),
+    fieldLine("الكاشير", data.cashierName),
     bold(false),
-    row("الدفع", method),
-    row("الوقت", data.paidAt),
+    fieldLine("الدفع", method),
+    fieldLine("الوقت", data.paidAt),
+    separator(),
+    bold(true),
+    line("الأصناف"),
+    bold(false),
     separator(),
   );
 
   for (const item of data.lines) {
-    parts.push(row(item.name, `x${item.qty}`));
-    parts.push(row(money(item.unitPrice), money(item.lineTotal)));
+    parts.push(bold(true));
+    printWrappedName(parts, item.name);
+    parts.push(bold(false));
+    parts.push(
+      line(
+        `${item.qty} x ${money(item.unitPrice)}  =  ${money(item.lineTotal)}`,
+      ),
+    );
   }
 
   parts.push(
     separator(),
     bold(true),
     doubleSize(true),
-    row("الإجمالي", money(data.total)),
+    fieldLine("الإجمالي", money(data.total)),
     doubleSize(false),
     bold(false),
     align("center"),
@@ -181,6 +224,7 @@ export function buildTestEscPos(
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
   parts.push(
+    align("center"),
     doubleSize(true),
     bold(true),
     line("اختبار طباعة"),
@@ -189,9 +233,14 @@ export function buildTestEscPos(
     line("Fast POS"),
     align("left"),
     separator(),
-    row("الطابعة", printerName),
-    row("الحالة", "تعمل بنجاح"),
-    row("الوقت", now),
+    fieldLine("الطابعة", printerName),
+    fieldLine("الحالة", "تعمل بنجاح"),
+    fieldLine("الوقت", now),
+    separator(),
+    bold(true),
+    line("كابتشينو"),
+    bold(false),
+    line("2 x 12.00 د.ل  =  24.00 د.ل"),
     separator(),
     align("center"),
     line("Maison Kayser Tripoli"),

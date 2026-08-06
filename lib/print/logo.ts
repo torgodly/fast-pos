@@ -182,7 +182,15 @@ function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
 export function appendLogo(parts: Uint8Array[], logo: Uint8Array | null) {
   if (!logo) return;
   const ESC = 0x1b;
+  const FS = 0x1c;
+  /** WPC1256 — same as escpos.ts */
+  const CODE_PAGE_WPC1256 = 46;
+
   parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center
   parts.push(logo);
-  parts.push(new Uint8Array([0x0a, 0x0a]));
+  parts.push(new Uint8Array([0x0a]));
+  // Raster images reset code page / Arabic mode on many XPrinters
+  parts.push(new Uint8Array([ESC, 0x74, CODE_PAGE_WPC1256]));
+  parts.push(new Uint8Array([FS, 0x26]));
+  parts.push(new Uint8Array([ESC, 0x61, 0x00])); // left align
 }
