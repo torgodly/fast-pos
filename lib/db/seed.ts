@@ -160,17 +160,9 @@ function runSeed(
       },
       {
         venueId: "restaurant",
-        name: "كاشير المطعم 1",
+        name: "كاشير المطعم",
         role: "checkout",
         host: "192.168.1.50",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: "restaurant",
-        name: "كاشير المطعم 2",
-        role: "checkout",
-        host: "192.168.1.51",
         port: 9100,
         active: true,
       },
@@ -192,17 +184,9 @@ function runSeed(
       },
       {
         venueId: "cafe",
-        name: "كاشير الكافيه 1",
+        name: "كاشير الكافيه",
         role: "checkout",
         host: "192.168.1.70",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: "cafe",
-        name: "كاشير الكافيه 2",
-        role: "checkout",
-        host: "192.168.1.71",
         port: 9100,
         active: true,
       },
@@ -212,37 +196,23 @@ function runSeed(
 
   const restKitchen = seededPrinters.find((p) => p.name === "مطبخ المطعم")!;
   const restDrinksPrn = seededPrinters.find((p) => p.name === "مشروبات المطعم")!;
-  const restCheckout1 = seededPrinters.find((p) => p.name === "كاشير المطعم 1")!;
-  const restCheckout2 = seededPrinters.find((p) => p.name === "كاشير المطعم 2")!;
+  const restCheckout = seededPrinters.find((p) => p.name === "كاشير المطعم")!;
   const cafeKitchen = seededPrinters.find((p) => p.name === "مطبخ الكافيه")!;
   const cafeDrinksPrn = seededPrinters.find((p) => p.name === "مشروبات الكافيه")!;
-  const cafeCheckout1 = seededPrinters.find((p) => p.name === "كاشير الكافيه 1")!;
-  const cafeCheckout2 = seededPrinters.find((p) => p.name === "كاشير الكافيه 2")!;
+  const cafeCheckout = seededPrinters.find((p) => p.name === "كاشير الكافيه")!;
 
   db.insert(cashierStations)
     .values([
       {
         venueId: "restaurant",
-        name: "كاشير 1",
-        printerId: restCheckout1.id,
-        active: true,
-      },
-      {
-        venueId: "restaurant",
-        name: "كاشير 2",
-        printerId: restCheckout2.id,
+        name: "كاشير المطعم",
+        printerId: restCheckout.id,
         active: true,
       },
       {
         venueId: "cafe",
-        name: "كاشير 1",
-        printerId: cafeCheckout1.id,
-        active: true,
-      },
-      {
-        venueId: "cafe",
-        name: "كاشير 2",
-        printerId: cafeCheckout2.id,
+        name: "كاشير الكافيه",
+        printerId: cafeCheckout.id,
         active: true,
       },
     ])
@@ -458,6 +428,8 @@ function runSeed(
           venueId,
           name: group.category,
           sortOrder: group.sortOrder,
+          kitchenPrinterId:
+            group.items[0]?.printer === "kitchen" ? kitchenId : drinksId,
           active: true,
         })),
       )
@@ -476,8 +448,6 @@ function runSeed(
             categoryId: catId(group.category),
             name: entry.name,
             price: entry.price,
-            kitchenPrinterId:
-              entry.printer === "kitchen" ? kitchenId : drinksId,
             active: entry.active ?? true,
           })),
         ),

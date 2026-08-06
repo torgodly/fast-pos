@@ -1,28 +1,9 @@
 "use server";
 
-import { cookies } from "next/headers";
-import { and, eq } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
-import { authCookieOptions } from "@/lib/auth/cookie-options";
-import { getSession } from "@/lib/auth/session";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cashierStations, printers } from "@/lib/db/schema";
-import { isVenueId } from "@/lib/venues";
-import type { VenueId } from "@/lib/types";
-
-function cookieName(venueId: string) {
-  return `pos_station_${venueId}`;
-}
-
-export async function getSelectedStationId(
-  venueId: string,
-): Promise<number | null> {
-  if (!isVenueId(venueId)) return null;
-  const store = await cookies();
-  const raw = store.get(cookieName(venueId))?.value;
-  const id = raw ? Number(raw) : NaN;
-  return Number.isFinite(id) ? id : null;
-}
+import { getVenueName, isVenueId } from "@/lib/venues";
 
 export async function getCashierStationContext(
   venueId: string,
@@ -33,25 +14,8 @@ export async function getCashierStationContext(
       printer: typeof printers.$inferSelect;
     }
 > {
-  const stationId = await getSelectedStationId(venueId);
-  if (!stationId || !isVenueId(venueId)) {
-    return { error: "اختر محطة الكاشير أولاً" };
-  }
-
-  const station = db
-    .select()
-    .from(cashierStations)
-    .where(
-      and(
-        eq(cashierStations.id, stationId),
-        eq(cashierStations.venueId, venueId),
-        eq(cashierStations.active, true),
-      ),
-    )
-    .get();
-
-  if (!station) {
-    return { error: "محطة الكاشير غير صالحة — اختر محطة أخرى" };
+  if (!isVenueId(venueId)) {
+    return { error: "قسم غير صالح" };
   }
 
   const printer = db
@@ -59,63 +23,39 @@ export async function getCashierStationContext(
     .from(printers)
     .where(
       and(
-        eq(printers.id, station.printerId),
+        eq(printers.venueId, venueId),
         eq(printers.role, "checkout"),
         eq(printers.active, true),
       ),
     )
+    .orderBy(asc(printers.name))
     .get();
 
   if (!printer) {
     return {
-      error: `محطة ${station.name} بدون طابعة فاتورة نشطة`,
+      error: `لا توجد طابعة كاشير لـ ${getVenueName(venueId)} — أضفها من الإدارة ← الطابعات`,
     };
   }
 
+  const station =
+    db
+      .select()
+      .from(cashierStations)
+      .where(
+        and(
+          eq(cashierStations.venueId, venueId),
+          eq(cashierStations.printerId, printer.id),
+          eq(cashierStations.active, true),
+        ),
+      )
+      .get() ??
+    ({
+      id: 0,
+      venueId,
+      name: getVenueName(venueId),
+      printerId: printer.id,
+      active: true,
+    } satisfies typeof cashierStations.$inferSelect);
+
   return { station, printer };
-}
-
-export async function selectCashierStation(venueId: string, stationId: number) {
-  const session = await getSession();
-  if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
-    return { error: "غير مصرح" };
-  }
-
-  const station = db
-    .select()
-    .from(cashierStations)
-    .where(
-      and(
-        eq(cashierStations.id, stationId),
-        eq(cashierStations.venueId, venueId as VenueId),
-        eq(cashierStations.active, true),
-      ),
-    )
-    .get();
-
-  if (!station) {
-    return { error: "المحطة غير موجودة" };
-  }
-
-  const store = await cookies();
-  store.set(
-    cookieName(venueId),
-    String(stationId),
-    authCookieOptions(60 * 60 * 24 * 30),
-  );
-
-  revalidatePath(`/cashier/${venueId}`);
-  revalidatePath(`/cashier/${venueId}/quick`);
-  return { ok: true as const };
-}
-
-export async function clearCashierStation(venueId: string) {
-  const session = await getSession();
-  if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
-    return { error: "غير مصرح" };
-  }
-  const store = await cookies();
-  store.delete(cookieName(venueId));
-  revalidatePath(`/cashier/${venueId}`);
-  return { ok: true as const };
 }

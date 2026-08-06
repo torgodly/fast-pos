@@ -59,7 +59,7 @@ export default async function AdminItemsPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">إدارة الأصناف</h2>
             <p className="text-sm text-base-content/45">
-              التصنيفات وقائمة {getVenueName(venue)}
+              أنشئ التصنيفات وأضف الأصناف داخل كل مجموعة — {getVenueName(venue)}
             </p>
           </div>
         </div>
@@ -72,6 +72,7 @@ export default async function AdminItemsPage({
           id: cat.id,
           name: cat.name,
           sortOrder: cat.sortOrder,
+          kitchenPrinterId: cat.kitchenPrinterId,
           active: cat.active,
         }))}
         items={allItems.map((item) => ({
@@ -79,7 +80,6 @@ export default async function AdminItemsPage({
           name: item.name,
           categoryId: item.categoryId,
           price: item.price,
-          kitchenPrinterId: item.kitchenPrinterId,
           active: item.active,
         }))}
         kitchenPrinters={kitchenPrinters.map((p) => ({

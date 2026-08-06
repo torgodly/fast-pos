@@ -51,11 +51,8 @@ function shell(title: string, body: string) {
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=80mm" />
+  <meta name="viewport" content="width=72mm" />
   <title>${escapeHtml(title)}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet" />
   <style>
     @page {
       size: 80mm auto;
@@ -67,7 +64,8 @@ function shell(title: string, body: string) {
     }
 
     html, body {
-      width: 80mm;
+      width: 72mm;
+      max-width: 72mm;
       margin: 0;
       padding: 0;
       background: #fff;
@@ -75,9 +73,10 @@ function shell(title: string, body: string) {
     }
 
     body {
-      font-family: "Cairo", "Segoe UI", Tahoma, Arial, sans-serif;
-      font-size: 12px;
-      line-height: 1.45;
+      font-family: Tahoma, Arial, "Segoe UI", sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.4;
       direction: rtl;
       text-align: right;
       -webkit-print-color-adjust: exact;
@@ -85,8 +84,9 @@ function shell(title: string, body: string) {
     }
 
     .wrap {
-      width: 80mm;
-      padding: 4mm 3mm 5mm;
+      width: 72mm;
+      max-width: 72mm;
+      padding: 1mm 1.5mm 2mm;
     }
 
     .center {
@@ -95,101 +95,118 @@ function shell(title: string, body: string) {
 
     .logo {
       display: block;
-      width: 42mm;
+      width: 38mm;
       max-width: 100%;
       height: auto;
-      margin: 0 auto 3mm;
+      margin: 0 auto 2mm;
     }
 
     .brand {
       margin: 0;
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 900;
-      line-height: 1.25;
+      line-height: 1.2;
+      color: #000;
     }
 
     .subtitle {
+      margin: 1.5mm 0 0;
+      font-size: 15px;
+      font-weight: 900;
+      color: #000;
+    }
+
+    .cashier-banner {
       margin: 2mm 0 0;
-      font-size: 13px;
-      font-weight: 700;
+      padding: 1.5mm 0;
+      font-size: 14px;
+      font-weight: 900;
+      color: #000;
+      border-top: 1px dashed #000;
+      border-bottom: 1px dashed #000;
     }
 
     .divider {
       border: 0;
       border-top: 1px dashed #000;
-      margin: 3mm 0;
+      margin: 2.5mm 0;
     }
 
     table {
       width: 100%;
       border-collapse: collapse;
+      table-layout: fixed;
     }
 
     .meta td {
-      padding: 1mm 0;
+      padding: 0.8mm 0;
       vertical-align: top;
-      font-size: 12px;
+      font-size: 13px;
+      color: #000;
     }
 
     .meta .label {
-      width: 38%;
-      color: #222;
-      font-weight: 600;
-      white-space: nowrap;
+      width: 36%;
+      font-weight: 800;
     }
 
     .meta .value {
-      width: 62%;
-      font-weight: 800;
+      width: 64%;
+      font-weight: 900;
       text-align: left;
       word-break: break-word;
     }
 
     .items thead td {
-      padding-bottom: 1.5mm;
-      font-size: 11px;
-      font-weight: 800;
-      border-bottom: 1px solid #000;
+      padding-bottom: 1mm;
+      font-size: 12px;
+      font-weight: 900;
+      color: #000;
+      border-bottom: 2px solid #000;
     }
 
     .items tbody td {
-      padding: 1.5mm 0;
+      padding: 1.2mm 0;
       vertical-align: top;
-      font-size: 12px;
+      font-size: 13px;
+      color: #000;
     }
 
     .items .name {
-      font-weight: 700;
-      line-height: 1.35;
+      font-weight: 900;
+      line-height: 1.3;
       word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .items .qty {
-      width: 12mm;
+      width: 10mm;
       text-align: center;
-      font-weight: 800;
+      font-weight: 900;
       white-space: nowrap;
     }
 
     .items .price {
-      width: 22mm;
+      width: 18mm;
       text-align: left;
-      font-weight: 700;
+      font-weight: 900;
       white-space: nowrap;
+      font-size: 12px;
     }
 
     .items .sub {
       display: block;
       margin-top: 0.5mm;
-      font-size: 10px;
-      font-weight: 600;
-      color: #333;
+      font-size: 11px;
+      font-weight: 800;
+      color: #000;
     }
 
     .total-row td {
       padding-top: 2mm;
-      font-size: 15px;
+      font-size: 17px;
       font-weight: 900;
+      color: #000;
     }
 
     .total-row .label {
@@ -202,11 +219,12 @@ function shell(title: string, body: string) {
     }
 
     .foot {
-      margin: 3mm 0 0;
-      font-size: 11px;
-      font-weight: 600;
-      line-height: 1.5;
+      margin: 2.5mm 0 0;
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.45;
       text-align: center;
+      color: #000;
     }
 
     .kitchen-qty {
@@ -214,6 +232,18 @@ function shell(title: string, body: string) {
       font-weight: 900;
       text-align: left;
       white-space: nowrap;
+      color: #000;
+    }
+
+    @media print {
+      html, body, .wrap {
+        width: 72mm !important;
+        max-width: 72mm !important;
+      }
+
+      body {
+        margin: 0 auto !important;
+      }
     }
   </style>
 </head>
@@ -293,13 +323,13 @@ export function buildCheckoutReceiptHtml(
       ${logoHtml}
       <p class="brand">${escapeHtml(data.venueName)}</p>
       <p class="subtitle">إيصال الدفع</p>
+      <p class="cashier-banner">الكاشير: ${escapeHtml(data.cashierName)}</p>
     </div>
     <hr class="divider" />
     <table class="meta">
       ${metaRow("رقم الفاتورة", `#${data.orderId}`)}
       ${metaRow("الطاولة", data.tableName)}
       ${data.waiterName ? metaRow("السفرادجي", data.waiterName) : ""}
-      ${metaRow("الكاشير", data.cashierName)}
       ${metaRow("طريقة الدفع", method)}
       ${metaRow("الوقت", data.paidAt)}
     </table>
@@ -308,8 +338,8 @@ export function buildCheckoutReceiptHtml(
       <thead>
         <tr>
           <td>الصنف</td>
-          <td style="text-align:center;width:12mm">الكمية</td>
-          <td style="text-align:left;width:22mm">المبلغ</td>
+          <td style="text-align:center;width:10mm">كم</td>
+          <td style="text-align:left;width:18mm">المبلغ</td>
         </tr>
       </thead>
       <tbody>${lines}</tbody>
@@ -351,7 +381,7 @@ export function printHtmlReceipt(html: string) {
     iframe.style.position = "fixed";
     iframe.style.right = "0";
     iframe.style.bottom = "0";
-    iframe.style.width = "80mm";
+    iframe.style.width = "72mm";
     iframe.style.height = "0";
     iframe.style.border = "0";
     iframe.style.visibility = "hidden";

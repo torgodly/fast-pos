@@ -12,21 +12,21 @@ import {
   ReceiptText,
   ShoppingBag,
   Trash2,
-  Utensils,
   X,
 } from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
 import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
+import {
+  CategoryItemPicker,
+  CategoryPickSummary,
+  type MenuCategory,
+  type MenuItem,
+} from "@/components/CategoryItemPicker";
 import { formatMoney } from "@/lib/venues";
 
-type Category = { id: number; name: string };
-type Item = {
-  id: number;
-  name: string;
-  price: number;
-  categoryId: number;
-};
+type Category = MenuCategory;
+type Item = MenuItem;
 
 export function QuickSaleBoard({
   venueId,
@@ -52,6 +52,19 @@ export function QuickSaleBoard({
     () => cart.reduce((sum, line) => sum + line.qty, 0),
     [cart],
   );
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const cat of categories) counts[cat.id] = 0;
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    for (const line of cart) {
+      const item = itemById.get(line.itemId);
+      if (item) {
+        counts[item.categoryId] = (counts[item.categoryId] ?? 0) + line.qty;
+      }
+    }
+    return counts;
+  }, [cart, items, categories]);
 
   function add(item: Item) {
     setCart((prev) => {
@@ -139,6 +152,10 @@ export function QuickSaleBoard({
 
   const cartBody = (
     <>
+      <CategoryPickSummary
+        categories={categories}
+        categoryCounts={categoryCounts}
+      />
       <ul className="max-h-[42vh] space-y-2 overflow-y-auto lg:max-h-[46vh]">
         {cart.map((line) => (
           <li
@@ -242,59 +259,14 @@ export function QuickSaleBoard({
   return (
     <>
       <div className="grid flex-1 gap-5 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0">
-        <div className="min-w-0 space-y-7">
-          {categories.map((cat) => {
-            const catItems = items.filter((item) => item.categoryId === cat.id);
-            if (catItems.length === 0) return null;
-            return (
-              <section key={cat.id}>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Utensils className="size-4" />
-                  </span>
-                  <h3 className="text-lg font-black">{cat.name}</h3>
-                  <span className="badge badge-ghost badge-sm">
-                    {catItems.length}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                  {catItems.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      className="group card min-h-28 border border-base-300/70 bg-base-100 text-right shadow-sm transition duration-200 hover:border-primary/30 hover:shadow-md disabled:opacity-60 sm:min-h-32"
-                      disabled={pending}
-                      onClick={() => add(item)}
-                    >
-                      <span className="card-body w-full justify-between p-4">
-                        <span className="grid size-9 place-items-center rounded-xl bg-base-200 text-base-content/35 transition group-hover:bg-primary/10 group-hover:text-primary">
-                          <Plus className="size-4" />
-                        </span>
-                        <span>
-                          <span className="block line-clamp-2 font-black">
-                            {item.name}
-                          </span>
-                          <span className="mt-1 block text-sm font-bold text-primary">
-                            {formatMoney(item.price)}
-                          </span>
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-
-          {items.length === 0 && (
-            <div className="premium-card rounded-3xl p-10 text-center">
-              <Utensils className="mx-auto mb-3 size-9 text-base-content/20" />
-              <p className="font-black">لا توجد أصناف متاحة</p>
-              <p className="text-sm text-base-content/45">
-                أضف الأصناف من لوحة الإدارة
-              </p>
-            </div>
-          )}
+        <div className="min-w-0">
+          <CategoryItemPicker
+            categories={categories}
+            items={items}
+            categoryCounts={categoryCounts}
+            pending={pending}
+            onAddItem={add}
+          />
         </div>
 
         <aside className="premium-card sticky top-24 hidden h-fit overflow-hidden lg:card lg:block">

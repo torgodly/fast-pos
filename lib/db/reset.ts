@@ -33,6 +33,7 @@ export function applyPartialReset(options: ResetOptions) {
 
   if (options.printers) {
     sqlite.exec("UPDATE items SET kitchen_printer_id = NULL");
+    sqlite.exec("UPDATE categories SET kitchen_printer_id = NULL");
     sqlite.exec("DELETE FROM cashier_stations");
     sqlite.exec("DELETE FROM printers");
   }

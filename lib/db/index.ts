@@ -204,6 +204,30 @@ function ensureSchema(sqlite: Database.Database) {
   } catch {
     // column already exists
   }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE categories ADD COLUMN kitchen_printer_id INTEGER REFERENCES printers(id)`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    sqlite.exec(`
+      UPDATE categories
+      SET kitchen_printer_id = (
+        SELECT i.kitchen_printer_id
+        FROM items i
+        WHERE i.category_id = categories.id
+          AND i.kitchen_printer_id IS NOT NULL
+        LIMIT 1
+      )
+      WHERE kitchen_printer_id IS NULL
+    `);
+  } catch {
+    // migration best-effort for existing databases
+  }
 }
 
 const globalForDb = globalThis as unknown as {

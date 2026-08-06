@@ -2,13 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { MonitorSmartphone, Pencil, Plus, Printer } from "lucide-react";
+import { Pencil, Plus, Printer } from "lucide-react";
 import {
-  deleteCashierStation,
   deletePrinter,
-  setCashierStationActive,
   setPrinterActive,
-  upsertCashierStation,
   upsertPrinter,
 } from "@/app/actions/admin";
 import { AdminModal } from "@/components/admin/AdminModal";
@@ -28,21 +25,12 @@ type PrinterRow = {
   active: boolean;
 };
 
-type StationRow = {
-  id: number;
-  name: string;
-  printerId: number;
-  active: boolean;
-};
-
 export function PrintersAdmin({
   venueId,
   printers: allPrinters,
-  stations,
 }: {
   venueId: VenueId;
   printers: PrinterRow[];
-  stations: StationRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -54,22 +42,14 @@ export function PrintersAdmin({
     | null
   >(null);
 
-  const [stationModal, setStationModal] = useState<
-    | { mode: "create" }
-    | { mode: "edit"; station: StationRow }
-    | null
-  >(null);
-
+  const kitchenPrinters = allPrinters.filter((p) => p.role === "kitchen");
   const checkoutPrinters = allPrinters.filter(
     (p) => p.role === "checkout" && p.active,
   );
-  const allCheckout = allPrinters.filter((p) => p.role === "checkout");
-  const kitchenPrinters = allPrinters.filter((p) => p.role === "kitchen");
 
   function closeModals() {
     if (pending) return;
     setPrinterModal(null);
-    setStationModal(null);
     setError(null);
   }
 
@@ -91,28 +71,8 @@ export function PrintersAdmin({
     });
   }
 
-  function submitStation(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    formData.set("venueId", venueId);
-
-    startTransition(async () => {
-      setError(null);
-      const result = await upsertCashierStation(formData);
-      if (result && "error" in result) {
-        setError(result.error);
-        return;
-      }
-      closeModals();
-      router.refresh();
-    });
-  }
-
   const editingPrinter =
     printerModal?.mode === "edit" ? printerModal.printer : null;
-  const editingStation =
-    stationModal?.mode === "edit" ? stationModal.station : null;
 
   return (
     <>
@@ -126,7 +86,8 @@ export function PrintersAdmin({
               <div>
                 <h3 className="font-black">الطابعات</h3>
                 <p className="text-xs text-base-content/45">
-                  IP ثابت — منفذ 9100 لطابعات XPrinter
+                  طابعة «فاتورة كاشير» واحدة لكل قسم — تُستخدم تلقائياً عند
+                  الدخول من الصفحة الرئيسية
                 </p>
               </div>
             </div>
@@ -240,118 +201,16 @@ export function PrintersAdmin({
 
           {kitchenPrinters.length === 0 && (
             <p className="text-sm text-warning">
-              أضف طابعة مطبخ ثم اربط الأصناف بها من صفحة الأصناف.
+              أضف طابعة مطبخ ثم اربط **التصنيفات** بها من صفحة الأصناف.
             </p>
           )}
-        </div>
-      </section>
 
-      <section className="premium-card card">
-        <div className="card-body gap-5 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-secondary/10 text-secondary">
-                <MonitorSmartphone className="size-5" />
-              </span>
-              <div>
-                <h3 className="font-black">محطات الكاشير</h3>
-                <p className="text-xs text-base-content/45">
-                  كل محطة تطبع على طابعة فاتورة
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-secondary gap-2"
-              disabled={checkoutPrinters.length === 0}
-              onClick={() => {
-                setError(null);
-                setStationModal({ mode: "create" });
-              }}
-            >
-              <Plus className="size-4" />
-              إضافة محطة
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-2xl border border-base-300/60">
-            <table className="table table-zebra">
-              <thead>
-                <tr>
-                  <th>المحطة</th>
-                  <th>طابعة الفاتورة</th>
-                  <th>الحالة</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {stations.map((station) => {
-                  const printer = allPrinters.find(
-                    (p) => p.id === station.printerId,
-                  );
-                  return (
-                    <tr
-                      key={station.id}
-                      className={!station.active ? "opacity-50" : ""}
-                    >
-                      <td className="font-bold">{station.name}</td>
-                      <td>
-                        {printer
-                          ? `${printer.name} (${printer.host})`
-                          : "طابعة محذوفة"}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge badge-sm ${
-                            station.active
-                              ? "badge-success badge-soft"
-                              : "badge-ghost"
-                          }`}
-                        >
-                          {station.active ? "نشط" : "معطّل"}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="btn btn-square btn-ghost btn-sm"
-                            title="تعديل"
-                            onClick={() => {
-                              setError(null);
-                              setStationModal({ mode: "edit", station });
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </button>
-                          <ToggleActiveButton
-                            active={station.active}
-                            onToggle={async () => {
-                              await setCashierStationActive(
-                                station.id,
-                                !station.active,
-                              );
-                            }}
-                          />
-                          <DeleteConfirmButton
-                            itemName={station.name}
-                            onDelete={() => deleteCashierStation(station.id)}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {stations.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center opacity-60">
-                      لا توجد محطات بعد
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          {checkoutPrinters.length === 0 && (
+            <p className="text-sm text-warning">
+              أضف طابعة «فاتورة كاشير» لهذا القسم — بدونها لا يعمل التحصيل ولا
+              البيع السريع.
+            </p>
+          )}
         </div>
       </section>
 
@@ -386,7 +245,7 @@ export function PrintersAdmin({
               <option value="checkout">فاتورة كاشير</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              طابعة USB للكاشير يجب أن تكون «فاتورة كاشير»، ثم أضف محطة مربوطة بها
+              فاتورة كاشير = طابعة هذا القسم (مطعم أو كافيه)
             </span>
           </label>
           <label className="form-control w-full">
@@ -441,65 +300,6 @@ export function PrintersAdmin({
             </button>
             <button type="submit" className="btn btn-primary" disabled={pending}>
               {editingPrinter ? "حفظ التعديلات" : "إضافة"}
-            </button>
-          </div>
-        </form>
-      </AdminModal>
-
-      <AdminModal
-        open={stationModal !== null}
-        title={editingStation ? "تعديل محطة" : "إضافة محطة كاشير"}
-        onClose={closeModals}
-        pending={pending}
-      >
-        <form onSubmit={submitStation} className="space-y-4">
-          {editingStation ? (
-            <input type="hidden" name="id" value={editingStation.id} />
-          ) : null}
-          <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">اسم المحطة</span>
-            <input
-              name="name"
-              defaultValue={editingStation?.name ?? ""}
-              placeholder="كاشير 1"
-              className="input input-bordered w-full"
-              required
-            />
-          </label>
-          <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">طابعة الفاتورة</span>
-            <select
-              name="printerId"
-              className="select select-bordered w-full"
-              defaultValue={editingStation?.printerId ?? ""}
-              required
-            >
-              <option value="" disabled>
-                اختر الطابعة
-              </option>
-              {(editingStation ? allCheckout : checkoutPrinters).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({p.host}){!p.active ? " — معطّلة" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ActionFeedback tone="error" message={error} />
-          <div className="modal-action mt-2">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={closeModals}
-              disabled={pending}
-            >
-              إلغاء
-            </button>
-            <button
-              type="submit"
-              className="btn btn-secondary"
-              disabled={pending}
-            >
-              {editingStation ? "حفظ التعديلات" : "إضافة"}
             </button>
           </div>
         </form>

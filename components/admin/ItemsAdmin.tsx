@@ -1,8 +1,16 @@
 "use client";
 
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import { Boxes, FolderPlus, PackagePlus, Pencil, Tag } from "lucide-react";
+import {
+  CheckCircle2,
+  FolderOpen,
+  FolderPlus,
+  PackagePlus,
+  Pencil,
+  Printer,
+  AlertCircle,
+} from "lucide-react";
 import {
   deleteCategory,
   deleteItem,
@@ -22,6 +30,7 @@ type CategoryRow = {
   id: number;
   name: string;
   sortOrder: number;
+  kitchenPrinterId: number | null;
   active: boolean;
 };
 
@@ -30,7 +39,6 @@ type ItemRow = {
   name: string;
   categoryId: number;
   price: number;
-  kitchenPrinterId: number | null;
   active: boolean;
 };
 
@@ -39,6 +47,11 @@ type PrinterOption = {
   name: string;
   active: boolean;
 };
+
+type ItemModalState =
+  | { mode: "create" }
+  | { mode: "edit"; item: ItemRow }
+  | null;
 
 export function ItemsAdmin({
   venueId,
@@ -57,21 +70,48 @@ export function ItemsAdmin({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const sortedCats = useMemo(
+    () => [...cats].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id),
+    [cats],
+  );
+
+  const [selectedId, setSelectedId] = useState<number | null>(
+    () => sortedCats[0]?.id ?? null,
+  );
+
+  useEffect(() => {
+    setSelectedId((current) => {
+      if (sortedCats.length === 0) return null;
+      if (current && sortedCats.some((c) => c.id === current)) return current;
+      return sortedCats[0]!.id;
+    });
+  }, [sortedCats]);
+
+  const selected = sortedCats.find((c) => c.id === selectedId) ?? null;
+  const selectedItems = useMemo(
+    () =>
+      selected
+        ? allItems.filter((i) => i.categoryId === selected.id)
+        : [],
+    [allItems, selected],
+  );
+
   const [categoryModal, setCategoryModal] = useState<
     | { mode: "create" }
     | { mode: "edit"; category: CategoryRow }
     | null
   >(null);
 
-  const [itemModal, setItemModal] = useState<
-    | { mode: "create" }
-    | { mode: "edit"; item: ItemRow }
-    | null
-  >(null);
+  const [itemModal, setItemModal] = useState<ItemModalState>(null);
 
   const editingCategory =
     categoryModal?.mode === "edit" ? categoryModal.category : null;
   const editingItem = itemModal?.mode === "edit" ? itemModal.item : null;
+
+  function printerName(id: number | null) {
+    if (!id) return null;
+    return allKitchenPrinters.find((p) => p.id === id)?.name ?? null;
+  }
 
   function closeModals() {
     if (pending) return;
@@ -101,6 +141,9 @@ export function ItemsAdmin({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     formData.set("venueId", venueId);
+    if (selected && itemModal?.mode === "create") {
+      formData.set("categoryId", String(selected.id));
+    }
 
     startTransition(async () => {
       setError(null);
@@ -116,211 +159,323 @@ export function ItemsAdmin({
 
   return (
     <>
-      <section className="premium-card card">
-        <div className="card-body gap-5 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-secondary/10 text-secondary">
-                <Tag className="size-5" />
-              </span>
+      {/* Quick guide */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {[
+          {
+            n: "1",
+            title: "أنشئ تصنيفاً",
+            desc: "قهوة، إفطار، حلويات…",
+          },
+          {
+            n: "2",
+            title: "اختر طابعة المطبخ",
+            desc: "مرّة واحدة لكل تصنيف",
+          },
+          {
+            n: "3",
+            title: "أضف الأصناف",
+            desc: "داخل التصنيف المختار",
+          },
+        ].map((step) => (
+          <div
+            key={step.n}
+            className="flex items-start gap-3 rounded-2xl border border-base-300/70 bg-base-100 p-4"
+          >
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-black text-primary-content">
+              {step.n}
+            </span>
+            <div>
+              <p className="font-black">{step.title}</p>
+              <p className="text-xs text-base-content/50">{step.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {kitchenPrinters.length === 0 ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
+          <AlertCircle className="size-5 shrink-0 text-warning" />
+          <p className="text-sm">
+            أضف طابعات مطبخ من صفحة <strong>الطابعات</strong> قبل ربط
+            التصنيفات.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="space-y-4">
+        {/* ── Categories ── */}
+        <section className="premium-card rounded-2xl">
+          <div className="flex flex-col gap-5 p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="font-black">التصنيفات</h3>
-                <p className="text-xs text-base-content/45">مجموعات الأصناف</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="btn btn-primary gap-2"
-              onClick={() => {
-                setError(null);
-                setCategoryModal({ mode: "create" });
-              }}
-            >
-              <FolderPlus className="size-4" />
-              إضافة تصنيف
-            </button>
-          </div>
-
-          <div className="overflow-x-auto rounded-2xl border border-base-300/60">
-            <table className="table table-zebra">
-              <thead>
-                <tr>
-                  <th>الاسم</th>
-                  <th>الترتيب</th>
-                  <th>الحالة</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {cats.map((cat) => (
-                  <tr key={cat.id} className={!cat.active ? "opacity-50" : ""}>
-                    <td>{cat.name}</td>
-                    <td>{cat.sortOrder}</td>
-                    <td>
-                      <span
-                        className={`badge badge-sm ${
-                          cat.active
-                            ? "badge-success badge-soft"
-                            : "badge-ghost"
-                        }`}
-                      >
-                        {cat.active ? "نشط" : "معطّل"}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="flex gap-1">
-                        <button
-                          type="button"
-                          className="btn btn-square btn-ghost btn-sm"
-                          title="تعديل"
-                          onClick={() => {
-                            setError(null);
-                            setCategoryModal({ mode: "edit", category: cat });
-                          }}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <ToggleActiveButton
-                          active={cat.active}
-                          onToggle={async () => {
-                            await setCategoryActive(cat.id, !cat.active);
-                          }}
-                        />
-                        <DeleteConfirmButton
-                          itemName={cat.name}
-                          onDelete={() => deleteCategory(cat.id)}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {cats.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="text-center opacity-60">
-                      لا توجد تصنيفات بعد
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section className="premium-card card">
-        <div className="card-body gap-5 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                <Boxes className="size-5" />
-              </span>
-              <div>
-                <h3 className="font-black">قائمة الأصناف</h3>
                 <p className="text-xs text-base-content/45">
-                  اربط كل صنف بطابعة المطبخ
+                  {sortedCats.length} تصنيف — اختر واحداً لإدارة أصنافه
                 </p>
               </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5 rounded-xl"
+                onClick={() => {
+                  setError(null);
+                  setCategoryModal({ mode: "create" });
+                }}
+              >
+                <FolderPlus className="size-4" />
+                تصنيف جديد
+              </button>
             </div>
-            <button
-              type="button"
-              className="btn btn-primary gap-2"
-              disabled={cats.filter((c) => c.active).length === 0}
-              onClick={() => {
-                setError(null);
-                setItemModal({ mode: "create" });
-              }}
-            >
-              <PackagePlus className="size-4" />
-              إضافة صنف
-            </button>
-          </div>
 
-          <div className="overflow-x-auto rounded-2xl border border-base-300/60">
-            <table className="table table-zebra">
-              <thead>
-                <tr>
-                  <th>الاسم</th>
-                  <th>التصنيف</th>
-                  <th>طابعة المطبخ</th>
-                  <th>السعر</th>
-                  <th>الحالة</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {allItems.map((item) => {
-                  const cat = cats.find((c) => c.id === item.categoryId);
-                  const printer = allKitchenPrinters.find(
-                    (p) => p.id === item.kitchenPrinterId,
-                  );
+            {sortedCats.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-base-300 py-12 text-center">
+                <FolderOpen className="mx-auto mb-3 size-9 text-base-content/20" />
+                <p className="font-bold text-base-content/50">لا توجد تصنيفات</p>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm mt-4 rounded-xl"
+                  onClick={() => setCategoryModal({ mode: "create" })}
+                >
+                  إنشاء أول تصنيف
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+                {sortedCats.map((cat) => {
+                  const count = allItems.filter(
+                    (i) => i.categoryId === cat.id,
+                  ).length;
+                  const isSelected = cat.id === selectedId;
+                  const hasPrinter = !!cat.kitchenPrinterId;
+                  const printer = printerName(cat.kitchenPrinterId);
+
                   return (
-                    <tr
-                      key={item.id}
-                      className={!item.active ? "opacity-50" : ""}
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setSelectedId(cat.id)}
+                      className={`flex min-h-[6.75rem] flex-col justify-between rounded-2xl border p-3.5 text-right transition duration-200 active:scale-[0.98] sm:min-h-[7.25rem] sm:p-4 ${
+                        isSelected
+                          ? "border-primary bg-primary/5 shadow-md ring-1 ring-primary/15"
+                          : "border-base-300/70 bg-base-100 hover:border-primary/25 hover:shadow-sm"
+                      } ${!cat.active ? "opacity-55" : ""}`}
                     >
-                      <td>{item.name}</td>
-                      <td>{cat?.name ?? "-"}</td>
-                      <td>
-                        {printer?.name ?? (
-                          <span className="text-warning">غير مربوطة</span>
-                        )}
-                      </td>
-                      <td>{formatMoney(item.price)}</td>
-                      <td>
+                      <span className="flex items-start justify-between gap-2">
                         <span
-                          className={`badge badge-sm ${
-                            item.active
-                              ? "badge-success badge-soft"
-                              : "badge-ghost"
+                          className={`grid size-9 place-items-center rounded-xl ${
+                            isSelected
+                              ? "bg-primary text-primary-content"
+                              : "bg-base-200 text-secondary"
                           }`}
                         >
-                          {item.active ? "نشط" : "معطّل"}
+                          <FolderOpen className="size-4" />
                         </span>
-                      </td>
-                      <td>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="btn btn-square btn-ghost btn-sm"
-                            title="تعديل"
-                            onClick={() => {
-                              setError(null);
-                              setItemModal({ mode: "edit", item });
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </button>
-                          <ToggleActiveButton
-                            active={item.active}
-                            onToggle={async () => {
-                              await setItemActive(item.id, !item.active);
-                            }}
-                          />
-                          <DeleteConfirmButton
-                            itemName={item.name}
-                            onDelete={() => deleteItem(item.id)}
-                          />
-                        </div>
-                      </td>
-                    </tr>
+                        {hasPrinter ? (
+                          <CheckCircle2 className="size-4 shrink-0 text-success" />
+                        ) : (
+                          <AlertCircle className="size-4 shrink-0 text-warning" />
+                        )}
+                      </span>
+                      <span className="mt-2 block min-w-0">
+                        <span className="block line-clamp-2 text-sm font-black leading-5">
+                          {cat.name}
+                        </span>
+                        <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-base-content/45">
+                          <span>{count} صنف</span>
+                          {printer ? (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span className="truncate">{printer}</span>
+                            </>
+                          ) : (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span className="font-bold text-warning">
+                                بدون طابعة
+                              </span>
+                            </>
+                          )}
+                        </span>
+                      </span>
+                    </button>
                   );
                 })}
-                {allItems.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="text-center opacity-60">
-                      لا توجد أصناف بعد
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              </div>
+            )}
           </div>
-        </div>
-      </section>
+        </section>
 
+        {/* ── Selected category detail ── */}
+        <main className="premium-card flex min-h-[24rem] flex-col overflow-hidden rounded-2xl">
+          {!selected ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-10 text-center">
+              <FolderOpen className="size-10 text-base-content/15" />
+              <p className="font-black text-base-content/40">
+                اختر تصنيفاً أعلاه
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Category header */}
+              <div className="border-b border-base-300/60 bg-base-200/30 px-4 py-4 sm:px-6 sm:py-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-black">{selected.name}</h3>
+                      {!selected.active ? (
+                        <span className="badge badge-ghost badge-sm">معطّل</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/55">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Printer className="size-3.5" />
+                        {printerName(selected.kitchenPrinterId) ?? (
+                          <span className="font-bold text-warning">
+                            لم تُحدَّد طابعة
+                          </span>
+                        )}
+                      </span>
+                      <span>ترتيب: {selected.sortOrder}</span>
+                      <span>{selectedItems.length} صنف</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+                      onClick={() => {
+                        setError(null);
+                        setCategoryModal({ mode: "edit", category: selected });
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                      تعديل التصنيف
+                    </button>
+                    <ToggleActiveButton
+                      active={selected.active}
+                      onToggle={async () => {
+                        await setCategoryActive(selected.id, !selected.active);
+                      }}
+                    />
+                    <DeleteConfirmButton
+                      itemName={selected.name}
+                      onDelete={() => deleteCategory(selected.id)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Items header */}
+              <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+                <p className="font-black">الأصناف</p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm gap-1.5 rounded-lg"
+                  disabled={!selected.active}
+                  onClick={() => {
+                    setError(null);
+                    setItemModal({ mode: "create" });
+                  }}
+                >
+                  <PackagePlus className="size-3.5" />
+                  إضافة صنف
+                </button>
+              </div>
+
+              {/* Items list */}
+              <div className="flex-1 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
+                {selectedItems.length === 0 ? (
+                  <div className="rounded-xl border-2 border-dashed border-base-300 bg-base-100 py-14 text-center">
+                    <PackagePlus className="mx-auto mb-2 size-8 text-base-content/20" />
+                    <p className="font-bold text-base-content/45">
+                      لا أصناف في «{selected.name}» بعد
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm mt-4 gap-1.5 rounded-lg"
+                      disabled={!selected.active}
+                      onClick={() => setItemModal({ mode: "create" })}
+                    >
+                      <PackagePlus className="size-3.5" />
+                      أضف أول صنف
+                    </button>
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-base-300/60">
+                    <table className="table">
+                      <thead>
+                        <tr className="bg-base-200/50 text-base-content/50">
+                          <th>اسم الصنف</th>
+                          <th>السعر</th>
+                          <th className="w-20 text-center">الحالة</th>
+                          <th className="w-24"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedItems.map((item) => (
+                          <tr
+                            key={item.id}
+                            className={!item.active ? "opacity-45" : ""}
+                          >
+                            <td className="font-bold">{item.name}</td>
+                            <td className="font-bold text-primary">
+                              {formatMoney(item.price)}
+                            </td>
+                            <td className="text-center">
+                              <span
+                                className={`badge badge-sm ${
+                                  item.active
+                                    ? "badge-success badge-soft"
+                                    : "badge-ghost"
+                                }`}
+                              >
+                                {item.active ? "نشط" : "معطّل"}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="flex justify-end gap-0.5">
+                                <button
+                                  type="button"
+                                  className="btn btn-square btn-ghost btn-xs"
+                                  title="تعديل"
+                                  onClick={() => {
+                                    setError(null);
+                                    setItemModal({ mode: "edit", item });
+                                  }}
+                                >
+                                  <Pencil className="size-3.5" />
+                                </button>
+                                <ToggleActiveButton
+                                  active={item.active}
+                                  onToggle={async () => {
+                                    await setItemActive(
+                                      item.id,
+                                      !item.active,
+                                    );
+                                  }}
+                                />
+                                <DeleteConfirmButton
+                                  itemName={item.name}
+                                  onDelete={() => deleteItem(item.id)}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </main>
+      </div>
+
+      {/* ── Category modal ── */}
       <AdminModal
         open={categoryModal !== null}
-        title={editingCategory ? "تعديل تصنيف" : "إضافة تصنيف"}
+        title={editingCategory ? "تعديل التصنيف" : "تصنيف جديد"}
         onClose={closeModals}
         pending={pending}
       >
@@ -333,22 +488,44 @@ export function ItemsAdmin({
             <input
               name="name"
               defaultValue={editingCategory?.name ?? ""}
+              placeholder="قهوة، إفطار، حلويات…"
               className="input input-bordered w-full"
               required
             />
           </label>
-          <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">الترتيب</span>
-            <input
-              name="sortOrder"
-              type="number"
-              defaultValue={
-                editingCategory?.sortOrder ?? cats.length + 1
-              }
-              className="input input-bordered w-full"
-              required
-            />
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="form-control w-full">
+              <span className="label-text mb-2 font-bold">ترتيب الظهور</span>
+              <input
+                name="sortOrder"
+                type="number"
+                defaultValue={editingCategory?.sortOrder ?? cats.length + 1}
+                className="input input-bordered w-full"
+                required
+              />
+            </label>
+            <label className="form-control w-full">
+              <span className="label-text mb-2 font-bold">طابعة المطبخ</span>
+              <select
+                name="kitchenPrinterId"
+                className="select select-bordered w-full"
+                defaultValue={editingCategory?.kitchenPrinterId ?? ""}
+              >
+                <option value="">— بدون —</option>
+                {(editingCategory ? allKitchenPrinters : kitchenPrinters).map(
+                  (p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+          </div>
+          <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
+            كل الأصناف في هذا التصنيف تُطبع على الطابعة المختارة عند إرسال
+            الطلب للمطبخ.
+          </p>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
             <button
@@ -360,15 +537,22 @@ export function ItemsAdmin({
               إلغاء
             </button>
             <button type="submit" className="btn btn-primary" disabled={pending}>
-              {editingCategory ? "حفظ التعديلات" : "إضافة"}
+              {editingCategory ? "حفظ" : "إنشاء"}
             </button>
           </div>
         </form>
       </AdminModal>
 
+      {/* ── Item modal ── */}
       <AdminModal
         open={itemModal !== null}
-        title={editingItem ? "تعديل صنف" : "إضافة صنف"}
+        title={
+          editingItem
+            ? "تعديل الصنف"
+            : selected
+              ? `صنف جديد — ${selected.name}`
+              : "صنف جديد"
+        }
         onClose={closeModals}
         pending={pending}
       >
@@ -376,37 +560,48 @@ export function ItemsAdmin({
           {editingItem ? (
             <input type="hidden" name="id" value={editingItem.id} />
           ) : null}
+          {!editingItem && selected ? (
+            <input type="hidden" name="categoryId" value={selected.id} />
+          ) : null}
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الصنف</span>
             <input
               name="name"
               defaultValue={editingItem?.name ?? ""}
+              placeholder="كابتشينو، فطور شرقي…"
               className="input input-bordered w-full"
               required
             />
           </label>
+          {editingItem ? (
+            <label className="form-control w-full">
+              <span className="label-text mb-2 font-bold">التصنيف</span>
+              <select
+                name="categoryId"
+                className="select select-bordered w-full"
+                defaultValue={editingItem.categoryId}
+                required
+              >
+                {cats
+                  .filter(
+                    (c) => c.active || c.id === editingItem.categoryId,
+                  )
+                  .sort((a, b) => a.sortOrder - b.sortOrder)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ) : (
+            <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
+              التصنيف:{" "}
+              <strong>{selected?.name ?? "—"}</strong>
+            </div>
+          )}
           <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">التصنيف</span>
-            <select
-              name="categoryId"
-              className="select select-bordered w-full"
-              defaultValue={editingItem?.categoryId ?? ""}
-              required
-            >
-              <option value="" disabled>
-                اختر التصنيف
-              </option>
-              {cats
-                .filter((c) => c.active || c.id === editingItem?.categoryId)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-            </select>
-          </label>
-          <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">السعر</span>
+            <span className="label-text mb-2 font-bold">السعر (د.ل)</span>
             <input
               name="price"
               type="number"
@@ -417,22 +612,6 @@ export function ItemsAdmin({
               required
             />
           </label>
-          <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">طابعة المطبخ</span>
-            <select
-              name="kitchenPrinterId"
-              className="select select-bordered w-full"
-              defaultValue={editingItem?.kitchenPrinterId ?? ""}
-            >
-              <option value="">بدون طابعة مطبخ</option>
-              {(editingItem ? allKitchenPrinters : kitchenPrinters).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                  {!p.active ? " — معطّلة" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
             <button
@@ -444,7 +623,7 @@ export function ItemsAdmin({
               إلغاء
             </button>
             <button type="submit" className="btn btn-primary" disabled={pending}>
-              {editingItem ? "حفظ التعديلات" : "إضافة"}
+              {editingItem ? "حفظ" : "إضافة"}
             </button>
           </div>
         </form>

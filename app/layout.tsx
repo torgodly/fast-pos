@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cairo } from "next/font/google";
 import { ToastProvider } from "@/components/ToastProvider";
 import "./globals.css";
@@ -6,11 +6,18 @@ import "./globals.css";
 const cairo = Cairo({
   variable: "--font-cairo",
   subsets: ["arabic", "latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "فاست بوس | نظام نقاط البيع",
   description: "نظام نقاط البيع للمطعم والكافيه",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

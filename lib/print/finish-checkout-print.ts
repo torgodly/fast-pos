@@ -5,7 +5,6 @@ import { printHtmlReceipt } from "@/lib/print/receipts";
 type BrowserPrintInput = {
   browserPrint?: boolean;
   receiptHtml?: string;
-  stationName?: string;
 };
 
 export async function finishCheckoutPrint(
@@ -17,10 +16,9 @@ export async function finishCheckoutPrint(
 
   try {
     await printHtmlReceipt(result.receiptHtml);
-    const station = result.stationName ? ` (${result.stationName})` : "";
     return {
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة${station}`,
+      message: "تم الدفع وطباعة الفاتورة",
     };
   } catch (error) {
     return {

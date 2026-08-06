@@ -8,7 +8,6 @@ import {
   ReceiptText,
   ShoppingBag,
   Trash2,
-  Utensils,
   X,
 } from "lucide-react";
 import {
@@ -16,18 +15,19 @@ import {
   removeOrderItem,
   updateOrderItemQty,
 } from "@/app/actions/orders";
+import {
+  CategoryItemPicker,
+  CategoryPickSummary,
+  type MenuCategory,
+  type MenuItem,
+} from "@/components/CategoryItemPicker";
 import { formatMoney } from "@/lib/venues";
 
-type Category = { id: number; name: string };
-type Item = {
-  id: number;
-  name: string;
-  price: number;
-  categoryId: number;
-  active?: boolean;
-};
+type Category = MenuCategory;
+type Item = MenuItem;
 type Line = {
   id: number;
+  itemId: number | null;
   itemName: string;
   qty: number;
   unitPrice: number;
@@ -57,6 +57,20 @@ export function OrderMenu({
     [lines],
   );
 
+  const categoryCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    for (const cat of categories) counts[cat.id] = 0;
+    const itemById = new Map(items.map((item) => [item.id, item]));
+    for (const line of lines) {
+      if (line.itemId == null) continue;
+      const item = itemById.get(line.itemId);
+      if (item) {
+        counts[item.categoryId] = (counts[item.categoryId] ?? 0) + line.qty;
+      }
+    }
+    return counts;
+  }, [lines, items, categories]);
+
   function add(itemId: number) {
     startTransition(async () => {
       await addItemToOrder(orderId, itemId);
@@ -77,6 +91,10 @@ export function OrderMenu({
 
   const cartBody = (
     <>
+      <CategoryPickSummary
+        categories={categories}
+        categoryCounts={categoryCounts}
+      />
       <ul className="max-h-[42vh] space-y-2 overflow-y-auto lg:max-h-[48vh]">
         {lines.map((line) => (
           <li
@@ -160,90 +178,14 @@ export function OrderMenu({
   return (
     <>
       <div className="grid flex-1 gap-4 pb-32 md:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="min-w-0 space-y-7">
-          {categories.map((cat) => {
-            const catItems = items.filter((item) => item.categoryId === cat.id);
-            if (catItems.length === 0) return null;
-            return (
-              <section key={cat.id}>
-                <div className="mb-3 flex items-center gap-2">
-                  <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
-                    <Utensils className="size-4" />
-                  </span>
-                  <h3 className="text-lg font-black">{cat.name}</h3>
-                  <span className="badge badge-ghost badge-sm">
-                    {catItems.length}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-                  {catItems.map((item) => {
-                    const available = item.active !== false;
-                    return (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={`group card min-h-32 touch-manipulation text-right shadow-sm transition duration-200 md:min-h-36 ${
-                          available
-                            ? "border border-base-300/70 bg-base-100 hover:border-primary/30 hover:shadow-md disabled:opacity-60"
-                            : "cursor-not-allowed border-2 border-error/35 bg-base-200 text-base-content opacity-100 shadow-sm disabled:bg-base-200 disabled:text-base-content disabled:opacity-100"
-                        }`}
-                        disabled={pending || !available}
-                        onClick={() => {
-                          if (!available) return;
-                          add(item.id);
-                        }}
-                        title={
-                          available
-                            ? undefined
-                            : "غير متوفر حالياً — أخبر الزبون بذلك"
-                        }
-                      >
-                        <span className="card-body w-full justify-between gap-3 p-4 md:p-5 lg:p-4 xl:p-5">
-                          {available ? (
-                            <span className="grid size-9 place-items-center rounded-xl bg-base-200 text-base-content/35 transition group-hover:bg-primary/10 group-hover:text-primary">
-                              <Plus className="size-4" />
-                            </span>
-                          ) : (
-                            <span className="grid size-9 place-items-center rounded-xl bg-error text-error-content shadow-sm">
-                              <X className="size-4" />
-                            </span>
-                          )}
-                          <span>
-                            <span
-                              className={`block line-clamp-2 text-base font-black leading-6 ${
-                                available ? "" : "text-base-content"
-                              }`}
-                            >
-                              {item.name}
-                            </span>
-                            {available ? (
-                              <span className="mt-1 block text-sm font-bold text-primary">
-                                {formatMoney(item.price)}
-                              </span>
-                            ) : (
-                              <span className="mt-1 inline-flex rounded-lg bg-error/10 px-2 py-1 text-xs font-black leading-5 text-error">
-                                غير متوفر حالياً
-                              </span>
-                            )}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
-
-          {items.length === 0 && (
-            <div className="premium-card rounded-3xl p-10 text-center">
-              <Utensils className="mx-auto mb-3 size-9 text-base-content/20" />
-              <p className="font-black">لا توجد أصناف متاحة</p>
-              <p className="text-sm text-base-content/45">
-                أضف الأصناف من لوحة الإدارة
-              </p>
-            </div>
-          )}
+        <div className="min-w-0">
+          <CategoryItemPicker
+            categories={categories}
+            items={items}
+            categoryCounts={categoryCounts}
+            pending={pending}
+            onAddItem={(item) => add(item.id)}
+          />
         </div>
 
         <aside className="premium-card sticky top-20 hidden h-fit max-h-[calc(100dvh-6rem)] overflow-hidden lg:card lg:block xl:top-24">

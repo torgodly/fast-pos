@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   ArrowLeft,
   Clock3,
+  History,
   Plus,
   ReceiptText,
   ShoppingBag,
@@ -12,13 +13,11 @@ import {
 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
-import { getSelectedStationId } from "@/app/actions/station";
+import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
-import { StationPicker } from "@/components/StationPicker";
 import { db } from "@/lib/db";
-import { cashierStations, orders, printers, tables, users } from "@/lib/db/schema";
-import { formatMoney, getVenueName, isVenueId } from "@/lib/venues";
-import type { VenueId } from "@/lib/types";
+import { orders, tables, users } from "@/lib/db/schema";
+import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierHomePage({
   params,
@@ -29,43 +28,9 @@ export default async function CashierHomePage({
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
   const waiter = alias(users, "waiter");
-  const selectedStationId = await getSelectedStationId(venue);
 
-  const stations = db
-    .select({
-      id: cashierStations.id,
-      name: cashierStations.name,
-      printerName: printers.name,
-      printerHost: printers.host,
-      printerConnection: printers.connectionType,
-    })
-    .from(cashierStations)
-    .innerJoin(printers, eq(cashierStations.printerId, printers.id))
-    .where(
-      and(
-        eq(cashierStations.venueId, venue),
-        eq(cashierStations.active, true),
-        eq(printers.active, true),
-        eq(printers.role, "checkout"),
-      ),
-    )
-    .orderBy(asc(cashierStations.name))
-    .all();
-
-  const otherVenue: VenueId = venue === "restaurant" ? "cafe" : "restaurant";
-  const [{ value: otherVenueStationCount }] = db
-    .select({ value: sql<number>`count(*)` })
-    .from(cashierStations)
-    .innerJoin(printers, eq(cashierStations.printerId, printers.id))
-    .where(
-      and(
-        eq(cashierStations.venueId, otherVenue),
-        eq(cashierStations.active, true),
-        eq(printers.active, true),
-        eq(printers.role, "checkout"),
-      ),
-    )
-    .all();
+  const stationCtx = await getCashierStationContext(venue);
+  const hasCheckout = !("error" in stationCtx);
 
   const openOrders = db
     .select({
@@ -81,11 +46,6 @@ export default async function CashierHomePage({
     .leftJoin(waiter, eq(orders.waiterId, waiter.id))
     .where(and(eq(orders.venueId, venue), eq(orders.status, "open")))
     .all();
-
-  const hasStation = selectedStationId != null &&
-    stations.some((s) => s.id === selectedStationId);
-
-  const selectedStation = stations.find((s) => s.id === selectedStationId);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
@@ -107,47 +67,40 @@ export default async function CashierHomePage({
                   {openOrders.length} فاتورة بانتظار التحصيل
                 </p>
               </div>
-              {hasStation ? (
+              <div className="flex flex-wrap gap-2">
+                {hasCheckout ? (
+                  <Link
+                    href={`/cashier/${venue}/quick`}
+                    className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
+                  >
+                    <Plus className="size-4" />
+                    بيع سريع
+                  </Link>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn border-white/15 bg-white/40 text-neutral"
+                    disabled
+                  >
+                    <Plus className="size-4" />
+                    بيع سريع
+                  </button>
+                )}
                 <Link
-                  href={`/cashier/${venue}/quick`}
-                  className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
+                  href={`/cashier/${venue}/sales`}
+                  className="btn border-white/15 bg-white/10 text-white hover:bg-white/20"
                 >
-                  <Plus className="size-4" />
-                  بيع سريع
+                  <History className="size-4" />
+                  مبيعاتي
                 </Link>
-              ) : (
-                <button
-                  type="button"
-                  className="btn border-white/15 bg-white/40 text-neutral"
-                  disabled
-                  title="اختر محطة أولاً"
-                >
-                  <Plus className="size-4" />
-                  بيع سريع
-                </button>
-              )}
+              </div>
             </div>
-
-            <StationPicker
-              venueId={venue}
-              venueName={getVenueName(venue)}
-              stations={stations}
-              selectedStationId={hasStation ? selectedStationId : null}
-              otherVenueName={
-                stations.length === 0 && otherVenueStationCount > 0
-                  ? getVenueName(otherVenue)
-                  : undefined
-              }
-            />
-
           </div>
         </section>
 
-        {!hasStation ? (
-          <div className="alert alert-warning rounded-2xl">
-            <span className="font-bold">
-              اختر محطة الكاشير أعلاه قبل التحصيل أو البيع السريع
-            </span>
+        {!hasCheckout ? (
+          <div className="alert alert-error rounded-2xl">
+            <span className="font-bold">{stationCtx.error}</span>
           </div>
         ) : null}
 
@@ -156,12 +109,12 @@ export default async function CashierHomePage({
             <Link
               key={order.id}
               href={
-                hasStation
+                hasCheckout
                   ? `/cashier/${venue}/order/${order.id}`
                   : `/cashier/${venue}`
               }
               className={`premium-card group card transition duration-200 ${
-                hasStation
+                hasCheckout
                   ? "hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg"
                   : "pointer-events-none opacity-50"
               }`}
@@ -212,7 +165,7 @@ export default async function CashierHomePage({
             </span>
             <p className="text-lg font-black">لا توجد فواتير مفتوحة حالياً</p>
             <p className="mt-1 text-sm text-base-content/45">
-              يمكنك بدء بيع سريع من الزر أعلاه بعد اختيار المحطة
+              يمكنك بدء بيع سريع من الزر أعلاه
             </p>
           </div>
         )}

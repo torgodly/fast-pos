@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -21,7 +21,11 @@ import {
 import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import { setReceiptFooterMessage, clearReceiptFooterMessage } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
-import type { PrinterRole, PrinterConnectionType } from "@/lib/types";
+import type {
+  PrinterRole,
+  PrinterConnectionType,
+  VenueId,
+} from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
 
 async function assertAdmin() {
@@ -43,25 +47,91 @@ function revalidatePrinters() {
 
 type ActionResult = { ok: true } | { error: string };
 
+function syncCheckoutStation(
+  venueId: VenueId,
+  printerId: number,
+  name: string,
+) {
+  const linked = db
+    .select()
+    .from(cashierStations)
+    .where(
+      and(
+        eq(cashierStations.venueId, venueId),
+        eq(cashierStations.printerId, printerId),
+      ),
+    )
+    .get();
+
+  if (linked) {
+    db.update(cashierStations)
+      .set({ name, active: true })
+      .where(eq(cashierStations.id, linked.id))
+      .run();
+  } else {
+    db.insert(cashierStations)
+      .values({ venueId, name, printerId, active: true })
+      .run();
+  }
+
+  db.update(cashierStations)
+    .set({ active: false })
+    .where(
+      and(
+        eq(cashierStations.venueId, venueId),
+        ne(cashierStations.printerId, printerId),
+      ),
+    )
+    .run();
+}
+
 export async function upsertCategory(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const venueId = String(formData.get("venueId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
+  const kitchenPrinterRaw = String(formData.get("kitchenPrinterId") ?? "");
+  const kitchenPrinterId = kitchenPrinterRaw
+    ? Number(kitchenPrinterRaw)
+    : null;
 
   if (!isVenueId(venueId) || !name) {
     return { error: "بيانات التصنيف غير مكتملة" };
   }
 
+  if (kitchenPrinterId) {
+    const printer = db
+      .select()
+      .from(printers)
+      .where(
+        and(
+          eq(printers.id, kitchenPrinterId),
+          eq(printers.venueId, venueId),
+          eq(printers.role, "kitchen"),
+        ),
+      )
+      .get();
+    if (!printer || (!id && !printer.active)) {
+      return { error: "طابعة المطبخ غير صالحة" };
+    }
+  }
+
+  const values = {
+    name,
+    sortOrder,
+    venueId,
+    kitchenPrinterId: kitchenPrinterId || null,
+  };
+
   if (id) {
     db.update(categories)
-      .set({ name, sortOrder, venueId })
+      .set(values)
       .where(eq(categories.id, id))
       .run();
   } else {
     db.insert(categories)
-      .values({ venueId, name, sortOrder, active: true })
+      .values({ ...values, active: true })
       .run();
   }
 
@@ -97,30 +167,9 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
   const categoryId = Number(formData.get("categoryId"));
   const name = String(formData.get("name") ?? "").trim();
   const price = Number(formData.get("price"));
-  const kitchenPrinterRaw = String(formData.get("kitchenPrinterId") ?? "");
-  const kitchenPrinterId = kitchenPrinterRaw
-    ? Number(kitchenPrinterRaw)
-    : null;
 
   if (!isVenueId(venueId) || !name || !categoryId || Number.isNaN(price)) {
     return { error: "بيانات الصنف غير مكتملة" };
-  }
-
-  if (kitchenPrinterId) {
-    const printer = db
-      .select()
-      .from(printers)
-      .where(
-        and(
-          eq(printers.id, kitchenPrinterId),
-          eq(printers.venueId, venueId),
-          eq(printers.role, "kitchen"),
-        ),
-      )
-      .get();
-    if (!printer || (!id && !printer.active)) {
-      return { error: "طابعة المطبخ غير صالحة" };
-    }
   }
 
   const values = {
@@ -128,7 +177,7 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     categoryId,
     name,
     price,
-    kitchenPrinterId: kitchenPrinterId || null,
+    kitchenPrinterId: null as number | null,
   };
 
   if (id) {
@@ -332,12 +381,21 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     connectionType: resolvedConnection,
   };
 
+  let printerId = id;
+
   if (id) {
     db.update(printers).set(values).where(eq(printers.id, id)).run();
   } else {
-    db.insert(printers)
+    const inserted = db
+      .insert(printers)
       .values({ ...values, active: true })
-      .run();
+      .returning()
+      .get();
+    printerId = inserted.id;
+  }
+
+  if (role === "checkout" && printerId) {
+    syncCheckoutStation(venueId as VenueId, printerId, name);
   }
 
   revalidatePrinters();
@@ -358,6 +416,10 @@ export async function deletePrinter(id: number): Promise<ActionResult> {
   db.update(items)
     .set({ kitchenPrinterId: null })
     .where(eq(items.kitchenPrinterId, id))
+    .run();
+  db.update(categories)
+    .set({ kitchenPrinterId: null })
+    .where(eq(categories.kitchenPrinterId, id))
     .run();
   db.delete(printers).where(eq(printers.id, id)).run();
   revalidatePrinters();
@@ -403,68 +465,6 @@ export async function testPrinter(
           : `تعذر الاتصال بالطابعة ${printer.name}`,
     };
   }
-}
-
-export async function upsertCashierStation(
-  formData: FormData,
-): Promise<ActionResult> {
-  await assertAdmin();
-  const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const venueId = String(formData.get("venueId") ?? "");
-  const name = String(formData.get("name") ?? "").trim();
-  const printerId = Number(formData.get("printerId"));
-
-  if (!isVenueId(venueId) || !name || !printerId) {
-    return { error: "بيانات المحطة غير مكتملة" };
-  }
-
-  const printerWhere = id
-    ? and(
-        eq(printers.id, printerId),
-        eq(printers.venueId, venueId),
-        eq(printers.role, "checkout"),
-      )
-    : and(
-        eq(printers.id, printerId),
-        eq(printers.venueId, venueId),
-        eq(printers.role, "checkout"),
-        eq(printers.active, true),
-      );
-
-  const printer = db.select().from(printers).where(printerWhere).get();
-  if (!printer) {
-    return { error: "طابعة الفاتورة غير صالحة" };
-  }
-
-  if (id) {
-    db.update(cashierStations)
-      .set({ venueId, name, printerId })
-      .where(eq(cashierStations.id, id))
-      .run();
-  } else {
-    db.insert(cashierStations)
-      .values({ venueId, name, printerId, active: true })
-      .run();
-  }
-
-  revalidatePrinters();
-  return { ok: true };
-}
-
-export async function setCashierStationActive(id: number, active: boolean) {
-  await assertAdmin();
-  db.update(cashierStations)
-    .set({ active })
-    .where(eq(cashierStations.id, id))
-    .run();
-  revalidatePrinters();
-}
-
-export async function deleteCashierStation(id: number): Promise<ActionResult> {
-  await assertAdmin();
-  db.delete(cashierStations).where(eq(cashierStations.id, id)).run();
-  revalidatePrinters();
-  return { ok: true };
 }
 
 function revalidateAfterSystemReset() {

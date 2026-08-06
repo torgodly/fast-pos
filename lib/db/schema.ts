@@ -37,6 +37,7 @@ export const categories = sqliteTable("categories", {
     .references(() => venues.id),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
+  kitchenPrinterId: integer("kitchen_printer_id").references(() => printers.id),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
@@ -144,6 +145,10 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
     fields: [categories.venueId],
     references: [venues.id],
   }),
+  kitchenPrinter: one(printers, {
+    fields: [categories.kitchenPrinterId],
+    references: [printers.id],
+  }),
   items: many(items),
 }));
 
@@ -153,6 +158,7 @@ export const printersRelations = relations(printers, ({ one, many }) => ({
     references: [venues.id],
   }),
   stations: many(cashierStations),
+  kitchenCategories: many(categories),
   kitchenItems: many(items),
 }));
 

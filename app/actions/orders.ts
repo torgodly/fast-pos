@@ -7,6 +7,7 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
+  categories,
   items,
   orderItems,
   orders,
@@ -252,9 +253,22 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     }
 
     const item = db.select().from(items).where(eq(items.id, line.itemId)).get();
-    if (!item?.kitchenPrinterId) {
+    if (!item) {
+      return { error: `الصنف "${line.itemName}" غير مربوط بقائمة الأصناف` };
+    }
+
+    const category = db
+      .select()
+      .from(categories)
+      .where(eq(categories.id, item.categoryId))
+      .get();
+
+    const resolvedPrinterId =
+      category?.kitchenPrinterId ?? item.kitchenPrinterId ?? null;
+
+    if (!resolvedPrinterId) {
       return {
-        error: `الصنف "${line.itemName}" بدون طابعة مطبخ — اربطه من الإدارة`,
+        error: `تصنيف "${category?.name ?? line.itemName}" بدون طابعة مطبخ — اربط التصنيف من الإدارة ← الأصناف`,
       };
     }
 
@@ -263,7 +277,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       .from(printers)
       .where(
         and(
-          eq(printers.id, item.kitchenPrinterId),
+          eq(printers.id, resolvedPrinterId),
           eq(printers.role, "kitchen"),
           eq(printers.active, true),
         ),
@@ -272,7 +286,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
 
     if (!printer) {
       return {
-        error: `طابعة المطبخ للصنف "${line.itemName}" غير متاحة`,
+        error: `طابعة المطبخ لتصنيف "${category?.name ?? line.itemName}" غير متاحة`,
       };
     }
 
@@ -376,6 +390,61 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   }
 
   return { ok: true, printedTo, failed, message };
+}
+
+async function buildCheckoutReceiptForOrder(
+  orderId: number,
+): Promise<{ error: string } | { receipt: CheckoutReceiptData; venueId: VenueId }> {
+  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order || order.status !== "paid") {
+    return { error: "الفاتورة غير مدفوعة أو غير موجودة" };
+  }
+  if (!isVenueId(order.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+  if (!order.paymentMethod) {
+    return { error: "بيانات الدفع غير مكتملة" };
+  }
+
+  const lines = db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId))
+    .all();
+  if (lines.length === 0) {
+    return { error: "الفاتورة فارغة" };
+  }
+
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
+  const waiter = order.waiterId
+    ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
+    : null;
+  const cashier = order.cashierId
+    ? db.select().from(users).where(eq(users.id, order.cashierId)).get()
+    : null;
+  const isQuickSale = order.tableId === null;
+
+  return {
+    venueId: order.venueId,
+    receipt: {
+      venueName: getVenueName(order.venueId),
+      orderId: order.id,
+      tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
+      waiterName: waiter?.name ?? null,
+      cashierName: cashier?.name ?? "كاشير",
+      paymentMethod: order.paymentMethod,
+      paidAt: formatDateTime(order.paidAt ?? order.createdAt),
+      total: order.total,
+      lines: lines.map((line) => ({
+        name: line.itemName,
+        qty: line.qty,
+        unitPrice: line.unitPrice,
+        lineTotal: line.lineTotal,
+      })),
+    },
+  };
 }
 
 async function printCheckoutReceipt(
@@ -531,7 +600,7 @@ export async function payOrder(
       ok: true,
       nextUrl: `/cashier/${order.venueId}`,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.station.name}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
     };
   }
 
@@ -543,7 +612,7 @@ export async function payOrder(
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
     printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printError}`,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
   };
 }
 
@@ -677,7 +746,7 @@ export async function payQuickSale(
     return {
       ok: true,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.station.name}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
     };
   }
 
@@ -688,7 +757,84 @@ export async function payQuickSale(
     ok: true,
     printOk: false,
     printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.station.name}: ${printError}`,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+  };
+}
+
+export async function reprintOrderReceipt(
+  orderId: number,
+  venueId: string,
+): Promise<
+  | { error: string }
+  | {
+      ok: true;
+      printOk: boolean;
+      printError?: string;
+      browserPrint?: boolean;
+      receiptHtml?: string;
+      message: string;
+    }
+> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier") {
+    return { error: "غير مصرح" };
+  }
+  if (!isVenueId(venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
+  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order || order.status !== "paid") {
+    return { error: "الفاتورة غير مدفوعة" };
+  }
+  if (order.venueId !== venueId) {
+    return { error: "الفاتورة لقسم آخر" };
+  }
+  if (order.cashierId !== session.userId) {
+    return { error: "يمكنك إعادة طباعة مبيعاتك فقط" };
+  }
+
+  const built = await buildCheckoutReceiptForOrder(orderId);
+  if ("error" in built) {
+    return { error: built.error };
+  }
+
+  const stationCtx = await getCashierStationContext(venueId);
+  if ("error" in stationCtx) {
+    return { error: stationCtx.error };
+  }
+
+  const printResult = await printCheckoutReceipt(
+    built.receipt,
+    stationCtx.printer,
+  );
+
+  if ("browserPrint" in printResult && printResult.browserPrint) {
+    return {
+      ok: true,
+      printOk: false,
+      browserPrint: true,
+      receiptHtml: printResult.receiptHtml,
+      message: "اختر الطابعة في نافذة Chrome",
+    };
+  }
+
+  if (printResult.printOk) {
+    return {
+      ok: true,
+      printOk: true,
+      message: `تمت إعادة الطباعة على ${stationCtx.printer.name}`,
+    };
+  }
+
+  const printError =
+    "printError" in printResult ? printResult.printError : "تعذر الطباعة";
+
+  return {
+    ok: true,
+    printOk: false,
+    printError,
+    message: `فشلت إعادة الطباعة: ${printError}`,
   };
 }
 

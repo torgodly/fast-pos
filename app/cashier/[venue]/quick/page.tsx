@@ -49,8 +49,7 @@ export default async function CashierQuickPage({
             <div>
               <h2 className="text-xl font-black sm:text-2xl">بيع سريع</h2>
               <p className="text-xs text-base-content/45 sm:text-sm">
-                المحطة: {stationCtx.station.name} — الطباعة على{" "}
-                {stationCtx.printer.name}
+                الطباعة على {stationCtx.printer.name}
               </p>
             </div>
           </div>

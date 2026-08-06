@@ -14,4 +14,4 @@ Copy this whole folder to the cashier PC (USB stick).
 
 IN ADMIN (once):
 ----------------
-Add printer → Cashier receipt → USB → leave IP empty → add station
+Add printer → Cashier receipt → USB → leave IP empty (under the right venue tab)

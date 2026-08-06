@@ -5,7 +5,7 @@ import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
-import { cashierStations, printers } from "@/lib/db/schema";
+import { printers } from "@/lib/db/schema";
 import { getVenueName } from "@/lib/venues";
 
 export default async function AdminPrintersPage({
@@ -24,13 +24,6 @@ export default async function AdminPrintersPage({
     .orderBy(asc(printers.name))
     .all();
 
-  const stations = db
-    .select()
-    .from(cashierStations)
-    .where(eq(cashierStations.venueId, venue))
-    .orderBy(asc(cashierStations.name))
-    .all();
-
   return (
     <div className="space-y-7">
       <div>
@@ -39,17 +32,17 @@ export default async function AdminPrintersPage({
             <Printer className="size-6" />
           </span>
           <div>
-            <h2 className="text-2xl font-black sm:text-3xl">الطابعات والمحطات</h2>
+            <h2 className="text-2xl font-black sm:text-3xl">الطابعات</h2>
             <p className="text-sm text-base-content/45">
-              إدارة طابعات {getVenueName(venue)} وربط محطات الكاشير
+              إدارة طابعات {getVenueName(venue)}
             </p>
           </div>
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
         <p className="mt-3 text-sm text-base-content/55">
-          المحطات والطابعات مرتبطة بـ <strong>{getVenueName(venue)}</strong> فقط.
-          الكاشير يرى محطات {getVenueName(venue)} عند الدخول من نفس المكان في
-          الصفحة الرئيسية.
+          كل قسم له طابعة كاشير خاصة. الموظف يختار <strong>مطعم</strong> أو{" "}
+          <strong>كافيه</strong> من الصفحة الرئيسية — لا حاجة لاختيار محطة
+          إضافية.
         </p>
       </div>
 
@@ -63,12 +56,6 @@ export default async function AdminPrintersPage({
           port: p.port,
           connectionType: p.connectionType,
           active: p.active,
-        }))}
-        stations={stations.map((s) => ({
-          id: s.id,
-          name: s.name,
-          printerId: s.printerId,
-          active: s.active,
         }))}
       />
     </div>
