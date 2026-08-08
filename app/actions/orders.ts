@@ -626,24 +626,8 @@ export async function payOrder(
     return { error: "الفاتورة فارغة" };
   }
 
-  const table = order.tableId
-    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
-    : null;
-  const isQuickSale = order.tableId === null;
-  const tableName = table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة");
-
-  // Unsent items → kitchen ticket on pay (cash/card)
-  const kitchenResult = await sendPendingKitchenTickets({
-    orderId,
-    venueId: order.venueId,
-    tableName,
-    staffName: session.name,
-  });
-  if ("error" in kitchenResult) {
-    return { error: `المطبخ: ${kitchenResult.error}` };
-  }
-
   const total = recalcOrderTotal(orderId);
+  const isQuickSale = order.tableId === null;
   const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 
   db.update(orders)
@@ -658,6 +642,9 @@ export async function payOrder(
     .where(eq(orders.id, orderId))
     .run();
 
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
   const waiter = order.waiterId
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
     : null;
@@ -665,7 +652,7 @@ export async function payOrder(
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(order.venueId),
     orderId: order.id,
-    tableName,
+    tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
     waiterName: waiter?.name ?? null,
     cashierName: session.name,
     paymentMethod,
@@ -688,11 +675,6 @@ export async function payOrder(
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
 
-  const kitchenNote =
-    !kitchenResult.skipped && kitchenResult.printedTo.length > 0
-      ? ` + مطبخ (${kitchenResult.printedTo.map((p) => p.printerName).join("، ")})`
-      : "";
-
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
@@ -700,7 +682,7 @@ export async function payOrder(
       printOk: false,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
+      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
     };
   }
 
@@ -709,7 +691,7 @@ export async function payOrder(
       ok: true,
       nextUrl: `/cashier/${order.venueId}`,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}${kitchenNote}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
     };
   }
 
@@ -721,7 +703,7 @@ export async function payOrder(
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
     printError,
-    message: `تم الدفع${kitchenNote}، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
   };
 }
 
