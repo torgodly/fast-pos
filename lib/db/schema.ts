@@ -91,6 +91,35 @@ export const tables = sqliteTable("tables", {
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
+export const shifts = sqliteTable(
+  "shifts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    venueId: text("venue_id")
+      .notNull()
+      .references(() => venues.id),
+    workDate: text("work_date").notNull(),
+    shiftNumber: integer("shift_number").notNull(),
+    status: text("status", { enum: ["open", "closed"] })
+      .notNull()
+      .default("open"),
+    openedBy: integer("opened_by").references(() => users.id),
+    openedAt: text("opened_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+    closedBy: integer("closed_by").references(() => users.id),
+    closedAt: text("closed_at"),
+    xPrintedAt: text("x_printed_at"),
+  },
+  (table) => [
+    uniqueIndex("shifts_venue_date_number_idx").on(
+      table.venueId,
+      table.workDate,
+      table.shiftNumber,
+    ),
+  ],
+);
+
 export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   venueId: text("venue_id")
@@ -99,6 +128,7 @@ export const orders = sqliteTable("orders", {
   tableId: integer("table_id").references(() => tables.id),
   waiterId: integer("waiter_id").references(() => users.id),
   cashierId: integer("cashier_id").references(() => users.id),
+  shiftId: integer("shift_id").references(() => shifts.id),
   status: text("status", { enum: ["open", "paid", "cancelled"] })
     .notNull()
     .default("open"),
@@ -131,6 +161,7 @@ export const venuesRelations = relations(venues, ({ many }) => ({
   orders: many(orders),
   printers: many(printers),
   cashierStations: many(cashierStations),
+  shifts: many(shifts),
 }));
 
 export const usersRelations = relations(users, ({ one }) => ({
@@ -198,6 +229,22 @@ export const tablesRelations = relations(tables, ({ one }) => ({
   }),
 }));
 
+export const shiftsRelations = relations(shifts, ({ one, many }) => ({
+  venue: one(venues, {
+    fields: [shifts.venueId],
+    references: [venues.id],
+  }),
+  openedByUser: one(users, {
+    fields: [shifts.openedBy],
+    references: [users.id],
+  }),
+  closedByUser: one(users, {
+    fields: [shifts.closedBy],
+    references: [users.id],
+  }),
+  orders: many(orders),
+}));
+
 export const ordersRelations = relations(orders, ({ one, many }) => ({
   venue: one(venues, {
     fields: [orders.venueId],
@@ -214,6 +261,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   cashier: one(users, {
     fields: [orders.cashierId],
     references: [users.id],
+  }),
+  shift: one(shifts, {
+    fields: [orders.shiftId],
+    references: [shifts.id],
   }),
   items: many(orderItems),
 }));

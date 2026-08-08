@@ -57,24 +57,24 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div className="glass-panel card overflow-hidden">
-        <div className="h-1.5 bg-gradient-to-l from-primary via-secondary to-accent" />
-        <div className="card-body items-center p-5 sm:p-8">
-          <div className="mb-1 grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <KeyRound className="size-7" />
+      <div className="glass-panel card">
+        <div className="h-1 bg-gradient-to-l from-primary via-secondary to-accent" />
+        <div className="card-body items-center gap-2 p-4 sm:gap-3 sm:p-6">
+          <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary sm:size-12">
+            <KeyRound className="size-5 sm:size-6" />
           </div>
-          <h1 className="card-title mt-2 text-2xl font-black sm:text-3xl">
+          <h1 className="card-title text-xl font-black sm:text-2xl">
             دخول {venueName}
           </h1>
-          <p className="text-sm text-base-content/55">
+          <p className="text-xs text-base-content/55 sm:text-sm">
             استخدم رمز الموظف للمتابعة
           </p>
 
-          <div className="my-5 flex min-h-16 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4">
+          <div className="my-2 flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14">
             {Array.from({ length: 4 }).map((_, i) => (
               <span
                 key={i}
-                className={`size-3 rounded-full transition-all ${
+                className={`size-2.5 rounded-full transition-all sm:size-3 ${
                   i < pin.length
                     ? "scale-110 bg-primary shadow-md shadow-primary/30"
                     : "bg-base-300"
@@ -84,19 +84,19 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
           </div>
 
           {error && (
-            <div role="alert" className="alert alert-error alert-soft w-full text-sm">
+            <div role="alert" className="alert alert-error alert-soft w-full py-2 text-sm">
               <span>{error}</span>
             </div>
           )}
 
-          <div className="grid w-full grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="grid w-full grid-cols-3 gap-2">
             {keys.map((key) => {
               if (key === "clear") {
                 return (
                   <button
                     key={key}
                     type="button"
-                    className="btn btn-ghost h-14 rounded-2xl text-error sm:h-16"
+                    className="btn btn-ghost h-12 min-h-12 rounded-xl text-error sm:h-14"
                     onClick={clear}
                     disabled={pending}
                     aria-label="مسح الرمز"
@@ -110,7 +110,7 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
                   <button
                     key={key}
                     type="button"
-                    className="btn btn-ghost h-14 rounded-2xl sm:h-16"
+                    className="btn btn-ghost h-12 min-h-12 rounded-xl sm:h-14"
                     onClick={backspace}
                     disabled={pending}
                     aria-label="حذف رقم"
@@ -123,7 +123,7 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
                 <button
                   key={key}
                   type="button"
-                  className="btn h-14 rounded-2xl border-base-300 bg-base-100 text-xl font-bold shadow-sm hover:border-primary/30 hover:bg-primary/5 sm:h-16"
+                  className="btn h-12 min-h-12 rounded-xl border-base-300 bg-base-100 text-lg font-bold shadow-sm hover:border-primary/30 hover:bg-primary/5 sm:h-14 sm:text-xl"
                   onClick={() => press(key)}
                   disabled={pending}
                 >
@@ -135,7 +135,7 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
 
           <button
             type="button"
-            className="btn btn-primary btn-lg mt-4 w-full rounded-2xl shadow-lg shadow-primary/20"
+            className="btn btn-primary btn-lg mt-1 w-full rounded-2xl shadow-lg shadow-primary/20"
             onClick={submit}
             disabled={pending || pin.length < 4}
           >
@@ -152,7 +152,7 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
             )}
           </button>
 
-          <div className="mt-3 flex items-center gap-2 text-xs text-base-content/45">
+          <div className="flex items-center gap-2 text-xs text-base-content/45">
             <ShieldCheck className="size-4 text-success" />
             رمزك مشفّر ومحمي
           </div>

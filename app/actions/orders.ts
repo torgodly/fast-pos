@@ -29,6 +29,7 @@ import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getReceiptFooterMessage } from "@/lib/settings";
+import { getOpenShift } from "@/lib/shifts/core";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -177,7 +178,21 @@ export async function updateOrderItemQty(
     return { error: "غير مصرح" };
   }
 
+  const kitchenSent = line.kitchenSentQty ?? 0;
+
+  if (qty < kitchenSent) {
+    return {
+      error:
+        kitchenSent > 0
+          ? `لا يمكن تقليل الكمية عن ${kitchenSent} — تم تأكيدها للمطبخ`
+          : "لا يمكن حذف صنف مؤكد للمطبخ",
+    };
+  }
+
   if (qty <= 0) {
+    if (kitchenSent > 0) {
+      return { error: "لا يمكن حذف صنف مؤكد للمطبخ" };
+    }
     db.delete(orderItems).where(eq(orderItems.id, orderItemId)).run();
   } else {
     db.update(orderItems)
@@ -211,7 +226,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     }
 > {
   const session = await getSession();
-  if (!session || session.role !== "waiter") {
+  if (!session || (session.role !== "waiter" && session.role !== "cashier")) {
     return { error: "غير مصرح" };
   }
 
@@ -374,7 +389,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     }
   }
 
-  revalidateOrderPaths(order.venueId, orderId, "waiter");
+  revalidateOrderPaths(order.venueId, orderId, session.role);
 
   if (printedTo.length === 0) {
     return {
@@ -529,6 +544,13 @@ export async function payOrder(
     return { error: stationCtx.error };
   }
 
+  const openShift = getOpenShift(order.venueId);
+  if (!openShift) {
+    return {
+      error: "افتح الوردية من شاشة الكاشير قبل التحصيل",
+    };
+  }
+
   const lines = db
     .select()
     .from(orderItems)
@@ -547,6 +569,7 @@ export async function payOrder(
       status: "paid",
       paymentMethod,
       cashierId: session.userId,
+      shiftId: openShift.id,
       total,
       paidAt,
     })
@@ -653,6 +676,13 @@ export async function payQuickSale(
     return { error: stationCtx.error };
   }
 
+  const openShift = getOpenShift(venueId);
+  if (!openShift) {
+    return {
+      error: "افتح الوردية من شاشة الكاشير قبل البيع",
+    };
+  }
+
   const priced = cart.map((line) => {
     const qty = Math.max(1, Math.trunc(line.qty));
     const item = db
@@ -687,6 +717,7 @@ export async function payQuickSale(
       tableId: null,
       waiterId: null,
       cashierId: session.userId,
+      shiftId: openShift.id,
       status: "paid",
       paymentMethod,
       total,

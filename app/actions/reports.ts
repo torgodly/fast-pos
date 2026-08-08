@@ -32,7 +32,6 @@ function summaryToPrintData(
     totalSales: summary.totalSales,
     cashTotal: summary.cashTotal,
     cardTotal: summary.cardTotal,
-    averageTicket: summary.averageTicket,
     totalItems: summary.totalItems,
     tableSales: summary.tableSales,
     quickSales: summary.quickSales,

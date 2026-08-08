@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
+import { migrateReportGroups } from "./migrate-report-groups";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -75,6 +76,11 @@ function createDb() {
   ensureSchema(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
+  try {
+    migrateReportGroups(sqlite);
+  } catch {
+    // best-effort remap for existing installs
+  }
   return db;
 }
 
@@ -150,12 +156,28 @@ function ensureSchema(sqlite: Database.Database) {
       active INTEGER NOT NULL DEFAULT 1
     );
 
+    CREATE TABLE IF NOT EXISTS shifts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id TEXT NOT NULL REFERENCES venues(id),
+      work_date TEXT NOT NULL,
+      shift_number INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      opened_by INTEGER REFERENCES users(id),
+      opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+      closed_by INTEGER REFERENCES users(id),
+      closed_at TEXT,
+      x_printed_at TEXT
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS shifts_venue_date_number_idx
+      ON shifts(venue_id, work_date, shift_number);
+
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
       table_id INTEGER REFERENCES tables(id),
       waiter_id INTEGER REFERENCES users(id),
       cashier_id INTEGER REFERENCES users(id),
+      shift_id INTEGER REFERENCES shifts(id),
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
       total REAL NOT NULL DEFAULT 0,
@@ -227,6 +249,14 @@ function ensureSchema(sqlite: Database.Database) {
     `);
   } catch {
     // migration best-effort for existing databases
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE orders ADD COLUMN shift_id INTEGER REFERENCES shifts(id)`,
+    );
+  } catch {
+    // column already exists
   }
 }
 

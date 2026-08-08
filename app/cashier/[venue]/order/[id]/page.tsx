@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { ArrowRight, ReceiptText, Trash2, WalletCards } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { cancelOpenOrder } from "@/app/actions/orders";
+import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PayButtons } from "@/components/PayButtons";
 import { PosHeader } from "@/components/PosHeader";
@@ -16,6 +17,7 @@ import {
   tables,
   users,
 } from "@/lib/db/schema";
+import { getOpenShift } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierOrderPage({
@@ -26,6 +28,9 @@ export default async function CashierOrderPage({
   const { venue, id } = await params;
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
+  if (!getOpenShift(venue)) {
+    redirect(`/cashier/${venue}`);
+  }
   const orderId = Number(id);
 
   const order = db
@@ -71,8 +76,8 @@ export default async function CashierOrderPage({
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex flex-1 flex-col gap-5 p-4 sm:p-6 lg:p-8">
-        <div className="premium-card flex flex-col gap-4 rounded-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+      <main className="page-shell flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:p-5">
+        <div className="premium-card flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
           <div className="flex items-center gap-3">
             <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
               <ReceiptText className="size-5" />
@@ -120,6 +125,10 @@ export default async function CashierOrderPage({
           total={order.total}
           footer={
             <div className="space-y-3">
+              <KitchenConfirmButton
+                orderId={orderId}
+                disabled={lines.length === 0}
+              />
               <div className="flex items-center gap-3">
                 <span className="grid size-10 place-items-center rounded-xl bg-success/10 text-success">
                   <WalletCards className="size-5" />

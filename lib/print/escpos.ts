@@ -2,6 +2,7 @@ import type {
   CheckoutReceiptData,
   KitchenReceiptData,
   ReportSummaryPrintData,
+  ShiftReportPrintData,
 } from "./receipts";
 import {
   encodePrinterText,
@@ -237,7 +238,6 @@ export function buildReportSummaryEscPos(data: ReportSummaryPrintData): Uint8Arr
   });
   fieldLine(parts, "نقدي", money(data.cashTotal));
   fieldLine(parts, "بطاقة", money(data.cardTotal));
-  fieldLine(parts, "متوسط الفاتورة", money(data.averageTicket));
   fieldLine(parts, "قطع مباعة", String(data.totalItems));
   fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
   fieldLine(parts, "ملغاة", String(data.cancelledCount));
@@ -284,6 +284,53 @@ export function buildReportSummaryEscPos(data: ReportSummaryPrintData): Uint8Arr
   reportSep(parts);
   parts.push(align("center"));
   printLine(parts, "— نهاية التقرير —", { center: true });
+  parts.push(cut());
+
+  return concat(...parts);
+}
+
+export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
+  const parts: Uint8Array[] = [init()];
+  const title = data.kind === "X" ? "تقرير X" : "تقرير Z";
+
+  headerBlock(parts, title, data.venueName);
+  reportSep(parts);
+  fieldLine(parts, "الوردية", String(data.shiftNumber));
+  fieldLine(parts, "تاريخ العمل", data.workDate);
+  fieldLine(parts, "فتح", data.openedAt);
+  fieldLine(parts, "فتح بواسطة", data.openedByName);
+  if (data.closedAt) {
+    fieldLine(parts, "إقفال", data.closedAt);
+    fieldLine(parts, "أقفل بواسطة", data.closedByName ?? "-");
+  }
+  reportSep(parts);
+
+  fieldLine(parts, "الفواتير", String(data.invoiceCount));
+  printLine(parts, `الإجمالي: ${money(data.totalSales)}`, {
+    bold: true,
+    fontSize: 32,
+  });
+  fieldLine(parts, "نقدي", money(data.cashTotal));
+  fieldLine(parts, "بطاقة", money(data.cardTotal));
+  fieldLine(parts, "قطع مباعة", String(data.totalItems));
+  fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
+
+  reportSep(parts);
+  printLine(parts, "المبيعات حسب المجموعة", { bold: true });
+  for (const group of data.groups) {
+    printLine(
+      parts,
+      `${group.name}: ${group.qty} = ${money(group.revenue)}`,
+    );
+  }
+
+  reportSep(parts);
+  parts.push(align("center"));
+  printLine(
+    parts,
+    data.kind === "Z" ? "تم إقفال الوردية" : "الوردية ما زالت مفتوحة",
+    { center: true, bold: true },
+  );
   parts.push(cut());
 
   return concat(...parts);

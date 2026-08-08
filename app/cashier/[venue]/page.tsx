@@ -14,9 +14,11 @@ import {
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
+import { CashierShiftPanel } from "@/components/CashierShiftPanel";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
+import { getCashierShiftStatus } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierHomePage({
@@ -31,6 +33,8 @@ export default async function CashierHomePage({
 
   const stationCtx = await getCashierStationContext(venue);
   const hasCheckout = !("error" in stationCtx);
+  const shiftStatus = getCashierShiftStatus(venue);
+  const canSell = hasCheckout && !!shiftStatus.open;
 
   const openOrders = db
     .select({
@@ -50,17 +54,17 @@ export default async function CashierHomePage({
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-5 text-neutral-content shadow-xl sm:p-7">
+      <main className="page-shell flex-1 space-y-4 p-3 sm:space-y-5 sm:p-5 lg:p-6">
+        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-4 text-neutral-content shadow-xl sm:rounded-3xl sm:p-6">
           <div className="absolute -bottom-24 -left-12 size-56 rounded-full bg-white/5" />
-          <div className="relative space-y-5">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative space-y-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <div className="mb-2 flex items-center gap-2 text-sm font-bold text-white/60">
+                <div className="mb-1 flex items-center gap-2 text-sm font-bold text-white/60">
                   <WalletCards className="size-4" />
                   شاشة الكاشير
                 </div>
-                <h2 className="text-2xl font-black sm:text-3xl">
+                <h2 className="text-xl font-black sm:text-2xl">
                   الفواتير المفتوحة
                 </h2>
                 <p className="mt-1 text-sm text-white/55">
@@ -68,7 +72,7 @@ export default async function CashierHomePage({
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
-                {hasCheckout ? (
+                {canSell ? (
                   <Link
                     href={`/cashier/${venue}/quick`}
                     className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
@@ -98,23 +102,50 @@ export default async function CashierHomePage({
           </div>
         </section>
 
+        <CashierShiftPanel
+          venueId={venue}
+          workDate={shiftStatus.workDate}
+          openShift={
+            shiftStatus.open
+              ? {
+                  id: shiftStatus.open.id,
+                  shiftNumber: shiftStatus.open.shiftNumber,
+                  status: shiftStatus.open.status,
+                  openedAt: shiftStatus.open.openedAt,
+                  closedAt: shiftStatus.open.closedAt,
+                }
+              : null
+          }
+          canOpen={shiftStatus.canOpen}
+          nextShiftNumber={shiftStatus.nextShiftNumber}
+          dayComplete={shiftStatus.dayComplete}
+        />
+
         {!hasCheckout ? (
           <div className="alert alert-error rounded-2xl">
             <span className="font-bold">{stationCtx.error}</span>
           </div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
+        {hasCheckout && !shiftStatus.open ? (
+          <div className="alert alert-warning rounded-2xl">
+            <span className="font-bold">
+              افتح الوردية أولاً قبل البيع السريع أو تحصيل الفواتير
+            </span>
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {openOrders.map((order) => (
             <Link
               key={order.id}
               href={
-                hasCheckout
+                canSell
                   ? `/cashier/${venue}/order/${order.id}`
                   : `/cashier/${venue}`
               }
               className={`premium-card group card transition duration-200 ${
-                hasCheckout
+                canSell
                   ? "hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg"
                   : "pointer-events-none opacity-50"
               }`}

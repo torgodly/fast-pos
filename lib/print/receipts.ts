@@ -14,7 +14,6 @@ export type ReportSummaryPrintData = {
   totalSales: number;
   cashTotal: number;
   cardTotal: number;
-  averageTicket: number;
   totalItems: number;
   tableSales: number;
   quickSales: number;
@@ -31,6 +30,25 @@ export type ReportSummaryPrintData = {
     card: number;
     sales: number;
   }>;
+};
+
+export type ShiftReportPrintData = {
+  kind: "X" | "Z";
+  venueName: string;
+  shiftNumber: number;
+  workDate: string;
+  openedAt: string;
+  closedAt: string | null;
+  openedByName: string;
+  closedByName: string | null;
+  invoiceCount: number;
+  totalSales: number;
+  cashTotal: number;
+  cardTotal: number;
+  totalItems: number;
+  tableSales: number;
+  quickSales: number;
+  groups: Array<{ name: string; qty: number; revenue: number }>;
 };
 
 export type KitchenReceiptData = {

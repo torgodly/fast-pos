@@ -262,7 +262,7 @@ export function QuickSaleBoard({
 
   return (
     <>
-      <div className="grid flex-1 gap-5 pb-28 lg:grid-cols-[minmax(0,1fr)_380px] lg:pb-0">
+      <div className="grid flex-1 gap-3 pb-28 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-4 lg:pb-0 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           <CategoryItemPicker
             categories={categories}
@@ -273,24 +273,24 @@ export function QuickSaleBoard({
           />
         </div>
 
-        <aside className="premium-card sticky top-24 hidden lg:flex lg:max-h-[calc(100dvh-5rem)] lg:flex-col lg:overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
+        <aside className="premium-card sticky top-14 hidden lg:flex lg:max-h-[calc(100dvh-4rem)] lg:flex-col lg:overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-3 py-3 xl:px-4">
             <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                <ShoppingBag className="size-4.5" />
+              <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
+                <ShoppingBag className="size-4" />
               </span>
               <div>
-                <h3 className="font-black">سلة البيع السريع</h3>
+                <h3 className="text-sm font-black">سلة البيع السريع</h3>
                 <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
               </div>
             </div>
-            <ReceiptText className="size-5 text-base-content/20" />
+            <ReceiptText className="size-4 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="flex min-h-0 flex-1 flex-col p-3 xl:p-4">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
-            <div className="mt-4 shrink-0 border-t border-base-300/60 bg-base-100 pt-4">
+            <div className="mt-3 shrink-0 border-t border-base-300/60 bg-base-100 pt-3">
               {cartFooter}
             </div>
           </div>

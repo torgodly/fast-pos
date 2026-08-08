@@ -32,6 +32,7 @@ type Line = {
   qty: number;
   unitPrice: number;
   lineTotal: number;
+  kitchenSentQty?: number | null;
 };
 
 export function OrderMenu({
@@ -96,7 +97,11 @@ export function OrderMenu({
         categoryCounts={categoryCounts}
       />
       <ul className="mt-3 space-y-2">
-        {lines.map((line) => (
+        {lines.map((line) => {
+          const kitchenSent = line.kitchenSentQty ?? 0;
+          const locked = kitchenSent > 0;
+          const canReduce = line.qty > kitchenSent;
+          return (
           <li
             key={line.id}
             className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
@@ -106,6 +111,11 @@ export function OrderMenu({
                 <p className="truncate font-black">{line.itemName}</p>
                 <p className="text-xs text-base-content/45">
                   {formatMoney(line.unitPrice)} للوحدة
+                  {locked ? (
+                    <span className="ms-2 text-warning">
+                      · مؤكد للمطبخ ({kitchenSent})
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <p className="shrink-0 font-black text-primary">
@@ -117,7 +127,7 @@ export function OrderMenu({
                 <button
                   type="button"
                   className="btn join-item btn-sm btn-square min-h-11 min-w-11"
-                  disabled={pending}
+                  disabled={pending || !canReduce}
                   onClick={() => changeQty(line.id, line.qty - 1)}
                   aria-label="تقليل الكمية"
                 >
@@ -139,7 +149,7 @@ export function OrderMenu({
               <button
                 type="button"
                 className="btn btn-circle btn-ghost btn-sm text-error"
-                disabled={pending}
+                disabled={pending || locked}
                 onClick={() => remove(line.id)}
                 aria-label="حذف الصنف"
               >
@@ -147,7 +157,8 @@ export function OrderMenu({
               </button>
             </div>
           </li>
-        ))}
+          );
+        })}
         {lines.length === 0 && (
           <li className="py-8 text-center">
             <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-base-200 text-base-content/20">
@@ -182,7 +193,7 @@ export function OrderMenu({
 
   return (
     <>
-      <div className="grid flex-1 gap-4 pb-32 md:gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="grid flex-1 gap-3 pb-28 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-4 lg:pb-0 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0">
           <CategoryItemPicker
             categories={categories}
@@ -193,35 +204,35 @@ export function OrderMenu({
           />
         </div>
 
-        <aside className="premium-card sticky top-20 hidden lg:flex lg:max-h-[calc(100dvh-5rem)] lg:flex-col lg:overflow-hidden xl:top-24">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-5 py-4">
+        <aside className="premium-card sticky top-14 hidden lg:flex lg:max-h-[calc(100dvh-4rem)] lg:flex-col lg:overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-3 py-3 xl:px-4">
             <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                <ShoppingBag className="size-4.5" />
+              <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
+                <ShoppingBag className="size-4" />
               </span>
               <div>
-                <h3 className="font-black">ملخص الفاتورة</h3>
+                <h3 className="text-sm font-black">ملخص الفاتورة</h3>
                 <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
               </div>
             </div>
-            <ReceiptText className="size-5 text-base-content/20" />
+            <ReceiptText className="size-4 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-5">
+          <div className="flex min-h-0 flex-1 flex-col p-3 xl:p-4">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
-            <div className="mt-4 shrink-0 border-t border-base-300/60 bg-base-100 pt-4">
+            <div className="mt-3 shrink-0 border-t border-base-300/60 bg-base-100 pt-3">
               {cartFooter}
             </div>
           </div>
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
         <button
           type="button"
           onClick={() => setCartOpen(true)}
-          className="flex min-h-16 w-full touch-manipulation items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3.5 text-primary-content shadow-lg shadow-primary/20 md:mx-auto md:max-w-2xl md:px-6"
+          className="flex min-h-14 w-full touch-manipulation items-center justify-between gap-3 rounded-2xl bg-primary px-4 py-3 text-primary-content shadow-lg shadow-primary/20 md:mx-auto md:max-w-2xl"
         >
           <span className="flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-white/15">

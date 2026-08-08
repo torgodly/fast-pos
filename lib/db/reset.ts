@@ -29,6 +29,11 @@ export function applyPartialReset(options: ResetOptions) {
   if (options.sales || options.menu) {
     sqlite.exec("DELETE FROM order_items");
     sqlite.exec("DELETE FROM orders");
+    try {
+      sqlite.exec("DELETE FROM shifts");
+    } catch {
+      /* shifts table may not exist on very old DBs */
+    }
   }
 
   if (options.printers) {
