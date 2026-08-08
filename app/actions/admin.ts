@@ -260,6 +260,8 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "");
   const pin = String(formData.get("pin") ?? "").trim();
+  const isMainCashier =
+    role === "cashier" && formData.get("isMainCashier") === "on";
 
   if (!name || (role !== "waiter" && role !== "cashier")) {
     return { error: "بيانات الموظف غير مكتملة" };
@@ -288,16 +290,22 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
     }
   }
 
+  if (isMainCashier) {
+    db.update(users).set({ isMainCashier: false }).run();
+  }
+
   if (id) {
     const updates: {
       name: string;
       role: "waiter" | "cashier";
       venueId: null;
       pinHash?: string;
+      isMainCashier: boolean;
     } = {
       name,
       role: role as "waiter" | "cashier",
       venueId: null,
+      isMainCashier: role === "cashier" ? isMainCashier : false,
     };
     if (pin) updates.pinHash = bcrypt.hashSync(pin, 10);
     db.update(users).set(updates).where(eq(users.id, id)).run();
@@ -308,6 +316,7 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
         role: role as "waiter" | "cashier",
         venueId: null,
         pinHash: bcrypt.hashSync(pin, 10),
+        isMainCashier: role === "cashier" ? isMainCashier : false,
         active: true,
       })
       .run();

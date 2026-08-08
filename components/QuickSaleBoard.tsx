@@ -162,7 +162,7 @@ export function QuickSaleBoard({
             key={line.itemId}
             className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="truncate font-black">{line.name}</p>
                 <p className="text-xs text-base-content/45">
@@ -177,18 +177,18 @@ export function QuickSaleBoard({
               <div className="join">
                 <button
                   type="button"
-                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
+                  className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
                   onClick={() => changeQty(line.itemId, line.qty - 1)}
                   aria-label="تقليل الكمية"
                 >
                   <Minus className="size-3.5" />
                 </button>
-                <span className="join-item grid h-11 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black">
+                <span className="join-item grid h-10 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black sm:h-11">
                   {line.qty}
                 </span>
                 <button
                   type="button"
-                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
+                  className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
                   onClick={() => changeQty(line.itemId, line.qty + 1)}
                   aria-label="زيادة الكمية"
                 >
@@ -221,8 +221,8 @@ export function QuickSaleBoard({
 
   const cartFooter = (
     <>
-      <div className="border-t border-dashed border-base-300 pt-4">
-        <div className="flex items-end justify-between">
+      <div className="border-t border-dashed border-base-300 pt-3">
+        <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold text-base-content/45">
               الإجمالي المستحق
@@ -237,23 +237,23 @@ export function QuickSaleBoard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
         <button
           type="button"
-          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20"
+          className="btn h-14 min-h-12 flex-col gap-1 rounded-2xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20 sm:h-16"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("cash")}
         >
-          <Banknote className="size-6" />
+          <Banknote className="size-5 sm:size-6" />
           <span className="font-black">دفع نقدي</span>
         </button>
         <button
           type="button"
-          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20"
+          className="btn h-14 min-h-12 flex-col gap-1 rounded-2xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20 sm:h-16"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("card")}
         >
-          <CreditCard className="size-6" />
+          <CreditCard className="size-5 sm:size-6" />
           <span className="font-black">دفع بالبطاقة</span>
         </button>
       </div>
@@ -262,7 +262,7 @@ export function QuickSaleBoard({
 
   return (
     <>
-      <div className="grid flex-1 gap-3 pb-28 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-4 lg:pb-0 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid flex-1 gap-3 pb-28 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
         <div className="min-w-0">
           <CategoryItemPicker
             categories={categories}
@@ -273,20 +273,20 @@ export function QuickSaleBoard({
           />
         </div>
 
-        <aside className="premium-card sticky top-14 hidden lg:flex lg:max-h-[calc(100dvh-4rem)] lg:flex-col lg:overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-3 py-3 xl:px-4">
+        <aside className="premium-card sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] lg:flex lg:flex-col lg:overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
+              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 <ShoppingBag className="size-4" />
               </span>
               <div>
-                <h3 className="text-sm font-black">سلة البيع السريع</h3>
+                <h3 className="font-black">سلة البيع السريع</h3>
                 <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
               </div>
             </div>
-            <ReceiptText className="size-4 text-base-content/20" />
+            <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-3 xl:p-4">
+          <div className="flex min-h-0 flex-1 flex-col p-4">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
@@ -331,7 +331,7 @@ export function QuickSaleBoard({
             aria-label="إغلاق السلة"
             onClick={() => setCartOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,100%)] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
                 <p className="font-black">سلة البيع السريع</p>

@@ -105,14 +105,14 @@ export function CategoryItemPicker({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {activeItems.map((item) => {
             const available = item.active !== false;
             return (
               <button
                 key={item.id}
                 type="button"
-                className={`group flex min-h-[6.5rem] touch-manipulation flex-col justify-between rounded-2xl border bg-base-100 p-3 text-right shadow-sm transition duration-200 sm:min-h-[7rem] lg:min-h-[6.75rem] ${
+                className={`group flex min-h-[7rem] touch-manipulation flex-col justify-between rounded-2xl border bg-base-100 p-3 text-right shadow-sm transition duration-200 sm:min-h-32 sm:p-4 ${
                   available
                     ? "border-base-300/80 hover:border-primary/30 hover:shadow-md active:scale-[0.98] disabled:opacity-60"
                     : "cursor-not-allowed border-error bg-base-200"
@@ -177,7 +177,7 @@ export function CategoryItemPicker({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
         {categoriesWithItems.map((cat) => {
           const catItems = items.filter((item) => item.categoryId === cat.id);
           const picked = categoryCounts[cat.id] ?? 0;
@@ -187,7 +187,7 @@ export function CategoryItemPicker({
             <button
               key={cat.id}
               type="button"
-              className={`premium-card group flex min-h-[7rem] touch-manipulation flex-col justify-between rounded-2xl border-2 bg-base-100 p-3 text-right shadow-sm transition duration-200 hover:shadow-md active:scale-[0.98] sm:min-h-[7.5rem] sm:p-4 lg:min-h-[7rem] ${
+              className={`premium-card group flex min-h-[8rem] touch-manipulation flex-col justify-between rounded-2xl border-2 bg-base-100 p-4 text-right shadow-sm transition duration-200 hover:shadow-md active:scale-[0.98] sm:min-h-36 sm:p-5 ${
                 hasPicked
                   ? "border-primary hover:border-primary"
                   : "border-dashed border-base-300 hover:border-secondary"

@@ -108,6 +108,7 @@ function ensureSchema(sqlite: Database.Database) {
       username TEXT,
       password_hash TEXT,
       pin_hash TEXT,
+      is_main_cashier INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -257,6 +258,36 @@ function ensureSchema(sqlite: Database.Database) {
     );
   } catch {
     // column already exists
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE users ADD COLUMN is_main_cashier INTEGER NOT NULL DEFAULT 0`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    const mainCount = sqlite
+      .prepare(
+        `SELECT COUNT(*) AS c FROM users WHERE role = 'cashier' AND is_main_cashier = 1 AND active = 1`,
+      )
+      .get() as { c: number };
+    if (!mainCount?.c) {
+      sqlite
+        .prepare(
+          `UPDATE users SET is_main_cashier = 1
+           WHERE id = (
+             SELECT id FROM users
+             WHERE role = 'cashier' AND active = 1
+             ORDER BY id ASC LIMIT 1
+           )`,
+        )
+        .run();
+    }
+  } catch {
+    // best-effort
   }
 }
 

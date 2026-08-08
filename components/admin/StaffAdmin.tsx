@@ -24,6 +24,7 @@ type StaffRow = {
   name: string;
   role: string;
   active: boolean;
+  isMainCashier: boolean;
 };
 
 export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
@@ -117,7 +118,11 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
                         ) : (
                           <WalletCards className="size-3.5" />
                         )}
-                        {person.role === "waiter" ? "سفرادجي" : "كاشير"}
+                        {person.role === "waiter"
+                          ? "سفرادجي"
+                          : person.isMainCashier
+                            ? "كاشير رئيسي"
+                            : "كاشير"}
                       </span>
                     </td>
                     <td>
@@ -212,6 +217,20 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
               required={!editing}
             />
           </label>
+          <label className="label cursor-pointer justify-start gap-3 rounded-xl border border-base-300/70 px-3 py-2.5">
+            <input
+              type="checkbox"
+              name="isMainCashier"
+              className="checkbox checkbox-primary"
+              defaultChecked={editing?.isMainCashier ?? false}
+            />
+            <span className="label-text font-bold">
+              كاشير رئيسي (فتح/إقفال الوردية وطباعة X و Z)
+            </span>
+          </label>
+          <p className="text-xs text-base-content/45">
+            يمكن تعيين كاشير رئيسي واحد فقط — التعيين الجديد يلغي السابق
+          </p>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
             <button

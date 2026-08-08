@@ -14,7 +14,6 @@ import {
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
-import { CashierShiftPanel } from "@/components/CashierShiftPanel";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
@@ -30,6 +29,8 @@ export default async function CashierHomePage({
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
   const waiter = alias(users, "waiter");
+  const me = db.select().from(users).where(eq(users.id, session.userId)).get();
+  const isMainCashier = !!me?.isMainCashier;
 
   const stationCtx = await getCashierStationContext(venue);
   const hasCheckout = !("error" in stationCtx);
@@ -97,41 +98,55 @@ export default async function CashierHomePage({
                   <History className="size-4" />
                   مبيعاتي
                 </Link>
+                {isMainCashier ? (
+                  <Link
+                    href={`/cashier/${venue}/shift`}
+                    className="btn border-white/15 bg-white/10 text-white hover:bg-white/20"
+                  >
+                    <Clock3 className="size-4" />
+                    إدارة الوردية
+                  </Link>
+                ) : null}
               </div>
             </div>
           </div>
         </section>
 
-        <CashierShiftPanel
-          venueId={venue}
-          workDate={shiftStatus.workDate}
-          openShift={
-            shiftStatus.open
-              ? {
-                  id: shiftStatus.open.id,
-                  shiftNumber: shiftStatus.open.shiftNumber,
-                  status: shiftStatus.open.status,
-                  openedAt: shiftStatus.open.openedAt,
-                  closedAt: shiftStatus.open.closedAt,
-                }
-              : null
-          }
-          canOpen={shiftStatus.canOpen}
-          nextShiftNumber={shiftStatus.nextShiftNumber}
-          dayComplete={shiftStatus.dayComplete}
-        />
+        <div
+          className={`alert rounded-2xl py-3 ${
+            shiftStatus.open ? "alert-success" : "alert-warning"
+          }`}
+        >
+          <Clock3 className="size-5" />
+          <div className="min-w-0 flex-1">
+            <p className="font-black">
+              {shiftStatus.open
+                ? `الوردية ${shiftStatus.open.shiftNumber} مفتوحة`
+                : shiftStatus.dayComplete
+                  ? "انتهى يوم العمل"
+                  : "لا توجد وردية مفتوحة"}
+            </p>
+            <p className="text-sm opacity-80">
+              {shiftStatus.open
+                ? "يمكنك التحصيل والبيع السريع"
+                : isMainCashier
+                  ? "افتح الوردية من «إدارة الوردية» قبل العمل"
+                  : "انتظر الكاشير الرئيسي لفتح الوردية"}
+            </p>
+          </div>
+          {isMainCashier ? (
+            <Link
+              href={`/cashier/${venue}/shift`}
+              className="btn btn-sm shrink-0 rounded-xl"
+            >
+              إدارة الوردية
+            </Link>
+          ) : null}
+        </div>
 
         {!hasCheckout ? (
           <div className="alert alert-error rounded-2xl">
             <span className="font-bold">{stationCtx.error}</span>
-          </div>
-        ) : null}
-
-        {hasCheckout && !shiftStatus.open ? (
-          <div className="alert alert-warning rounded-2xl">
-            <span className="font-bold">
-              افتح الوردية أولاً قبل البيع السريع أو تحصيل الفواتير
-            </span>
           </div>
         ) : null}
 

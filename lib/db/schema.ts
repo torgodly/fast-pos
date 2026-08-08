@@ -22,6 +22,10 @@ export const users = sqliteTable(
     username: text("username"),
     passwordHash: text("password_hash"),
     pinHash: text("pin_hash"),
+    /** Only the main cashier may open/close shifts and print X/Z. */
+    isMainCashier: integer("is_main_cashier", { mode: "boolean" })
+      .notNull()
+      .default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at")
       .notNull()

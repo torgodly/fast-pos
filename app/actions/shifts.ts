@@ -1,11 +1,11 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { shifts } from "@/lib/db/schema";
+import { shifts, users } from "@/lib/db/schema";
 import { buildShiftReportEscPos } from "@/lib/print/escpos";
 import { printToPrinter } from "@/lib/print/network";
 import {
@@ -19,8 +19,25 @@ import { isVenueId } from "@/lib/venues";
 
 function revalidateCashier(venueId: string) {
   revalidatePath(`/cashier/${venueId}`);
+  revalidatePath(`/cashier/${venueId}/shift`);
   revalidatePath(`/cashier/${venueId}/quick`);
   revalidatePath(`/cashier/${venueId}/sales`);
+}
+
+function requireMainCashier(userId: number) {
+  const user = db
+    .select()
+    .from(users)
+    .where(
+      and(
+        eq(users.id, userId),
+        eq(users.role, "cashier"),
+        eq(users.active, true),
+        eq(users.isMainCashier, true),
+      ),
+    )
+    .get();
+  return user ?? null;
 }
 
 export async function openCashierShift(
@@ -29,6 +46,9 @@ export async function openCashierShift(
   const session = await getSession();
   if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
     return { error: "غير مصرح" };
+  }
+  if (!requireMainCashier(session.userId)) {
+    return { error: "فقط الكاشير الرئيسي يمكنه فتح الوردية" };
   }
 
   if (getOpenShift(venueId)) {
@@ -68,6 +88,9 @@ async function printShiftReport(
   const session = await getSession();
   if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
     return { error: "غير مصرح" };
+  }
+  if (!requireMainCashier(session.userId)) {
+    return { error: "فقط الكاشير الرئيسي يمكنه طباعة تقارير X و Z" };
   }
 
   const open = getOpenShift(venueId);

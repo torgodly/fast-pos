@@ -104,6 +104,7 @@ function runSeed(
           role: "cashier" as const,
           venueId: null,
           pinHash: pin("2222"),
+          isMainCashier: true,
           active: true,
         },
         {
@@ -111,6 +112,7 @@ function runSeed(
           role: "cashier" as const,
           venueId: null,
           pinHash: pin("5555"),
+          isMainCashier: false,
           active: true,
         },
         {

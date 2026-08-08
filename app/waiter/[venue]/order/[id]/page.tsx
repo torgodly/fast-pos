@@ -70,12 +70,12 @@ export default async function WaiterOrderPage({
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
       <main className="page-shell flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:p-5">
         <div className="premium-card flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary sm:size-11">
               <ReceiptText className="size-5" />
             </span>
-            <div>
-            <h2 className="text-xl font-black sm:text-2xl">
+            <div className="min-w-0">
+            <h2 className="truncate text-lg font-black sm:text-xl lg:text-2xl">
               فاتورة #{order.id} — {table?.name ?? "بدون طاولة"}
             </h2>
             <p className="text-xs text-base-content/45 sm:text-sm">

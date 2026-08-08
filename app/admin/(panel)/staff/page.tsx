@@ -35,6 +35,7 @@ export default async function AdminStaffPage() {
           name: person.name,
           role: person.role,
           active: person.active,
+          isMainCashier: person.isMainCashier,
         }))}
       />
     </div>

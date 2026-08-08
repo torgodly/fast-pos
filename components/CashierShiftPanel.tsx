@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useTransition } from "react";
 import {
   AlertTriangle,
   LoaderCircle,
@@ -41,7 +41,11 @@ export function CashierShiftPanel({
 }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
-  const [confirmZ, setConfirmZ] = useState(false);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  useEffect(() => {
+    if (!openShift) dialogRef.current?.close();
+  }, [openShift]);
 
   function run(
     action: () => Promise<{ error: string } | { ok: true; message: string }>,
@@ -53,138 +57,156 @@ export function CashierShiftPanel({
         return;
       }
       showToast("success", result.message);
-      setConfirmZ(false);
+      dialogRef.current?.close();
     });
   }
 
   return (
-    <section className="premium-card card">
-      <div className="card-body gap-4 p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-base-content/45">
-              ورديات اليوم · {workDate}
-            </p>
-            <h3 className="text-xl font-black">
-              {openShift
-                ? `الوردية ${openShift.shiftNumber} مفتوحة`
-                : dayComplete
-                  ? "انتهى يوم العمل"
-                  : "لا توجد وردية مفتوحة"}
-            </h3>
-            <p className="mt-1 text-sm text-base-content/50">
-              {openShift
-                ? `فُتحت ${formatDateTime(openShift.openedAt)} — طباعة X في أي وقت، Z تقفل الوردية`
-                : dayComplete
-                  ? "تم إقفال الورديتين — الوردية التالية غداً"
-                  : nextShiftNumber
-                    ? `الخطوة التالية: فتح الوردية ${nextShiftNumber}`
-                    : "افتح الوردية قبل أي بيع أو تحصيل"}
-            </p>
+    <>
+      <section className="premium-card card">
+        <div className="card-body gap-4 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold text-base-content/45">
+                ورديات اليوم · {workDate}
+              </p>
+              <h3 className="text-xl font-black">
+                {openShift
+                  ? `الوردية ${openShift.shiftNumber} مفتوحة`
+                  : dayComplete
+                    ? "انتهى يوم العمل"
+                    : "لا توجد وردية مفتوحة"}
+              </h3>
+              <p className="mt-1 text-sm text-base-content/50">
+                {openShift
+                  ? `فُتحت ${formatDateTime(openShift.openedAt)} — تقرير X في أي وقت، Z تقفل الوردية`
+                  : dayComplete
+                    ? "تم إقفال الورديتين — الوردية التالية غداً"
+                    : nextShiftNumber
+                      ? `الخطوة التالية: فتح الوردية ${nextShiftNumber}`
+                      : "افتح الوردية قبل أي بيع أو تحصيل"}
+              </p>
+            </div>
+            <span
+              className={`badge gap-1.5 ${
+                openShift
+                  ? "badge-success"
+                  : dayComplete
+                    ? "badge-neutral"
+                    : "badge-warning"
+              }`}
+            >
+              {openShift ? (
+                <Unlock className="size-3.5" />
+              ) : (
+                <Lock className="size-3.5" />
+              )}
+              {openShift ? "مفتوحة" : dayComplete ? "مكتمل" : "مقفلة"}
+            </span>
           </div>
-          <span
-            className={`badge gap-1.5 ${
-              openShift
-                ? "badge-success"
-                : dayComplete
-                  ? "badge-neutral"
-                  : "badge-warning"
-            }`}
-          >
-            {openShift ? (
-              <Unlock className="size-3.5" />
-            ) : (
-              <Lock className="size-3.5" />
-            )}
-            {openShift ? "مفتوحة" : dayComplete ? "مكتمل" : "مقفلة"}
-          </span>
-        </div>
 
-        {!openShift && canOpen ? (
-          <button
-            type="button"
-            className="btn btn-primary btn-lg gap-2 rounded-2xl"
-            disabled={pending}
-            onClick={() => run(() => openCashierShift(venueId))}
-          >
-            {pending ? (
-              <LoaderCircle className="size-5 animate-spin" />
-            ) : (
-              <Unlock className="size-5" />
-            )}
-            فتح الوردية {nextShiftNumber}
-          </button>
-        ) : null}
-
-        {!openShift && !canOpen && !dayComplete ? (
-          <div className="alert alert-warning rounded-2xl">
-            <AlertTriangle className="size-5" />
-            <span>لا يمكن فتح وردية الآن</span>
-          </div>
-        ) : null}
-
-        {openShift ? (
-          <div className="grid gap-2 sm:grid-cols-2">
+          {!openShift && canOpen ? (
             <button
               type="button"
-              className="btn btn-outline btn-lg gap-2 rounded-2xl"
+              className="btn btn-primary btn-lg gap-2 rounded-2xl"
               disabled={pending}
-              onClick={() => run(() => printShiftXReport(venueId))}
+              onClick={() => run(() => openCashierShift(venueId))}
             >
               {pending ? (
                 <LoaderCircle className="size-5 animate-spin" />
               ) : (
-                <Printer className="size-5" />
+                <Unlock className="size-5" />
               )}
-              طباعة تقرير X
+              فتح الوردية {nextShiftNumber}
             </button>
-            {!confirmZ ? (
+          ) : null}
+
+          {!openShift && !canOpen && !dayComplete ? (
+            <div className="alert alert-warning rounded-2xl">
+              <AlertTriangle className="size-5" />
+              <span>لا يمكن فتح وردية الآن</span>
+            </div>
+          ) : null}
+
+          {openShift ? (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                className="btn btn-outline btn-lg gap-2 rounded-2xl"
+                disabled={pending}
+                onClick={() => run(() => printShiftXReport(venueId))}
+              >
+                {pending ? (
+                  <LoaderCircle className="size-5 animate-spin" />
+                ) : (
+                  <Printer className="size-5" />
+                )}
+                طباعة تقرير X
+              </button>
               <button
                 type="button"
                 className="btn btn-error btn-lg gap-2 rounded-2xl"
                 disabled={pending}
-                onClick={() => setConfirmZ(true)}
+                onClick={() => dialogRef.current?.showModal()}
               >
                 <Lock className="size-5" />
                 إقفال الوردية (Z)
               </button>
-            ) : (
-              <div className="flex flex-col gap-2 sm:col-span-2">
-                <div className="alert alert-error rounded-2xl py-3">
-                  <AlertTriangle className="size-5" />
-                  <span className="text-sm font-bold">
-                    تأكيد: إقفال الوردية {openShift.shiftNumber} وطباعة Z؟ لا يمكن
-                    التراجع.
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-ghost rounded-xl"
-                    disabled={pending}
-                    onClick={() => setConfirmZ(false)}
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-error rounded-xl gap-2"
-                    disabled={pending}
-                    onClick={() => run(() => closeShiftWithZReport(venueId))}
-                  >
-                    {pending ? (
-                      <LoaderCircle className="size-4 animate-spin" />
-                    ) : (
-                      <Printer className="size-4" />
-                    )}
-                    تأكيد وطباعة Z
-                  </button>
-                </div>
-              </div>
-            )}
+            </div>
+          ) : null}
+        </div>
+      </section>
+
+      <dialog ref={dialogRef} className="modal modal-bottom sm:modal-middle">
+        <div className="modal-box max-w-md rounded-t-3xl sm:rounded-3xl">
+          <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-error/10 text-error">
+            <AlertTriangle className="size-7" />
           </div>
-        ) : null}
-      </div>
-    </section>
+          <h3 className="text-2xl font-black">تأكيد إقفال الوردية</h3>
+          <p className="mt-2 leading-7 text-base-content/60">
+            سيتم إقفال الوردية{" "}
+            <span className="font-black text-base-content">
+              {openShift?.shiftNumber ?? ""}
+            </span>{" "}
+            وطباعة تقرير{" "}
+            <span className="font-black text-error">Z</span>. لا يمكن التراجع عن
+            هذا الإجراء.
+          </p>
+          <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              className="btn btn-ghost rounded-xl"
+              disabled={pending}
+              onClick={() => dialogRef.current?.close()}
+            >
+              إلغاء
+            </button>
+            <button
+              type="button"
+              className="btn btn-error gap-2 rounded-xl"
+              disabled={pending || !openShift}
+              onClick={() => run(() => closeShiftWithZReport(venueId))}
+            >
+              {pending ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  جاري الإقفال...
+                </>
+              ) : (
+                <>
+                  <Printer className="size-4" />
+                  تأكيد وطباعة Z
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="submit" disabled={pending}>
+            إغلاق
+          </button>
+        </form>
+      </dialog>
+    </>
   );
 }

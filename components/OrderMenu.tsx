@@ -102,61 +102,61 @@ export function OrderMenu({
           const locked = kitchenSent > 0;
           const canReduce = line.qty > kitchenSent;
           return (
-          <li
-            key={line.id}
-            className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
-          >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-black">{line.itemName}</p>
-                <p className="text-xs text-base-content/45">
-                  {formatMoney(line.unitPrice)} للوحدة
-                  {locked ? (
-                    <span className="ms-2 text-warning">
-                      · مؤكد للمطبخ ({kitchenSent})
-                    </span>
-                  ) : null}
+            <li
+              key={line.id}
+              className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
+            >
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate font-black">{line.itemName}</p>
+                  <p className="text-xs text-base-content/45">
+                    {formatMoney(line.unitPrice)} للوحدة
+                    {locked ? (
+                      <span className="ms-2 text-warning">
+                        · مؤكد للمطبخ ({kitchenSent})
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <p className="shrink-0 font-black text-primary">
+                  {formatMoney(line.lineTotal)}
                 </p>
               </div>
-              <p className="shrink-0 font-black text-primary">
-                {formatMoney(line.lineTotal)}
-              </p>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="join">
+              <div className="flex items-center justify-between">
+                <div className="join">
+                  <button
+                    type="button"
+                    className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
+                    disabled={pending || !canReduce}
+                    onClick={() => changeQty(line.id, line.qty - 1)}
+                    aria-label="تقليل الكمية"
+                  >
+                    <Minus className="size-3.5" />
+                  </button>
+                  <span className="join-item grid h-10 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black sm:h-11">
+                    {line.qty}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
+                    disabled={pending}
+                    onClick={() => changeQty(line.id, line.qty + 1)}
+                    aria-label="زيادة الكمية"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                </div>
                 <button
                   type="button"
-                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
-                  disabled={pending || !canReduce}
-                  onClick={() => changeQty(line.id, line.qty - 1)}
-                  aria-label="تقليل الكمية"
+                  className="btn btn-circle btn-ghost btn-sm text-error"
+                  disabled={pending || locked}
+                  onClick={() => remove(line.id)}
+                  aria-label="حذف الصنف"
                 >
-                  <Minus className="size-3.5" />
-                </button>
-                <span className="join-item grid h-11 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black">
-                  {line.qty}
-                </span>
-                <button
-                  type="button"
-                  className="btn join-item btn-sm btn-square min-h-11 min-w-11"
-                  disabled={pending}
-                  onClick={() => changeQty(line.id, line.qty + 1)}
-                  aria-label="زيادة الكمية"
-                >
-                  <Plus className="size-3.5" />
+                  <Trash2 className="size-4" />
                 </button>
               </div>
-              <button
-                type="button"
-                className="btn btn-circle btn-ghost btn-sm text-error"
-                disabled={pending || locked}
-                onClick={() => remove(line.id)}
-                aria-label="حذف الصنف"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          </li>
+            </li>
           );
         })}
         {lines.length === 0 && (
@@ -174,8 +174,8 @@ export function OrderMenu({
 
   const cartFooter = (
     <>
-      <div className="border-t border-dashed border-base-300 pt-4">
-        <div className="flex items-end justify-between">
+      <div className="border-t border-dashed border-base-300 pt-3">
+        <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-xs font-bold text-base-content/45">
               الإجمالي المستحق
@@ -187,13 +187,13 @@ export function OrderMenu({
           </span>
         </div>
       </div>
-      {footer ? <div className="mt-4">{footer}</div> : null}
+      {footer ? <div className="mt-3">{footer}</div> : null}
     </>
   );
 
   return (
     <>
-      <div className="grid flex-1 gap-3 pb-28 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-4 lg:pb-0 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid flex-1 gap-3 pb-28 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
         <div className="min-w-0">
           <CategoryItemPicker
             categories={categories}
@@ -204,20 +204,20 @@ export function OrderMenu({
           />
         </div>
 
-        <aside className="premium-card sticky top-14 hidden lg:flex lg:max-h-[calc(100dvh-4rem)] lg:flex-col lg:overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-3 py-3 xl:px-4">
+        <aside className="premium-card sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] lg:flex lg:flex-col lg:overflow-hidden">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-4 py-3">
             <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-primary/10 text-primary">
+              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
                 <ShoppingBag className="size-4" />
               </span>
               <div>
-                <h3 className="text-sm font-black">ملخص الفاتورة</h3>
+                <h3 className="font-black">ملخص الفاتورة</h3>
                 <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
               </div>
             </div>
-            <ReceiptText className="size-4 text-base-content/20" />
+            <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-3 xl:p-4">
+          <div className="flex min-h-0 flex-1 flex-col p-4">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
@@ -228,7 +228,7 @@ export function OrderMenu({
         </aside>
       </div>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2.5 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300/70 bg-base-100/95 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 shadow-[0_-12px_40px_rgb(15_23_42_/_0.12)] backdrop-blur-xl lg:hidden">
         <button
           type="button"
           onClick={() => setCartOpen(true)}
@@ -262,7 +262,7 @@ export function OrderMenu({
             aria-label="إغلاق الفاتورة"
             onClick={() => setCartOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 flex max-h-[88dvh] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,100%)] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
             <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
                 <p className="font-black">ملخص الفاتورة</p>
