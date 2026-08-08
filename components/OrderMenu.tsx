@@ -110,7 +110,7 @@ export function OrderMenu({
 
   return (
     <>
-      <div className="grid min-h-0 flex-1 gap-1.5 pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,26%)] lg:pb-0">
+      <div className="grid min-h-0 flex-1 gap-1.5 pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:pb-0">
         <div className="flex min-h-0 min-w-0 flex-col border border-base-300 bg-base-100 p-1.5">
           <CategoryItemPicker
             categories={categories}

@@ -80,7 +80,7 @@ export function PosTicketLines({
                 <Plus className="size-3" />
               </button>
             </div>
-            <p className="w-12 text-end text-[11px] font-black tabular-nums text-primary">
+            <p className="w-[4.75rem] shrink-0 whitespace-nowrap text-end text-[11px] font-black tabular-nums text-primary">
               {formatMoney(line.lineTotal)}
             </p>
             <button
@@ -129,7 +129,7 @@ export function PosTicketPanel({
             ({itemCount})
           </span>
         </p>
-        <p className="text-sm font-black tabular-nums text-primary">
+        <p className="shrink-0 whitespace-nowrap text-sm font-black tabular-nums text-primary">
           {formatMoney(total)}
         </p>
       </div>
@@ -147,7 +147,7 @@ export function PosTicketPanel({
           <span className="text-[11px] font-bold text-base-content/50">
             الإجمالي
           </span>
-          <span className="text-base font-black tabular-nums text-primary">
+          <span className="shrink-0 whitespace-nowrap text-base font-black tabular-nums text-primary">
             {formatMoney(total)}
           </span>
         </div>

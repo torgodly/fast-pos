@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { ArrowRight, Trash2 } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireWaiter } from "@/app/actions/auth";
 import { cancelOpenOrder } from "@/app/actions/orders";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
@@ -40,6 +40,9 @@ export default async function WaiterOrderPage({
     .get();
 
   if (!order) notFound();
+  if (order.waiterId !== session.userId) {
+    redirect(`/waiter/${venue}`);
+  }
 
   const table = order.tableId
     ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()

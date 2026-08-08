@@ -154,6 +154,7 @@ function shell(title: string, body: string) {
       font-size: 18px;
       font-weight: 900;
       line-height: 1.2;
+      text-align: right;
       color: #000;
     }
 
@@ -161,6 +162,7 @@ function shell(title: string, body: string) {
       margin: 1.5mm 0 0;
       font-size: 15px;
       font-weight: 900;
+      text-align: right;
       color: #000;
     }
 
@@ -221,8 +223,10 @@ function shell(title: string, body: string) {
     }
 
     .items .name {
+      font-size: 16px;
       font-weight: 900;
-      line-height: 1.3;
+      line-height: 1.35;
+      text-align: right;
       word-break: break-word;
       overflow-wrap: anywhere;
     }
@@ -276,6 +280,7 @@ function shell(title: string, body: string) {
     }
 
     .kitchen-qty {
+      width: 12mm;
       font-size: 18px;
       font-weight: 900;
       text-align: left;

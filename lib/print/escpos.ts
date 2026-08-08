@@ -123,13 +123,24 @@ function wrapText(value: string, maxLen = LINE_WIDTH): string[] {
   const lines: string[] = [];
   let current = "";
 
+  const pushHard = (chunk: string) => {
+    for (let i = 0; i < chunk.length; i += maxLen) {
+      lines.push(chunk.slice(i, i + maxLen));
+    }
+  };
+
   for (const word of words) {
     const next = current ? `${current} ${word}` : word;
-    if (next.length > maxLen && current) {
-      lines.push(current);
+    if (next.length <= maxLen) {
+      current = next;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (word.length <= maxLen) {
       current = word;
     } else {
-      current = next;
+      pushHard(word);
+      current = "";
     }
   }
 
@@ -151,7 +162,7 @@ function headerBlock(parts: Uint8Array[], title: string, subtitle?: string) {
   parts.push(align("right"));
 }
 
-/** Kitchen ticket line — centered, readable size (not cramped on paper edge). */
+/** Kitchen ticket line — RTL/right-aligned; long names wrap (not cropped). */
 function kitchenLine(
   parts: Uint8Array[],
   value: string,
@@ -163,29 +174,32 @@ function kitchenLine(
     return;
   }
 
-  const fontSize = options.emphasis ? 32 : 28;
+  const fontSize = options.emphasis ? 30 : 26;
 
-  parts.push(align("center"));
+  parts.push(align("right"));
 
   if (useArabicRaster() && hasArabicText(normalized)) {
     parts.push(
       textToEscPosRaster(normalized, {
         bold: options.emphasis,
         fontSize,
-        align: "center",
+        align: "right",
       }),
     );
-    parts.push(restorePrinterTextMode("center"));
+    parts.push(restorePrinterTextMode("right"));
     return;
   }
 
-  if (options.emphasis) parts.push(bold(true), doubleSize(true));
-  parts.push(textLine(normalized));
-  if (options.emphasis) parts.push(doubleSize(false), bold(false));
+  const maxLen = options.emphasis ? 18 : 22;
+  for (const row of wrapText(normalized, maxLen)) {
+    if (options.emphasis) parts.push(bold(true));
+    parts.push(textLine(row));
+    if (options.emphasis) parts.push(bold(false));
+  }
 }
 
 function kitchenSep(parts: Uint8Array[]) {
-  parts.push(align("center"), textLine("--------------------------------"));
+  parts.push(align("right"), textLine("--------------------------------"));
 }
 
 /** Max items per kitchen ticket — avoids printer buffer overflow. */
@@ -201,7 +215,7 @@ export function chunkKitchenLines<T>(lines: T[], size = KITCHEN_ITEMS_PER_TICKET
 }
 
 export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
-  const parts: Uint8Array[] = [init(), align("center")];
+  const parts: Uint8Array[] = [init(), align("right")];
 
   const partTag = data.ticketPart ? ` ${data.ticketPart}` : "";
   kitchenLine(parts, `#${data.orderId}${partTag} · ${data.tableName}`, {

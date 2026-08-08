@@ -60,20 +60,36 @@ export default async function WaiterFloorPage({
               : null;
 
             if (order) {
+              if (!isMyTable) {
+                return (
+                  <div
+                    key={table.id}
+                    className="flex min-h-24 flex-col justify-between rounded-xl border border-base-300 bg-base-200/70 px-3 py-2.5 opacity-70"
+                    title="طاولة سفرادجي آخر"
+                  >
+                    <div>
+                      <p className="font-black">{table.name}</p>
+                      <p className="truncate text-xs text-base-content/50">
+                        {waiterName ?? "سفرادجي آخر"}
+                      </p>
+                    </div>
+                    <p className="text-xs font-bold text-base-content/40">
+                      غير متاحة
+                    </p>
+                  </div>
+                );
+              }
+
               return (
                 <Link
                   key={table.id}
                   href={`/waiter/${venue}/order/${order.id}`}
-                  className={`flex min-h-24 flex-col justify-between rounded-xl border px-3 py-2.5 ${
-                    isMyTable
-                      ? "border-success/40 bg-success/15"
-                      : "border-warning/40 bg-warning/10"
-                  }`}
+                  className="flex min-h-24 flex-col justify-between rounded-xl border border-success/40 bg-success/15 px-3 py-2.5"
                 >
                   <div>
                     <p className="font-black">{table.name}</p>
                     <p className="truncate text-xs text-base-content/50">
-                      {isMyTable ? "طاولتي" : waiterName}
+                      طاولتي
                     </p>
                   </div>
                   <p className="text-sm font-black text-primary">

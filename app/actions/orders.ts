@@ -45,6 +45,15 @@ function recalcOrderTotal(orderId: number) {
   return total;
 }
 
+/** Waiters may only mutate orders they opened; cashiers can work any open order. */
+function waiterOwnsOrder(
+  session: { role: string; userId: number },
+  order: { waiterId: number | null },
+) {
+  if (session.role !== "waiter") return true;
+  return order.waiterId === session.userId;
+}
+
 export async function openTableOrder(venueId: string, tableId: number) {
   const session = await getSession();
   if (!session || session.role !== "waiter" || !isVenueId(venueId)) {
@@ -78,6 +87,9 @@ export async function openTableOrder(venueId: string, tableId: number) {
     .get();
 
   if (existing) {
+    if (existing.waiterId !== session.userId) {
+      return { error: "هذه الطاولة مع سفرادجي آخر" };
+    }
     redirect(`/waiter/${venueId}/order/${existing.id}`);
   }
 
@@ -106,6 +118,9 @@ export async function addItemToOrder(orderId: number, itemId: number) {
   const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
   if (!order || order.status !== "open") {
     return { error: "الفاتورة غير مفتوحة" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
   }
 
   const item = db
@@ -177,6 +192,9 @@ export async function updateOrderItemQty(
   if (!order || order.status !== "open") {
     return { error: "غير مصرح" };
   }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
+  }
 
   const kitchenSent = line.kitchenSentQty ?? 0;
 
@@ -216,36 +234,35 @@ export type PrintTargetResult = {
   host: string;
 };
 
-export async function confirmKitchenOrder(orderId: number): Promise<
-  | { error: string }
+type KitchenSendResult =
+  | { ok: true; skipped: true }
   | {
       ok: true;
+      skipped: false;
       printedTo: PrintTargetResult[];
       failed: Array<PrintTargetResult & { reason: string }>;
       message: string;
     }
-> {
-  const session = await getSession();
-  if (!session || (session.role !== "waiter" && session.role !== "cashier")) {
-    return { error: "غير مصرح" };
-  }
+  | { error: string };
 
-  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
-  if (!order || order.status !== "open") {
-    return { error: "الفاتورة غير مفتوحة" };
-  }
-  if (!isVenueId(order.venueId)) {
-    return { error: "فرع غير صالح" };
-  }
-
+/** Print kitchen tickets for lines not yet sent; updates kitchenSentQty on success. */
+async function sendPendingKitchenTickets(options: {
+  orderId: number;
+  venueId: VenueId;
+  tableName: string;
+  staffName: string;
+  requirePending?: boolean;
+}): Promise<KitchenSendResult> {
   const lines = db
     .select()
     .from(orderItems)
-    .where(eq(orderItems.orderId, orderId))
+    .where(eq(orderItems.orderId, options.orderId))
     .all();
 
   if (lines.length === 0) {
-    return { error: "أضف أصنافاً قبل الإرسال للمطبخ" };
+    return options.requirePending
+      ? { error: "أضف أصنافاً قبل الإرسال للمطبخ" }
+      : { ok: true, skipped: true };
   }
 
   type Pending = {
@@ -318,12 +335,10 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   }
 
   if (pending.length === 0) {
-    return { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" };
+    return options.requirePending
+      ? { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" }
+      : { ok: true, skipped: true };
   }
-
-  const table = order.tableId
-    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
-    : null;
 
   const createdAt = new Date()
     .toLocaleTimeString("ar-LY", { hour: "2-digit", minute: "2-digit" })
@@ -352,10 +367,10 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     try {
       for (let i = 0; i < chunks.length; i++) {
         const payload = buildKitchenEscPos({
-          venueName: getVenueName(order.venueId),
-          orderId: order.id,
-          tableName: table?.name ?? "بدون طاولة",
-          waiterName: session.name,
+          venueName: getVenueName(options.venueId),
+          orderId: options.orderId,
+          tableName: options.tableName,
+          waiterName: options.staffName,
           createdAt,
           ticketPart:
             chunks.length > 1 ? `${i + 1}/${chunks.length}` : undefined,
@@ -389,8 +404,6 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     }
   }
 
-  revalidateOrderPaths(order.venueId, orderId, session.role);
-
   if (printedTo.length === 0) {
     return {
       error: failed
@@ -406,7 +419,60 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       .join("، ")}`;
   }
 
-  return { ok: true, printedTo, failed, message };
+  return { ok: true, skipped: false, printedTo, failed, message };
+}
+
+export async function confirmKitchenOrder(orderId: number): Promise<
+  | { error: string }
+  | {
+      ok: true;
+      printedTo: PrintTargetResult[];
+      failed: Array<PrintTargetResult & { reason: string }>;
+      message: string;
+    }
+> {
+  const session = await getSession();
+  if (!session || (session.role !== "waiter" && session.role !== "cashier")) {
+    return { error: "غير مصرح" };
+  }
+
+  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order || order.status !== "open") {
+    return { error: "الفاتورة غير مفتوحة" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
+  }
+  if (!isVenueId(order.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
+
+  const result = await sendPendingKitchenTickets({
+    orderId,
+    venueId: order.venueId,
+    tableName: table?.name ?? "بدون طاولة",
+    staffName: session.name,
+    requirePending: true,
+  });
+
+  if ("error" in result) return result;
+
+  revalidateOrderPaths(order.venueId, orderId, session.role);
+
+  if (result.skipped) {
+    return { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" };
+  }
+
+  return {
+    ok: true,
+    printedTo: result.printedTo,
+    failed: result.failed,
+    message: result.message,
+  };
 }
 
 async function buildCheckoutReceiptForOrder(
@@ -560,8 +626,24 @@ export async function payOrder(
     return { error: "الفاتورة فارغة" };
   }
 
-  const total = recalcOrderTotal(orderId);
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
   const isQuickSale = order.tableId === null;
+  const tableName = table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة");
+
+  // Unsent items → kitchen ticket on pay (cash/card)
+  const kitchenResult = await sendPendingKitchenTickets({
+    orderId,
+    venueId: order.venueId,
+    tableName,
+    staffName: session.name,
+  });
+  if ("error" in kitchenResult) {
+    return { error: `المطبخ: ${kitchenResult.error}` };
+  }
+
+  const total = recalcOrderTotal(orderId);
   const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 
   db.update(orders)
@@ -576,9 +658,6 @@ export async function payOrder(
     .where(eq(orders.id, orderId))
     .run();
 
-  const table = order.tableId
-    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
-    : null;
   const waiter = order.waiterId
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
     : null;
@@ -586,7 +665,7 @@ export async function payOrder(
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(order.venueId),
     orderId: order.id,
-    tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
+    tableName,
     waiterName: waiter?.name ?? null,
     cashierName: session.name,
     paymentMethod,
@@ -609,6 +688,11 @@ export async function payOrder(
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
 
+  const kitchenNote =
+    !kitchenResult.skipped && kitchenResult.printedTo.length > 0
+      ? ` + مطبخ (${kitchenResult.printedTo.map((p) => p.printerName).join("، ")})`
+      : "";
+
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
@@ -616,7 +700,7 @@ export async function payOrder(
       printOk: false,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
+      message: `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
     };
   }
 
@@ -625,7 +709,7 @@ export async function payOrder(
       ok: true,
       nextUrl: `/cashier/${order.venueId}`,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}${kitchenNote}`,
     };
   }
 
@@ -637,7 +721,7 @@ export async function payOrder(
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
     printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+    message: `تم الدفع${kitchenNote}، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
   };
 }
 
@@ -708,7 +792,6 @@ export async function payQuickSale(
     (sum, line) => sum + line.item.price * line.qty,
     0,
   );
-  const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 
   const order = db
     .insert(orders)
@@ -718,10 +801,8 @@ export async function payQuickSale(
       waiterId: null,
       cashierId: session.userId,
       shiftId: openShift.id,
-      status: "paid",
-      paymentMethod,
+      status: "open",
       total,
-      paidAt,
     })
     .returning()
     .get();
@@ -735,10 +816,32 @@ export async function payQuickSale(
         unitPrice: line.item.price,
         qty: line.qty,
         lineTotal: line.item.price * line.qty,
-        kitchenSentQty: line.qty,
+        kitchenSentQty: 0,
       })
       .run();
   }
+
+  const kitchenResult = await sendPendingKitchenTickets({
+    orderId: order.id,
+    venueId,
+    tableName: "بيع سريع",
+    staffName: session.name,
+  });
+  if ("error" in kitchenResult) {
+    db.delete(orderItems).where(eq(orderItems.orderId, order.id)).run();
+    db.delete(orders).where(eq(orders.id, order.id)).run();
+    return { error: `المطبخ: ${kitchenResult.error}` };
+  }
+
+  const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+  db.update(orders)
+    .set({
+      status: "paid",
+      paymentMethod,
+      paidAt,
+    })
+    .where(eq(orders.id, order.id))
+    .run();
 
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(venueId),
@@ -765,13 +868,18 @@ export async function payQuickSale(
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
 
+  const kitchenNote =
+    !kitchenResult.skipped && kitchenResult.printedTo.length > 0
+      ? ` + مطبخ (${kitchenResult.printedTo.map((p) => p.printerName).join("، ")})`
+      : "";
+
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
       printOk: false,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
+      message: `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
     };
   }
 
@@ -779,7 +887,7 @@ export async function payQuickSale(
     return {
       ok: true,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}${kitchenNote}`,
     };
   }
 
@@ -790,7 +898,7 @@ export async function payQuickSale(
     ok: true,
     printOk: false,
     printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+    message: `تم الدفع${kitchenNote}، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
   };
 }
 
@@ -880,6 +988,9 @@ export async function cancelOpenOrder(orderId: number) {
   const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
   if (!order || order.status !== "open") {
     return { error: "غير مصرح" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
   }
 
   const lines = db
