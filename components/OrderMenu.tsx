@@ -17,7 +17,6 @@ import {
 } from "@/app/actions/orders";
 import {
   CategoryItemPicker,
-  CategoryPickSummary,
   type MenuCategory,
   type MenuItem,
 } from "@/components/CategoryItemPicker";
@@ -91,101 +90,82 @@ export function OrderMenu({
   }
 
   const cartItems = (
-    <>
-      <CategoryPickSummary
-        categories={categories}
-        categoryCounts={categoryCounts}
-      />
-      <ul className="mt-3 space-y-2">
-        {lines.map((line) => {
-          const kitchenSent = line.kitchenSentQty ?? 0;
-          const locked = kitchenSent > 0;
-          const canReduce = line.qty > kitchenSent;
-          return (
-            <li
-              key={line.id}
-              className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
-            >
-              <div className="mb-2 flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate font-black">{line.itemName}</p>
-                  <p className="text-xs text-base-content/45">
-                    {formatMoney(line.unitPrice)} للوحدة
-                    {locked ? (
-                      <span className="ms-2 text-warning">
-                        · مؤكد للمطبخ ({kitchenSent})
-                      </span>
-                    ) : null}
-                  </p>
-                </div>
-                <p className="shrink-0 font-black text-primary">
-                  {formatMoney(line.lineTotal)}
+    <ul className="divide-y divide-base-300/70">
+      {lines.map((line) => {
+        const kitchenSent = line.kitchenSentQty ?? 0;
+        const locked = kitchenSent > 0;
+        const canReduce = line.qty > kitchenSent;
+        return (
+          <li key={line.id} className="flex items-center gap-2 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-black leading-5">
+                {line.itemName}
+              </p>
+              {locked ? (
+                <p className="text-[11px] font-bold text-warning">
+                  مطبخ {kitchenSent}
                 </p>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="join">
-                  <button
-                    type="button"
-                    className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
-                    disabled={pending || !canReduce}
-                    onClick={() => changeQty(line.id, line.qty - 1)}
-                    aria-label="تقليل الكمية"
-                  >
-                    <Minus className="size-3.5" />
-                  </button>
-                  <span className="join-item grid h-10 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black sm:h-11">
-                    {line.qty}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
-                    disabled={pending}
-                    onClick={() => changeQty(line.id, line.qty + 1)}
-                    aria-label="زيادة الكمية"
-                  >
-                    <Plus className="size-3.5" />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-circle btn-ghost btn-sm text-error"
-                  disabled={pending || locked}
-                  onClick={() => remove(line.id)}
-                  aria-label="حذف الصنف"
-                >
-                  <Trash2 className="size-4" />
-                </button>
-              </div>
-            </li>
-          );
-        })}
-        {lines.length === 0 && (
-          <li className="py-8 text-center">
-            <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-base-200 text-base-content/20">
-              <ShoppingBag className="size-6" />
-            </span>
-            <p className="font-bold">الفاتورة فارغة</p>
-            <p className="text-xs text-base-content/40">اختر صنفاً من القائمة</p>
+              ) : (
+                <p className="text-[11px] text-base-content/40">
+                  {formatMoney(line.unitPrice)}
+                </p>
+              )}
+            </div>
+            <div className="join shrink-0">
+              <button
+                type="button"
+                className="btn join-item btn-xs btn-square h-9 min-h-9 w-9"
+                disabled={pending || !canReduce}
+                onClick={() => changeQty(line.id, line.qty - 1)}
+                aria-label="تقليل الكمية"
+              >
+                <Minus className="size-3.5" />
+              </button>
+              <span className="join-item grid h-9 w-8 place-items-center border-y border-base-300 bg-base-100 text-xs font-black">
+                {line.qty}
+              </span>
+              <button
+                type="button"
+                className="btn join-item btn-xs btn-square h-9 min-h-9 w-9"
+                disabled={pending}
+                onClick={() => changeQty(line.id, line.qty + 1)}
+                aria-label="زيادة الكمية"
+              >
+                <Plus className="size-3.5" />
+              </button>
+            </div>
+            <p className="w-16 shrink-0 text-end text-sm font-black text-primary">
+              {formatMoney(line.lineTotal)}
+            </p>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs btn-square h-9 w-9 text-error"
+              disabled={pending || locked}
+              onClick={() => remove(line.id)}
+              aria-label="حذف الصنف"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
           </li>
-        )}
-      </ul>
-    </>
+        );
+      })}
+      {lines.length === 0 && (
+        <li className="py-10 text-center">
+          <ShoppingBag className="mx-auto mb-2 size-6 text-base-content/20" />
+          <p className="text-sm font-bold">الفاتورة فارغة</p>
+          <p className="text-xs text-base-content/40">اختر صنفاً من القائمة</p>
+        </li>
+      )}
+    </ul>
   );
 
   const cartFooter = (
     <>
-      <div className="border-t border-dashed border-base-300 pt-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-base-content/45">
-              الإجمالي المستحق
-            </p>
-            <p className="text-xs text-base-content/35">شامل كل الأصناف</p>
-          </div>
-          <span className="text-2xl font-black text-primary">
-            {formatMoney(total)}
-          </span>
-        </div>
+      <div className="flex items-end justify-between gap-3 border-t border-dashed border-base-300 pt-3">
+        <p className="text-sm font-bold text-base-content/55">الإجمالي</p>
+        <span className="text-2xl font-black text-primary">
+          {formatMoney(total)}
+        </span>
       </div>
       {footer ? <div className="mt-3">{footer}</div> : null}
     </>
@@ -193,8 +173,8 @@ export function OrderMenu({
 
   return (
     <>
-      <div className="grid flex-1 gap-3 pb-28 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
-        <div className="min-w-0">
+      <div className="grid flex-1 gap-3 pb-24 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
+        <div className="min-w-0 rounded-2xl border border-base-300/70 bg-base-100 p-3 sm:p-4">
           <CategoryItemPicker
             categories={categories}
             items={items}
@@ -204,26 +184,23 @@ export function OrderMenu({
           />
         </div>
 
-        <aside className="premium-card sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] lg:flex lg:flex-col lg:overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-4 py-3">
+        <aside className="sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] overflow-hidden rounded-2xl border border-base-300/70 bg-base-100 lg:flex lg:flex-col">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                <ShoppingBag className="size-4" />
-              </span>
+              <ReceiptText className="size-4 text-primary" />
               <div>
-                <h3 className="font-black">ملخص الفاتورة</h3>
-                <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
+                <h3 className="text-sm font-black">الفاتورة</h3>
+                <p className="text-[11px] text-base-content/40">
+                  {itemCount} عنصر
+                </p>
               </div>
             </div>
-            <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="flex min-h-0 flex-1 flex-col px-3">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
-            <div className="mt-3 shrink-0 border-t border-base-300/60 bg-base-100 pt-3">
-              {cartFooter}
-            </div>
+            <div className="shrink-0 bg-base-100 pb-3 pt-1">{cartFooter}</div>
           </div>
         </aside>
       </div>
@@ -265,7 +242,7 @@ export function OrderMenu({
           <div className="absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,100%)] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl md:left-1/2 md:right-auto md:w-full md:max-w-2xl md:-translate-x-1/2">
             <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
-                <p className="font-black">ملخص الفاتورة</p>
+                <p className="font-black">الفاتورة</p>
                 <p className="text-xs text-base-content/45">{itemCount} عنصر</p>
               </div>
               <button
@@ -277,7 +254,7 @@ export function OrderMenu({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3">
               {cartItems}
             </div>
             <div className="shrink-0 border-t border-base-300/60 bg-base-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

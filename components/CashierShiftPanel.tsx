@@ -49,14 +49,25 @@ export function CashierShiftPanel({
 
   function run(
     action: () => Promise<{ error: string } | { ok: true; message: string }>,
+    options?: { afterZ?: boolean },
   ) {
     startTransition(async () => {
+      const closedShiftNumber = openShift?.shiftNumber;
       const result = await action();
       if ("error" in result) {
         showToast("error", result.error);
         return;
       }
-      showToast("success", result.message);
+      if (options?.afterZ && closedShiftNumber === 1) {
+        showToast(
+          "success",
+          `${result.message} — افتح الوردية 2 للمتابعة`,
+        );
+      } else if (options?.afterZ && closedShiftNumber === 2) {
+        showToast("success", `${result.message} — انتهى يوم العمل`);
+      } else {
+        showToast("success", result.message);
+      }
       dialogRef.current?.close();
     });
   }
@@ -72,18 +83,20 @@ export function CashierShiftPanel({
               </p>
               <h3 className="text-xl font-black">
                 {openShift
-                  ? `الوردية ${openShift.shiftNumber} مفتوحة`
+                  ? `وردية مفتوحة · ${openShift.shiftNumber}`
                   : dayComplete
                     ? "انتهى يوم العمل"
-                    : "لا توجد وردية مفتوحة"}
+                    : nextShiftNumber === 2
+                      ? "بانتظار فتح الوردية التالية"
+                      : "لا توجد وردية مفتوحة"}
               </h3>
               <p className="mt-1 text-sm text-base-content/50">
                 {openShift
-                  ? `فُتحت ${formatDateTime(openShift.openedAt)} — تقرير X في أي وقت، Z تقفل الوردية`
+                  ? `فُتحت ${formatDateTime(openShift.openedAt)} — X في أي وقت، Z تقفل الوردية وتوقف البيع`
                   : dayComplete
                     ? "تم إقفال الورديتين — الوردية التالية غداً"
                     : nextShiftNumber
-                      ? `الخطوة التالية: فتح الوردية ${nextShiftNumber}`
+                      ? `افتح الوردية ${nextShiftNumber} لاستئناف البيع والتحصيل`
                       : "افتح الوردية قبل أي بيع أو تحصيل"}
               </p>
             </div>
@@ -185,7 +198,9 @@ export function CashierShiftPanel({
               type="button"
               className="btn btn-error gap-2 rounded-xl"
               disabled={pending || !openShift}
-              onClick={() => run(() => closeShiftWithZReport(venueId))}
+              onClick={() =>
+                run(() => closeShiftWithZReport(venueId), { afterZ: true })
+              }
             >
               {pending ? (
                 <>

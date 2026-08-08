@@ -19,7 +19,6 @@ import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 import {
   CategoryItemPicker,
-  CategoryPickSummary,
   type MenuCategory,
   type MenuItem,
 } from "@/components/CategoryItemPicker";
@@ -151,110 +150,86 @@ export function QuickSaleBoard({
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
   const cartItems = (
-    <>
-      <CategoryPickSummary
-        categories={categories}
-        categoryCounts={categoryCounts}
-      />
-      <ul className="mt-3 space-y-2">
-        {cart.map((line) => (
-          <li
-            key={line.itemId}
-            className="rounded-2xl border border-base-300/60 bg-base-100 p-3"
-          >
-            <div className="mb-2 flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-black">{line.name}</p>
-                <p className="text-xs text-base-content/45">
-                  {formatMoney(line.unitPrice)} للوحدة
-                </p>
-              </div>
-              <p className="shrink-0 font-black text-primary">
-                {formatMoney(line.unitPrice * line.qty)}
-              </p>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="join">
-                <button
-                  type="button"
-                  className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
-                  onClick={() => changeQty(line.itemId, line.qty - 1)}
-                  aria-label="تقليل الكمية"
-                >
-                  <Minus className="size-3.5" />
-                </button>
-                <span className="join-item grid h-10 w-10 place-items-center border-y border-base-300 bg-base-100 text-sm font-black sm:h-11">
-                  {line.qty}
-                </span>
-                <button
-                  type="button"
-                  className="btn join-item btn-sm btn-square min-h-10 min-w-10 sm:min-h-11 sm:min-w-11"
-                  onClick={() => changeQty(line.itemId, line.qty + 1)}
-                  aria-label="زيادة الكمية"
-                >
-                  <Plus className="size-3.5" />
-                </button>
-              </div>
-              <button
-                type="button"
-                className="btn btn-circle btn-ghost btn-sm text-error"
-                onClick={() => remove(line.itemId)}
-                aria-label="حذف الصنف"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          </li>
-        ))}
-        {cart.length === 0 && (
-          <li className="py-8 text-center">
-            <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-base-200 text-base-content/20">
-              <ShoppingBag className="size-6" />
+    <ul className="divide-y divide-base-300/70">
+      {cart.map((line) => (
+        <li key={line.itemId} className="flex items-center gap-2 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-black leading-5">{line.name}</p>
+            <p className="text-[11px] text-base-content/40">
+              {formatMoney(line.unitPrice)}
+            </p>
+          </div>
+          <div className="join shrink-0">
+            <button
+              type="button"
+              className="btn join-item btn-xs btn-square h-9 min-h-9 w-9"
+              onClick={() => changeQty(line.itemId, line.qty - 1)}
+              aria-label="تقليل الكمية"
+            >
+              <Minus className="size-3.5" />
+            </button>
+            <span className="join-item grid h-9 w-8 place-items-center border-y border-base-300 bg-base-100 text-xs font-black">
+              {line.qty}
             </span>
-            <p className="font-bold">السلة فارغة</p>
-            <p className="text-xs text-base-content/40">اختر صنفاً من القائمة</p>
-          </li>
-        )}
-      </ul>
-    </>
+            <button
+              type="button"
+              className="btn join-item btn-xs btn-square h-9 min-h-9 w-9"
+              onClick={() => changeQty(line.itemId, line.qty + 1)}
+              aria-label="زيادة الكمية"
+            >
+              <Plus className="size-3.5" />
+            </button>
+          </div>
+          <p className="w-16 shrink-0 text-end text-sm font-black text-primary">
+            {formatMoney(line.unitPrice * line.qty)}
+          </p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs btn-square h-9 w-9 text-error"
+            onClick={() => remove(line.itemId)}
+            aria-label="حذف الصنف"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
+        </li>
+      ))}
+      {cart.length === 0 && (
+        <li className="py-10 text-center">
+          <ShoppingBag className="mx-auto mb-2 size-6 text-base-content/20" />
+          <p className="text-sm font-bold">السلة فارغة</p>
+          <p className="text-xs text-base-content/40">اختر صنفاً من القائمة</p>
+        </li>
+      )}
+    </ul>
   );
 
   const cartFooter = (
     <>
-      <div className="border-t border-dashed border-base-300 pt-3">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold text-base-content/45">
-              الإجمالي المستحق
-            </p>
-            <p className="text-xs text-base-content/35">
-              لا تُسجّل الفاتورة إلا بعد الدفع
-            </p>
-          </div>
-          <span className="text-2xl font-black text-primary">
-            {formatMoney(total)}
-          </span>
-        </div>
+      <div className="flex items-end justify-between gap-3 border-t border-dashed border-base-300 pt-3">
+        <p className="text-sm font-bold text-base-content/55">الإجمالي</p>
+        <span className="text-2xl font-black text-primary">
+          {formatMoney(total)}
+        </span>
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         <button
           type="button"
-          className="btn h-14 min-h-12 flex-col gap-1 rounded-2xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20 sm:h-16"
+          className="btn h-12 min-h-12 gap-2 rounded-xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("cash")}
         >
-          <Banknote className="size-5 sm:size-6" />
-          <span className="font-black">دفع نقدي</span>
+          <Banknote className="size-5" />
+          <span className="font-black">نقدي</span>
         </button>
         <button
           type="button"
-          className="btn h-14 min-h-12 flex-col gap-1 rounded-2xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20 sm:h-16"
+          className="btn h-12 min-h-12 gap-2 rounded-xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("card")}
         >
-          <CreditCard className="size-5 sm:size-6" />
-          <span className="font-black">دفع بالبطاقة</span>
+          <CreditCard className="size-5" />
+          <span className="font-black">بطاقة</span>
         </button>
       </div>
     </>
@@ -262,8 +237,8 @@ export function QuickSaleBoard({
 
   return (
     <>
-      <div className="grid flex-1 gap-3 pb-28 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
-        <div className="min-w-0">
+      <div className="grid flex-1 gap-3 pb-24 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(16rem,30%)] lg:pb-0 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,28%)]">
+        <div className="min-w-0 rounded-2xl border border-base-300/70 bg-base-100 p-3 sm:p-4">
           <CategoryItemPicker
             categories={categories}
             items={items}
@@ -273,26 +248,23 @@ export function QuickSaleBoard({
           />
         </div>
 
-        <aside className="premium-card sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] lg:flex lg:flex-col lg:overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 bg-base-200/50 px-4 py-3">
+        <aside className="sticky top-14 hidden max-h-[calc(100dvh-4.5rem)] overflow-hidden rounded-2xl border border-base-300/70 bg-base-100 lg:flex lg:flex-col">
+          <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-3 py-2.5">
             <div className="flex items-center gap-2">
-              <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary">
-                <ShoppingBag className="size-4" />
-              </span>
+              <ReceiptText className="size-4 text-primary" />
               <div>
-                <h3 className="font-black">سلة البيع السريع</h3>
-                <p className="text-xs text-base-content/40">{itemCount} عنصر</p>
+                <h3 className="text-sm font-black">الفاتورة</h3>
+                <p className="text-[11px] text-base-content/40">
+                  {itemCount} عنصر
+                </p>
               </div>
             </div>
-            <ReceiptText className="size-5 text-base-content/20" />
           </div>
-          <div className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="flex min-h-0 flex-1 flex-col px-3">
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {cartItems}
             </div>
-            <div className="mt-3 shrink-0 border-t border-base-300/60 bg-base-100 pt-3">
-              {cartFooter}
-            </div>
+            <div className="shrink-0 bg-base-100 pb-3 pt-1">{cartFooter}</div>
           </div>
         </aside>
       </div>
@@ -334,7 +306,7 @@ export function QuickSaleBoard({
           <div className="absolute inset-x-0 bottom-0 flex max-h-[min(88dvh,100%)] flex-col overflow-hidden rounded-t-3xl bg-base-100 shadow-2xl">
             <div className="flex shrink-0 items-center justify-between border-b border-base-300/60 px-4 py-3">
               <div>
-                <p className="font-black">سلة البيع السريع</p>
+                <p className="font-black">الفاتورة</p>
                 <p className="text-xs text-base-content/45">{itemCount} عنصر</p>
               </div>
               <button
@@ -346,7 +318,7 @@ export function QuickSaleBoard({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3">
               {cartItems}
             </div>
             <div className="shrink-0 border-t border-base-300/60 bg-base-100 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">

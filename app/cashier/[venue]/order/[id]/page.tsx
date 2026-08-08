@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
-import { ArrowRight, ReceiptText, Trash2, WalletCards } from "lucide-react";
+import { ArrowRight, Trash2 } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { cancelOpenOrder } from "@/app/actions/orders";
@@ -76,26 +76,22 @@ export default async function CashierOrderPage({
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:p-5">
-        <div className="premium-card flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary/10 text-primary sm:size-11">
-              <ReceiptText className="size-5" />
-            </span>
-            <div className="min-w-0">
-            <h2 className="truncate text-lg font-black sm:text-xl lg:text-2xl">
-              تحصيل فاتورة #{order.id}
+      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-black sm:text-lg">
+              #{order.id} · {table?.name ?? "بيع سريع"}
             </h2>
-            <p className="truncate text-xs text-base-content/45 sm:text-sm">
-              {table?.name ?? "بيع سريع"}
-              {waiter ? ` — السفرادجي: ${waiter.name}` : ""}
-            </p>
-            </div>
+            {waiter ? (
+              <p className="truncate text-xs text-base-content/45">
+                {waiter.name}
+              </p>
+            ) : null}
           </div>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 gap-1">
             <Link
               href={`/cashier/${venue}`}
-              className="btn btn-ghost btn-sm gap-2 rounded-xl sm:btn-md"
+              className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
             >
               <ArrowRight className="size-4" />
               رجوع
@@ -108,7 +104,7 @@ export default async function CashierOrderPage({
             >
               <button
                 type="submit"
-                className="btn btn-ghost btn-sm gap-2 rounded-xl text-error sm:btn-md"
+                className="btn btn-ghost btn-sm gap-1.5 rounded-lg text-error"
               >
                 <Trash2 className="size-4" />
                 إلغاء
@@ -124,22 +120,11 @@ export default async function CashierOrderPage({
           lines={lines}
           total={order.total}
           footer={
-            <div className="space-y-3">
+            <div className="space-y-2">
               <KitchenConfirmButton
                 orderId={orderId}
                 disabled={lines.length === 0}
               />
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-xl bg-success/10 text-success">
-                  <WalletCards className="size-5" />
-                </span>
-                <div>
-                  <h3 className="font-black">إتمام الدفع</h3>
-                  <p className="text-xs text-base-content/45">
-                    اختر طريقة الدفع المناسبة
-                  </p>
-                </div>
-              </div>
               <PayButtons
                 orderId={orderId}
                 totalLabel={formatMoney(order.total)}

@@ -112,37 +112,53 @@ export default async function CashierHomePage({
           </div>
         </section>
 
-        <div
-          className={`alert rounded-2xl py-3 ${
-            shiftStatus.open ? "alert-success" : "alert-warning"
-          }`}
-        >
-          <Clock3 className="size-5" />
-          <div className="min-w-0 flex-1">
-            <p className="font-black">
-              {shiftStatus.open
-                ? `الوردية ${shiftStatus.open.shiftNumber} مفتوحة`
-                : shiftStatus.dayComplete
-                  ? "انتهى يوم العمل"
-                  : "لا توجد وردية مفتوحة"}
-            </p>
-            <p className="text-sm opacity-80">
-              {shiftStatus.open
-                ? "يمكنك التحصيل والبيع السريع"
-                : isMainCashier
-                  ? "افتح الوردية من «إدارة الوردية» قبل العمل"
-                  : "انتظر الكاشير الرئيسي لفتح الوردية"}
-            </p>
-          </div>
-          {isMainCashier ? (
-            <Link
-              href={`/cashier/${venue}/shift`}
-              className="btn btn-sm shrink-0 rounded-xl"
+        {(() => {
+          const waitingNext =
+            !shiftStatus.open &&
+            !shiftStatus.dayComplete &&
+            shiftStatus.nextShiftNumber === 2;
+          const title = shiftStatus.open
+            ? `وردية مفتوحة · ${shiftStatus.open.shiftNumber}`
+            : shiftStatus.dayComplete
+              ? "انتهى يوم العمل"
+              : waitingNext
+                ? "بانتظار فتح الوردية التالية"
+                : "لا توجد وردية مفتوحة";
+          const detail = shiftStatus.open
+            ? "يمكنك التحصيل والبيع السريع"
+            : shiftStatus.dayComplete
+              ? "تم إقفال الورديتين — الوردية التالية غداً"
+              : isMainCashier
+                ? waitingNext
+                  ? `افتح الوردية ${shiftStatus.nextShiftNumber} من «إدارة الوردية» للمتابعة`
+                  : "افتح الوردية من «إدارة الوردية» قبل البيع أو التحصيل"
+                : "فقط الكاشير الرئيسي يفتح الوردية ويطبع X و Z — انتظره للمتابعة";
+          return (
+            <div
+              className={`alert rounded-2xl py-3 ${
+                shiftStatus.open
+                  ? "alert-success"
+                  : shiftStatus.dayComplete
+                    ? "alert-info"
+                    : "alert-warning"
+              }`}
             >
-              إدارة الوردية
-            </Link>
-          ) : null}
-        </div>
+              <Clock3 className="size-5" />
+              <div className="min-w-0 flex-1">
+                <p className="font-black">{title}</p>
+                <p className="text-sm opacity-80">{detail}</p>
+              </div>
+              {isMainCashier && !shiftStatus.dayComplete ? (
+                <Link
+                  href={`/cashier/${venue}/shift`}
+                  className="btn btn-sm shrink-0 rounded-xl"
+                >
+                  إدارة الوردية
+                </Link>
+              ) : null}
+            </div>
+          );
+        })()}
 
         {!hasCheckout ? (
           <div className="alert alert-error rounded-2xl">

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
@@ -41,22 +41,19 @@ export default async function CashierQuickPage({
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:p-5">
-        <div className="premium-card flex flex-col gap-3 rounded-2xl p-3 sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
-              <Zap className="size-5" />
-            </span>
-            <div>
-              <h2 className="text-xl font-black sm:text-2xl">بيع سريع</h2>
-              <p className="text-xs text-base-content/45 sm:text-sm">
-                الطباعة على {stationCtx.printer.name}
-              </p>
-            </div>
+      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-black sm:text-lg">
+              بيع سريع
+            </h2>
+            <p className="truncate text-xs text-base-content/45">
+              {stationCtx.printer.name}
+            </p>
           </div>
           <Link
             href={`/cashier/${venue}`}
-            className="btn btn-ghost btn-sm gap-2 rounded-xl sm:btn-md"
+            className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
           >
             <ArrowRight className="size-4" />
             رجوع
