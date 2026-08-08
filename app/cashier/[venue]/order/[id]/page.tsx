@@ -74,26 +74,25 @@ export default async function CashierOrderPage({
     .all();
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col">
+    <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-black sm:text-lg">
-              #{order.id} · {table?.name ?? "بيع سريع"}
-            </h2>
+      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 p-1 sm:p-1.5">
+        <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
+          <p className="truncate text-xs font-black">
+            #{order.id} · {table?.name ?? "بيع سريع"}
             {waiter ? (
-              <p className="truncate text-xs text-base-content/45">
-                {waiter.name}
-              </p>
+              <span className="font-bold text-base-content/45">
+                {" "}
+                · {waiter.name}
+              </span>
             ) : null}
-          </div>
-          <div className="flex shrink-0 gap-1">
+          </p>
+          <div className="flex shrink-0 gap-0.5">
             <Link
               href={`/cashier/${venue}`}
-              className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+              className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
             >
-              <ArrowRight className="size-4" />
+              <ArrowRight className="size-3.5" />
               رجوع
             </Link>
             <form
@@ -104,9 +103,9 @@ export default async function CashierOrderPage({
             >
               <button
                 type="submit"
-                className="btn btn-ghost btn-sm gap-1.5 rounded-lg text-error"
+                className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md text-error"
               >
-                <Trash2 className="size-4" />
+                <Trash2 className="size-3.5" />
                 إلغاء
               </button>
             </form>
@@ -120,7 +119,7 @@ export default async function CashierOrderPage({
           lines={lines}
           total={order.total}
           footer={
-            <div className="space-y-2">
+            <div className="space-y-1">
               <KitchenConfirmButton
                 orderId={orderId}
                 disabled={lines.length === 0}

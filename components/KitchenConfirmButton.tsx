@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { ChefHat, LoaderCircle, Printer } from "lucide-react";
+import { LoaderCircle, Printer } from "lucide-react";
 import { confirmKitchenOrder } from "@/app/actions/orders";
 import { useToast } from "@/components/ToastProvider";
 
@@ -32,17 +32,16 @@ export function KitchenConfirmButton({
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-lg w-full gap-2 rounded-2xl shadow-lg shadow-secondary/15"
+      className="btn btn-secondary btn-sm h-9 min-h-9 w-full gap-1.5 rounded-md text-xs"
       disabled={pending || disabled}
       onClick={confirm}
     >
       {pending ? (
-        <LoaderCircle className="size-5 animate-spin" />
+        <LoaderCircle className="size-3.5 animate-spin" />
       ) : (
-        <Printer className="size-5" />
+        <Printer className="size-3.5" />
       )}
-      <ChefHat className="size-5" />
-      {pending ? "جاري الإرسال للمطبخ..." : "تأكيد الطلب وطباعة للمطبخ"}
+      {pending ? "جاري الإرسال..." : "تأكيد للمطبخ"}
     </button>
   );
 }

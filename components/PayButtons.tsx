@@ -69,59 +69,38 @@ export function PayButtons({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-1">
         <button
           type="button"
-          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-success/20 bg-success/10 text-success hover:border-success/30 hover:bg-success/20 sm:h-20"
+          className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-md"
           disabled={pending}
           onClick={() => askConfirm("cash")}
         >
-          <Banknote className="size-6" />
-          <span className="font-black">دفع نقدي</span>
+          <Banknote className="size-3.5" />
+          نقدي
         </button>
         <button
           type="button"
-          className="btn h-16 min-h-14 flex-col gap-1 rounded-2xl border-info/20 bg-info/10 text-info hover:border-info/30 hover:bg-info/20 sm:h-20"
+          className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-md"
           disabled={pending}
           onClick={() => askConfirm("card")}
         >
-          <CreditCard className="size-6" />
-          <span className="font-black">دفع بالبطاقة</span>
+          <CreditCard className="size-3.5" />
+          بطاقة
         </button>
       </div>
 
       <dialog id={dialogId} className="modal modal-bottom sm:modal-middle">
-        <div className="modal-box max-w-md rounded-t-3xl sm:rounded-3xl">
-          <div
-            className={`mb-4 grid size-14 place-items-center rounded-2xl ${
-              selected === "cash"
-                ? "bg-success/10 text-success"
-                : "bg-info/10 text-info"
-            }`}
-          >
-            {selected === "cash" ? (
-              <Banknote className="size-7" />
-            ) : (
-              <CreditCard className="size-7" />
-            )}
-          </div>
-          <h3 className="text-2xl font-black">تأكيد الدفع</h3>
-          <p className="mt-2 leading-7 text-base-content/60">
-            هل تريد تأكيد الدفع بطريقة{" "}
-            <span className="font-black text-base-content">{methodLabel}</span>
-            {totalLabel ? (
-              <>
-                {" "}
-                بمبلغ{" "}
-                <span className="font-black text-primary">{totalLabel}</span>
-              </>
-            ) : null}
-            ؟
+        <div className="modal-box max-w-sm rounded-t-2xl p-4 sm:rounded-2xl">
+          <h3 className="text-base font-black">تأكيد الدفع</h3>
+          <p className="mt-1 text-sm text-base-content/60">
+            {methodLabel}
+            {totalLabel ? ` · ${totalLabel}` : ""}
           </p>
-          <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
+          <div className="modal-action mt-4 gap-2">
             <button
               type="button"
-              className="btn btn-ghost rounded-xl"
+              className="btn btn-ghost btn-sm"
               onClick={closeModal}
               disabled={pending}
             >
@@ -129,19 +108,16 @@ export function PayButtons({
             </button>
             <button
               type="button"
-              className={`btn rounded-xl ${
+              className={`btn btn-sm ${
                 selected === "cash" ? "btn-success" : "btn-info"
               }`}
               onClick={confirmPay}
               disabled={pending || !selected}
             >
               {pending ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" />
-                  جاري الدفع والطباعة...
-                </>
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                `تأكيد الدفع ${methodLabel}`
+                "تأكيد"
               )}
             </button>
           </div>

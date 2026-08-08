@@ -52,7 +52,6 @@ export default async function WaiterOrderPage({
     .orderBy(asc(categories.sortOrder))
     .all();
 
-  // Show inactive items too so staff can tell guests they're unavailable
   const menuItems = db
     .select()
     .from(items)
@@ -66,22 +65,20 @@ export default async function WaiterOrderPage({
     .all();
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col">
+    <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
-      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-black sm:text-lg">
-              #{order.id} · {table?.name ?? "بدون طاولة"}
-            </h2>
-          </div>
-          <div className="flex shrink-0 gap-1">
+      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 p-1 sm:p-1.5">
+        <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
+          <p className="truncate text-xs font-black">
+            #{order.id} · {table?.name ?? "بدون طاولة"}
+          </p>
+          <div className="flex shrink-0 gap-0.5">
             <Link
               href={`/waiter/${venue}`}
-              className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+              className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
             >
-              <ArrowRight className="size-4" />
-              <span className="hidden sm:inline">رجوع</span>
+              <ArrowRight className="size-3.5" />
+              رجوع
             </Link>
             {lines.length === 0 && (
               <form
@@ -92,10 +89,10 @@ export default async function WaiterOrderPage({
               >
                 <button
                   type="submit"
-                  className="btn btn-ghost btn-sm gap-1.5 rounded-lg text-error"
+                  className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md text-error"
                 >
-                  <Trash2 className="size-4" />
-                  <span className="hidden sm:inline">إلغاء</span>
+                  <Trash2 className="size-3.5" />
+                  إلغاء
                 </button>
               </form>
             )}

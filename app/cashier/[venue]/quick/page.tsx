@@ -39,23 +39,21 @@ export default async function CashierQuickPage({
     .all();
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col">
+    <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-black sm:text-lg">
-              بيع سريع
-            </h2>
-            <p className="truncate text-xs text-base-content/45">
-              {stationCtx.printer.name}
-            </p>
-          </div>
+      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 p-1 sm:p-1.5">
+        <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
+          <p className="truncate text-xs font-black">
+            بيع سريع
+            <span className="ms-1 font-bold text-base-content/45">
+              · {stationCtx.printer.name}
+            </span>
+          </p>
           <Link
             href={`/cashier/${venue}`}
-            className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+            className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
           >
-            <ArrowRight className="size-4" />
+            <ArrowRight className="size-3.5" />
             رجوع
           </Link>
         </div>
