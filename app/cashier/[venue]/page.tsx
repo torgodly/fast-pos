@@ -1,16 +1,7 @@
 import Link from "next/link";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import {
-  ArrowLeft,
-  Clock3,
-  History,
-  Plus,
-  ReceiptText,
-  ShoppingBag,
-  UserRound,
-  WalletCards,
-} from "lucide-react";
+import { Clock3, History, Plus } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
@@ -37,6 +28,27 @@ export default async function CashierHomePage({
   const shiftStatus = getCashierShiftStatus(venue);
   const canSell = hasCheckout && !!shiftStatus.open;
 
+  const waitingNext =
+    !shiftStatus.open &&
+    !shiftStatus.dayComplete &&
+    shiftStatus.nextShiftNumber === 2;
+  const shiftTitle = shiftStatus.open
+    ? `وردية مفتوحة · ${shiftStatus.open.shiftNumber}`
+    : shiftStatus.dayComplete
+      ? "انتهى يوم العمل"
+      : waitingNext
+        ? "بانتظار فتح الوردية التالية"
+        : "لا توجد وردية مفتوحة";
+  const shiftDetail = shiftStatus.open
+    ? null
+    : shiftStatus.dayComplete
+      ? "الوردية التالية غداً"
+      : isMainCashier
+        ? waitingNext
+          ? `افتح الوردية ${shiftStatus.nextShiftNumber}`
+          : "افتح الوردية قبل العمل"
+        : "انتظر الكاشير الرئيسي";
+
   const openOrders = db
     .select({
       id: orders.id,
@@ -55,118 +67,80 @@ export default async function CashierHomePage({
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex-1 space-y-4 p-3 sm:space-y-5 sm:p-5 lg:p-6">
-        <section className="relative overflow-hidden rounded-2xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-4 text-neutral-content shadow-xl sm:rounded-3xl sm:p-6">
-          <div className="absolute -bottom-24 -left-12 size-56 rounded-full bg-white/5" />
-          <div className="relative space-y-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="mb-1 flex items-center gap-2 text-sm font-bold text-white/60">
-                  <WalletCards className="size-4" />
-                  شاشة الكاشير
-                </div>
-                <h2 className="text-xl font-black sm:text-2xl">
-                  الفواتير المفتوحة
-                </h2>
-                <p className="mt-1 text-sm text-white/55">
-                  {openOrders.length} فاتورة بانتظار التحصيل
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {canSell ? (
-                  <Link
-                    href={`/cashier/${venue}/quick`}
-                    className="btn border-white/15 bg-white text-neutral hover:bg-white/90"
-                  >
-                    <Plus className="size-4" />
-                    بيع سريع
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn border-white/15 bg-white/40 text-neutral"
-                    disabled
-                  >
-                    <Plus className="size-4" />
-                    بيع سريع
-                  </button>
-                )}
-                <Link
-                  href={`/cashier/${venue}/sales`}
-                  className="btn border-white/15 bg-white/10 text-white hover:bg-white/20"
-                >
-                  <History className="size-4" />
-                  مبيعاتي
-                </Link>
-                {isMainCashier ? (
-                  <Link
-                    href={`/cashier/${venue}/shift`}
-                    className="btn border-white/15 bg-white/10 text-white hover:bg-white/20"
-                  >
-                    <Clock3 className="size-4" />
-                    إدارة الوردية
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {(() => {
-          const waitingNext =
-            !shiftStatus.open &&
-            !shiftStatus.dayComplete &&
-            shiftStatus.nextShiftNumber === 2;
-          const title = shiftStatus.open
-            ? `وردية مفتوحة · ${shiftStatus.open.shiftNumber}`
-            : shiftStatus.dayComplete
-              ? "انتهى يوم العمل"
-              : waitingNext
-                ? "بانتظار فتح الوردية التالية"
-                : "لا توجد وردية مفتوحة";
-          const detail = shiftStatus.open
-            ? "يمكنك التحصيل والبيع السريع"
-            : shiftStatus.dayComplete
-              ? "تم إقفال الورديتين — الوردية التالية غداً"
-              : isMainCashier
-                ? waitingNext
-                  ? `افتح الوردية ${shiftStatus.nextShiftNumber} من «إدارة الوردية» للمتابعة`
-                  : "افتح الوردية من «إدارة الوردية» قبل البيع أو التحصيل"
-                : "فقط الكاشير الرئيسي يفتح الوردية ويطبع X و Z — انتظره للمتابعة";
-          return (
-            <div
-              className={`alert rounded-2xl py-3 ${
-                shiftStatus.open
-                  ? "alert-success"
-                  : shiftStatus.dayComplete
-                    ? "alert-info"
-                    : "alert-warning"
-              }`}
+      <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
+          <p className="text-sm font-black">
+            فواتير مفتوحة · {openOrders.length}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {canSell ? (
+              <Link
+                href={`/cashier/${venue}/quick`}
+                className="btn btn-primary btn-sm gap-1.5 rounded-lg"
+              >
+                <Plus className="size-4" />
+                بيع سريع
+              </Link>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5 rounded-lg"
+                disabled
+              >
+                <Plus className="size-4" />
+                بيع سريع
+              </button>
+            )}
+            <Link
+              href={`/cashier/${venue}/sales`}
+              className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
             >
-              <Clock3 className="size-5" />
-              <div className="min-w-0 flex-1">
-                <p className="font-black">{title}</p>
-                <p className="text-sm opacity-80">{detail}</p>
-              </div>
-              {isMainCashier && !shiftStatus.dayComplete ? (
-                <Link
-                  href={`/cashier/${venue}/shift`}
-                  className="btn btn-sm shrink-0 rounded-xl"
-                >
-                  إدارة الوردية
-                </Link>
-              ) : null}
-            </div>
-          );
-        })()}
+              <History className="size-4" />
+              مبيعاتي
+            </Link>
+            {isMainCashier ? (
+              <Link
+                href={`/cashier/${venue}/shift`}
+                className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+              >
+                <Clock3 className="size-4" />
+                الوردية
+              </Link>
+            ) : null}
+          </div>
+        </div>
+
+        <div
+          className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+            shiftStatus.open
+              ? "border-success/30 bg-success/10 text-success"
+              : shiftStatus.dayComplete
+                ? "border-info/30 bg-info/10 text-info"
+                : "border-warning/30 bg-warning/10 text-warning-content"
+          }`}
+        >
+          <Clock3 className="size-4 shrink-0" />
+          <span className="font-black">{shiftTitle}</span>
+          {shiftDetail ? (
+            <span className="opacity-80">— {shiftDetail}</span>
+          ) : null}
+          {isMainCashier && !shiftStatus.open && !shiftStatus.dayComplete ? (
+            <Link
+              href={`/cashier/${venue}/shift`}
+              className="btn btn-xs ms-auto rounded-lg"
+            >
+              فتح
+            </Link>
+          ) : null}
+        </div>
 
         {!hasCheckout ? (
-          <div className="alert alert-error rounded-2xl">
-            <span className="font-bold">{stationCtx.error}</span>
+          <div className="rounded-xl border border-error/30 bg-error/10 px-3 py-2 text-sm font-bold text-error">
+            {stationCtx.error}
           </div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {openOrders.map((order) => (
             <Link
               key={order.id}
@@ -175,62 +149,32 @@ export default async function CashierHomePage({
                   ? `/cashier/${venue}/order/${order.id}`
                   : `/cashier/${venue}`
               }
-              className={`premium-card group card transition duration-200 ${
+              className={`flex items-center justify-between gap-3 rounded-xl border border-base-300/70 bg-base-100 px-3 py-3 ${
                 canSell
-                  ? "hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg"
+                  ? "hover:border-primary/40"
                   : "pointer-events-none opacity-50"
               }`}
             >
-              <div className="card-body gap-4 p-5">
-                <div className="flex items-start justify-between">
-                  <span className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary">
-                    <ReceiptText className="size-5" />
-                  </span>
-                  <span className="badge badge-warning badge-soft badge-sm gap-1">
-                    <Clock3 className="size-3" />
-                    مفتوحة
-                  </span>
-                </div>
-                <div>
-                  <p className="text-xs font-bold text-base-content/40">
-                    فاتورة #{order.id}
-                  </p>
-                  <h3 className="mt-1 text-xl font-black">
-                    {order.tableName ?? "بيع سريع"}
-                  </h3>
-                  <p className="mt-1 flex items-center gap-1 text-xs text-base-content/45">
-                    <UserRound className="size-3" />
-                    {order.waiterName ?? "بدون سفرادجي"}
-                  </p>
-                </div>
-                <div className="flex items-end justify-between border-t border-base-300/60 pt-4">
-                  <div>
-                    <p className="text-xs text-base-content/40">الإجمالي</p>
-                    <p className="text-xl font-black text-primary">
-                      {formatMoney(order.total)}
-                    </p>
-                  </div>
-                  <span className="btn btn-primary btn-sm gap-1.5 rounded-xl">
-                    تحصيل
-                    <ArrowLeft className="size-3.5 transition group-hover:-translate-x-0.5" />
-                  </span>
-                </div>
+              <div className="min-w-0">
+                <p className="truncate font-black">
+                  #{order.id} · {order.tableName ?? "بيع سريع"}
+                </p>
+                <p className="truncate text-xs text-base-content/45">
+                  {order.waiterName ?? "—"}
+                </p>
               </div>
+              <p className="shrink-0 text-base font-black text-primary">
+                {formatMoney(order.total)}
+              </p>
             </Link>
           ))}
         </div>
 
-        {openOrders.length === 0 && (
-          <div className="premium-card rounded-3xl p-12 text-center">
-            <span className="mx-auto mb-4 grid size-16 place-items-center rounded-3xl bg-base-200 text-base-content/25">
-              <ShoppingBag className="size-8" />
-            </span>
-            <p className="text-lg font-black">لا توجد فواتير مفتوحة حالياً</p>
-            <p className="mt-1 text-sm text-base-content/45">
-              يمكنك بدء بيع سريع من الزر أعلاه
-            </p>
-          </div>
-        )}
+        {openOrders.length === 0 ? (
+          <p className="py-10 text-center text-sm text-base-content/45">
+            لا توجد فواتير مفتوحة
+          </p>
+        ) : null}
       </main>
     </div>
   );

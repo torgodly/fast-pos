@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useTransition } from "react";
-import { Armchair, CheckCircle2, LoaderCircle, Users } from "lucide-react";
+import { Armchair, LoaderCircle, Users } from "lucide-react";
 import { openTableOrder } from "@/app/actions/orders";
 
 export function OpenTableButton({
@@ -37,25 +37,13 @@ export function OpenTableButton({
       <button
         type="button"
         onClick={openModal}
-        className="group card min-h-44 w-full border border-base-300/70 bg-base-100 text-right shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg sm:min-h-52"
+        className="flex min-h-24 w-full flex-col justify-between rounded-xl border border-base-300/70 bg-base-100 px-3 py-2.5 text-right hover:border-primary/40"
       >
-        <div className="card-body justify-between p-4 sm:p-5">
-          <div className="flex items-start justify-between">
-            <span className="grid size-10 place-items-center rounded-xl bg-base-200 text-base-content/35">
-              <Armchair className="size-5" />
-            </span>
-            <span className="badge badge-ghost badge-sm gap-1 text-base-content/55">
-              <CheckCircle2 className="size-3" />
-              متاحة
-            </span>
-          </div>
-          <div>
-            <h3 className="text-xl font-black sm:text-2xl">{tableName}</h3>
-            <p className="mt-1 text-xs text-base-content/45">
-              اضغط لفتح فاتورة
-            </p>
-          </div>
+        <div>
+          <p className="font-black">{tableName}</p>
+          <p className="text-xs text-base-content/45">متاحة</p>
         </div>
+        <Armchair className="size-4 text-base-content/25" />
       </button>
 
       <dialog id={dialogId} className="modal modal-bottom sm:modal-middle">
