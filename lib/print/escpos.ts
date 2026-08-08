@@ -309,14 +309,10 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
 
   headerBlock(parts, title, data.venueName);
   reportSep(parts);
-  fieldLine(parts, "الوردية", String(data.shiftNumber));
-  fieldLine(parts, "تاريخ العمل", data.workDate);
-  fieldLine(parts, "فتح", data.openedAt);
-  fieldLine(parts, "فتح بواسطة", data.openedByName);
-  if (data.closedAt) {
-    fieldLine(parts, "إقفال", data.closedAt);
-    fieldLine(parts, "أقفل بواسطة", data.closedByName ?? "-");
-  }
+  fieldLine(parts, "اليوم", data.workDate);
+  fieldLine(parts, "من", data.periodFrom);
+  fieldLine(parts, "إلى", data.periodTo);
+  fieldLine(parts, "بواسطة", data.printedByName);
   reportSep(parts);
 
   fieldLine(parts, "الفواتير", String(data.invoiceCount));
@@ -342,7 +338,7 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   parts.push(align("center"));
   printLine(
     parts,
-    data.kind === "Z" ? "تم إقفال الوردية" : "الوردية ما زالت مفتوحة",
+    data.kind === "Z" ? "نهاية يوم العمل (Z)" : "تقرير منتصف اليوم (X)",
     { center: true, bold: true },
   );
   parts.push(cut());

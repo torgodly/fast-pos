@@ -19,7 +19,12 @@ import {
   users,
 } from "@/lib/db/schema";
 import { buildTestPrintBytes } from "@/lib/print/test-bytes";
-import { setReceiptFooterMessage, clearReceiptFooterMessage } from "@/lib/settings";
+import {
+  clearReceiptFooterMessage,
+  resetZWindow,
+  setReceiptFooterMessage,
+  setZWindow,
+} from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
 import type {
   PrinterConnectionType,
@@ -551,6 +556,28 @@ export async function saveReceiptSettings(
 export async function resetReceiptSettings(): Promise<ActionResult> {
   await assertAdmin();
   clearReceiptFooterMessage();
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export async function saveZWindowSettings(
+  start: string,
+  end: string,
+): Promise<ActionResult> {
+  await assertAdmin();
+  const startOk = /^\d{1,2}:\d{2}$/.test(start.trim());
+  const endOk = /^\d{1,2}:\d{2}$/.test(end.trim());
+  if (!startOk || !endOk) {
+    return { error: "صيغة الوقت غير صحيحة (HH:MM)" };
+  }
+  setZWindow(start, end);
+  revalidatePath("/admin/settings");
+  return { ok: true };
+}
+
+export async function resetZWindowSettings(): Promise<ActionResult> {
+  await assertAdmin();
+  resetZWindow();
   revalidatePath("/admin/settings");
   return { ok: true };
 }

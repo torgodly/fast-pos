@@ -8,7 +8,6 @@ import { PosHeader } from "@/components/PosHeader";
 import { QuickSaleBoard } from "@/components/QuickSaleBoard";
 import { db } from "@/lib/db";
 import { categories, items } from "@/lib/db/schema";
-import { getOpenShift } from "@/lib/shifts/core";
 import { isVenueId } from "@/lib/venues";
 
 export default async function CashierQuickPage({
@@ -21,7 +20,7 @@ export default async function CashierQuickPage({
   const session = await requireCashier(venue);
 
   const stationCtx = await getCashierStationContext(venue);
-  if ("error" in stationCtx || !getOpenShift(venue)) {
+  if ("error" in stationCtx) {
     redirect(`/cashier/${venue}`);
   }
 

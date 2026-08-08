@@ -8,7 +8,6 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
-import { getCashierShiftStatus } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierHomePage({
@@ -25,29 +24,7 @@ export default async function CashierHomePage({
 
   const stationCtx = await getCashierStationContext(venue);
   const hasCheckout = !("error" in stationCtx);
-  const shiftStatus = getCashierShiftStatus(venue);
-  const canSell = hasCheckout && !!shiftStatus.open;
-
-  const waitingNext =
-    !shiftStatus.open &&
-    !shiftStatus.dayComplete &&
-    shiftStatus.nextShiftNumber === 2;
-  const shiftTitle = shiftStatus.open
-    ? `وردية مفتوحة · ${shiftStatus.open.shiftNumber}`
-    : shiftStatus.dayComplete
-      ? "انتهى يوم العمل"
-      : waitingNext
-        ? "بانتظار فتح الوردية التالية"
-        : "لا توجد وردية مفتوحة";
-  const shiftDetail = shiftStatus.open
-    ? null
-    : shiftStatus.dayComplete
-      ? "الوردية التالية غداً"
-      : isMainCashier
-        ? waitingNext
-          ? `افتح الوردية ${shiftStatus.nextShiftNumber}`
-          : "افتح الوردية قبل العمل"
-        : "انتظر الكاشير الرئيسي";
+  const canSell = hasCheckout;
 
   const openOrders = db
     .select({
@@ -104,34 +81,10 @@ export default async function CashierHomePage({
                 className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
               >
                 <Clock3 className="size-4" />
-                الوردية
+                تقارير X/Z
               </Link>
             ) : null}
           </div>
-        </div>
-
-        <div
-          className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
-            shiftStatus.open
-              ? "border-success/30 bg-success/10 text-success"
-              : shiftStatus.dayComplete
-                ? "border-info/30 bg-info/10 text-info"
-                : "border-warning/30 bg-warning/10 text-warning-content"
-          }`}
-        >
-          <Clock3 className="size-4 shrink-0" />
-          <span className="font-black">{shiftTitle}</span>
-          {shiftDetail ? (
-            <span className="opacity-80">— {shiftDetail}</span>
-          ) : null}
-          {isMainCashier && !shiftStatus.open && !shiftStatus.dayComplete ? (
-            <Link
-              href={`/cashier/${venue}/shift`}
-              className="btn btn-xs ms-auto rounded-lg"
-            >
-              فتح
-            </Link>
-          ) : null}
         </div>
 
         {!hasCheckout ? (

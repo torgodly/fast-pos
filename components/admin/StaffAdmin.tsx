@@ -225,7 +225,7 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
               defaultChecked={editing?.isMainCashier ?? false}
             />
             <span className="label-text font-bold">
-              كاشير رئيسي (فتح/إقفال الوردية وطباعة X و Z)
+              كاشير رئيسي (طباعة تقارير X و Z فقط)
             </span>
           </label>
           <p className="text-xs text-base-content/45">

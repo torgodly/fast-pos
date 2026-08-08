@@ -1,171 +1,129 @@
 "use client";
 
-import { useEffect, useRef, useTransition } from "react";
+import { useRef, useTransition } from "react";
 import {
   AlertTriangle,
   LoaderCircle,
   Lock,
   Printer,
-  Unlock,
 } from "lucide-react";
 import {
   closeShiftWithZReport,
-  openCashierShift,
   printShiftXReport,
 } from "@/app/actions/shifts";
 import { useToast } from "@/components/ToastProvider";
-import { formatDateTime } from "@/lib/venues";
-
-type ShiftRow = {
-  id: number;
-  shiftNumber: number;
-  status: string;
-  openedAt: string;
-  closedAt: string | null;
-};
+import { formatMoney } from "@/lib/venues";
 
 export function CashierShiftPanel({
   venueId,
-  workDate,
-  openShift,
-  canOpen,
-  nextShiftNumber,
-  dayComplete,
+  lastZLabel,
+  zWindowStart,
+  zWindowEnd,
+  canPrintZ,
+  preview,
 }: {
   venueId: string;
-  workDate: string;
-  openShift: ShiftRow | null;
-  canOpen: boolean;
-  nextShiftNumber: number | null;
-  dayComplete: boolean;
+  lastZLabel: string | null;
+  zWindowStart: string;
+  zWindowEnd: string;
+  canPrintZ: boolean;
+  preview: {
+    invoiceCount: number;
+    totalSales: number;
+    cashTotal: number;
+    cardTotal: number;
+  };
 }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  useEffect(() => {
-    if (!openShift) dialogRef.current?.close();
-  }, [openShift]);
-
   function run(
     action: () => Promise<{ error: string } | { ok: true; message: string }>,
-    options?: { afterZ?: boolean },
   ) {
     startTransition(async () => {
-      const closedShiftNumber = openShift?.shiftNumber;
       const result = await action();
       if ("error" in result) {
         showToast("error", result.error);
         return;
       }
-      if (options?.afterZ && closedShiftNumber === 1) {
-        showToast(
-          "success",
-          `${result.message} — افتح الوردية 2 للمتابعة`,
-        );
-      } else if (options?.afterZ && closedShiftNumber === 2) {
-        showToast("success", `${result.message} — انتهى يوم العمل`);
-      } else {
-        showToast("success", result.message);
-      }
+      showToast("success", result.message);
       dialogRef.current?.close();
     });
   }
 
   return (
     <>
-      <section className="premium-card card">
-        <div className="card-body gap-4 p-4 sm:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold text-base-content/45">
-                ورديات اليوم · {workDate}
-              </p>
-              <h3 className="text-xl font-black">
-                {openShift
-                  ? `وردية مفتوحة · ${openShift.shiftNumber}`
-                  : dayComplete
-                    ? "انتهى يوم العمل"
-                    : nextShiftNumber === 2
-                      ? "بانتظار فتح الوردية التالية"
-                      : "لا توجد وردية مفتوحة"}
-              </h3>
-              <p className="mt-1 text-sm text-base-content/50">
-                {openShift
-                  ? `فُتحت ${formatDateTime(openShift.openedAt)} — X في أي وقت، Z تقفل الوردية وتوقف البيع`
-                  : dayComplete
-                    ? "تم إقفال الورديتين — الوردية التالية غداً"
-                    : nextShiftNumber
-                      ? `افتح الوردية ${nextShiftNumber} لاستئناف البيع والتحصيل`
-                      : "افتح الوردية قبل أي بيع أو تحصيل"}
-              </p>
-            </div>
-            <span
-              className={`badge gap-1.5 ${
-                openShift
-                  ? "badge-success"
-                  : dayComplete
-                    ? "badge-neutral"
-                    : "badge-warning"
-              }`}
-            >
-              {openShift ? (
-                <Unlock className="size-3.5" />
-              ) : (
-                <Lock className="size-3.5" />
-              )}
-              {openShift ? "مفتوحة" : dayComplete ? "مكتمل" : "مقفلة"}
-            </span>
+      <section className="rounded-xl border border-base-300 bg-base-100 p-4">
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-bold text-base-content/45">
+              تقارير يوم العمل
+            </p>
+            <h3 className="text-lg font-black">X في أي وقت · Z نهاية اليوم</h3>
+            <p className="mt-1 text-sm text-base-content/50">
+              الفترة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
+            </p>
+            <p className="text-xs text-base-content/45">
+              نافذة Z: {zWindowStart} – {zWindowEnd}
+              {canPrintZ ? " · متاحة الآن" : " · خارج النافذة"}
+            </p>
           </div>
 
-          {!openShift && canOpen ? (
+          <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+            <div className="rounded-lg border border-base-300 px-2 py-1.5">
+              <p className="text-[11px] text-base-content/45">فواتير</p>
+              <p className="font-black">{preview.invoiceCount}</p>
+            </div>
+            <div className="rounded-lg border border-base-300 px-2 py-1.5">
+              <p className="text-[11px] text-base-content/45">الإجمالي</p>
+              <p className="font-black text-primary">
+                {formatMoney(preview.totalSales)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-base-300 px-2 py-1.5">
+              <p className="text-[11px] text-base-content/45">نقدي</p>
+              <p className="font-black">{formatMoney(preview.cashTotal)}</p>
+            </div>
+            <div className="rounded-lg border border-base-300 px-2 py-1.5">
+              <p className="text-[11px] text-base-content/45">بطاقة</p>
+              <p className="font-black">{formatMoney(preview.cardTotal)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"
-              className="btn btn-primary btn-lg gap-2 rounded-2xl"
+              className="btn btn-outline gap-2 rounded-xl"
               disabled={pending}
-              onClick={() => run(() => openCashierShift(venueId))}
+              onClick={() => run(() => printShiftXReport(venueId))}
             >
               {pending ? (
-                <LoaderCircle className="size-5 animate-spin" />
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <Unlock className="size-5" />
+                <Printer className="size-4" />
               )}
-              فتح الوردية {nextShiftNumber}
+              طباعة تقرير X
             </button>
-          ) : null}
-
-          {!openShift && !canOpen && !dayComplete ? (
-            <div className="alert alert-warning rounded-2xl">
-              <AlertTriangle className="size-5" />
-              <span>لا يمكن فتح وردية الآن</span>
-            </div>
-          ) : null}
-
-          {openShift ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                className="btn btn-outline btn-lg gap-2 rounded-2xl"
-                disabled={pending}
-                onClick={() => run(() => printShiftXReport(venueId))}
-              >
-                {pending ? (
-                  <LoaderCircle className="size-5 animate-spin" />
-                ) : (
-                  <Printer className="size-5" />
-                )}
-                طباعة تقرير X
-              </button>
-              <button
-                type="button"
-                className="btn btn-error btn-lg gap-2 rounded-2xl"
-                disabled={pending}
-                onClick={() => dialogRef.current?.showModal()}
-              >
-                <Lock className="size-5" />
-                إقفال الوردية (Z)
-              </button>
-            </div>
+            <button
+              type="button"
+              className="btn btn-error gap-2 rounded-xl"
+              disabled={pending || !canPrintZ}
+              onClick={() => dialogRef.current?.showModal()}
+              title={
+                canPrintZ
+                  ? undefined
+                  : `متاح فقط من ${zWindowStart} إلى ${zWindowEnd}`
+              }
+            >
+              <Lock className="size-4" />
+              طباعة تقرير Z
+            </button>
+          </div>
+          {!canPrintZ ? (
+            <p className="text-xs text-warning">
+              زر Z يُفعّل فقط بين {zWindowStart} و {zWindowEnd} (يضبطه المدير)
+            </p>
           ) : null}
         </div>
       </section>
@@ -175,15 +133,10 @@ export function CashierShiftPanel({
           <div className="mb-4 grid size-14 place-items-center rounded-2xl bg-error/10 text-error">
             <AlertTriangle className="size-7" />
           </div>
-          <h3 className="text-2xl font-black">تأكيد إقفال الوردية</h3>
-          <p className="mt-2 leading-7 text-base-content/60">
-            سيتم إقفال الوردية{" "}
-            <span className="font-black text-base-content">
-              {openShift?.shiftNumber ?? ""}
-            </span>{" "}
-            وطباعة تقرير{" "}
-            <span className="font-black text-error">Z</span>. لا يمكن التراجع عن
-            هذا الإجراء.
+          <h3 className="text-xl font-black">تأكيد تقرير Z</h3>
+          <p className="mt-2 text-sm leading-7 text-base-content/60">
+            سيُطبع ملخص يوم العمل من آخر Z حتى الآن، ويبدأ يوم عمل جديد بعدها.
+            البيع يستمر عادياً — لا حاجة لفتح وردية.
           </p>
           <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
             <button
@@ -197,22 +150,15 @@ export function CashierShiftPanel({
             <button
               type="button"
               className="btn btn-error gap-2 rounded-xl"
-              disabled={pending || !openShift}
-              onClick={() =>
-                run(() => closeShiftWithZReport(venueId), { afterZ: true })
-              }
+              disabled={pending}
+              onClick={() => run(() => closeShiftWithZReport(venueId))}
             >
               {pending ? (
-                <>
-                  <LoaderCircle className="size-4 animate-spin" />
-                  جاري الإقفال...
-                </>
+                <LoaderCircle className="size-4 animate-spin" />
               ) : (
-                <>
-                  <Printer className="size-4" />
-                  تأكيد وطباعة Z
-                </>
+                <Printer className="size-4" />
               )}
+              تأكيد وطباعة Z
             </button>
           </div>
         </div>

@@ -1,13 +1,20 @@
 import Image from "next/image";
-import { KeyRound, Receipt, Settings2 } from "lucide-react";
+import { Clock3, KeyRound, Receipt, Settings2 } from "lucide-react";
 import { ChangeAdminPasswordForm } from "@/components/admin/ChangeAdminPasswordForm";
 import { ReceiptSettingsForm } from "@/components/admin/ReceiptSettingsForm";
+import { ZWindowSettingsForm } from "@/components/admin/ZWindowSettingsForm";
 import { requireAdmin } from "@/app/actions/auth";
-import { getReceiptFooterMessage } from "@/lib/settings";
+import {
+  getReceiptFooterMessage,
+  getZWindowEnd,
+  getZWindowStart,
+} from "@/lib/settings";
 
 export default async function AdminSettingsPage() {
   await requireAdmin();
   const footerMessage = getReceiptFooterMessage();
+  const zStart = getZWindowStart();
+  const zEnd = getZWindowEnd();
 
   return (
     <div className="space-y-7">
@@ -19,11 +26,28 @@ export default async function AdminSettingsPage() {
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الإعدادات</h2>
             <p className="text-sm text-base-content/45">
-              كلمة مرور المدير ورسالة الفاتورة
+              كلمة المرور، الفاتورة، ونافذة تقرير Z
             </p>
           </div>
         </div>
       </div>
+
+      <section className="premium-card card">
+        <div className="card-body gap-5 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-error/10 text-error">
+              <Clock3 className="size-5" />
+            </span>
+            <div>
+              <h3 className="font-black">نافذة طباعة تقرير Z</h3>
+              <p className="text-xs text-base-content/45">
+                نهاية يوم العمل — الافتراضي 23:00 إلى 01:00
+              </p>
+            </div>
+          </div>
+          <ZWindowSettingsForm initialStart={zStart} initialEnd={zEnd} />
+        </div>
+      </section>
 
       <section className="premium-card card">
         <div className="card-body gap-5 p-5 sm:p-6">

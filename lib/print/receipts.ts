@@ -35,12 +35,10 @@ export type ReportSummaryPrintData = {
 export type ShiftReportPrintData = {
   kind: "X" | "Z";
   venueName: string;
-  shiftNumber: number;
   workDate: string;
-  openedAt: string;
-  closedAt: string | null;
-  openedByName: string;
-  closedByName: string | null;
+  periodFrom: string;
+  periodTo: string;
+  printedByName: string;
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;

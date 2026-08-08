@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
 import { ArrowRight, Trash2 } from "lucide-react";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { cancelOpenOrder } from "@/app/actions/orders";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
@@ -17,7 +17,6 @@ import {
   tables,
   users,
 } from "@/lib/db/schema";
-import { getOpenShift } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function CashierOrderPage({
@@ -28,9 +27,6 @@ export default async function CashierOrderPage({
   const { venue, id } = await params;
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
-  if (!getOpenShift(venue)) {
-    redirect(`/cashier/${venue}`);
-  }
   const orderId = Number(id);
 
   const order = db

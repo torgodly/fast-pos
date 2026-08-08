@@ -28,7 +28,6 @@ import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
 import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
 import { getReceiptFooterMessage } from "@/lib/settings";
-import { getOpenShift } from "@/lib/shifts/core";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -606,13 +605,6 @@ export async function payOrder(
     return { error: stationCtx.error };
   }
 
-  const openShift = getOpenShift(order.venueId);
-  if (!openShift) {
-    return {
-      error: "افتح الوردية من شاشة الكاشير قبل التحصيل",
-    };
-  }
-
   const lines = db
     .select()
     .from(orderItems)
@@ -631,7 +623,7 @@ export async function payOrder(
       status: "paid",
       paymentMethod,
       cashierId: session.userId,
-      shiftId: openShift.id,
+      shiftId: null,
       total,
       paidAt,
     })
@@ -738,13 +730,6 @@ export async function payQuickSale(
     return { error: stationCtx.error };
   }
 
-  const openShift = getOpenShift(venueId);
-  if (!openShift) {
-    return {
-      error: "افتح الوردية من شاشة الكاشير قبل البيع",
-    };
-  }
-
   const priced = cart.map((line) => {
     const qty = Math.max(1, Math.trunc(line.qty));
     const item = db
@@ -778,7 +763,7 @@ export async function payQuickSale(
       tableId: null,
       waiterId: null,
       cashierId: session.userId,
-      shiftId: openShift.id,
+      shiftId: null,
       status: "open",
       total,
     })
