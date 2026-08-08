@@ -146,20 +146,21 @@ export function buildDayReportData(
     tableSales,
     quickSales,
     groups,
-    zWindowStart: getZWindowStart(),
-    zWindowEnd: getZWindowEnd(),
-    canPrintZ: isWithinZWindow(),
+    zWindowStart: getZWindowStart(venueId),
+    zWindowEnd: getZWindowEnd(venueId),
+    canPrintZ: isWithinZWindow(new Date(), venueId),
   };
 }
 
 export function getDayReportStatus(venueId: VenueId) {
   const lastZ = getLastZAt(venueId);
   return {
+    venueId,
     lastZAt: lastZ,
     lastZLabel: lastZ ? formatDateTime(lastZ) : null,
-    zWindowStart: getZWindowStart(),
-    zWindowEnd: getZWindowEnd(),
-    canPrintZ: isWithinZWindow(),
+    zWindowStart: getZWindowStart(venueId),
+    zWindowEnd: getZWindowEnd(venueId),
+    canPrintZ: isWithinZWindow(new Date(), venueId),
     workDate: workDateToday(),
   };
 }

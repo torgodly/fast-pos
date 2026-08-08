@@ -7,11 +7,16 @@ import {
   saveZWindowSettings,
 } from "@/app/actions/admin";
 import { useToast } from "@/components/ToastProvider";
+import type { VenueId } from "@/lib/types";
 
 export function ZWindowSettingsForm({
+  venueId,
+  venueLabel,
   initialStart,
   initialEnd,
 }: {
+  venueId: VenueId;
+  venueLabel: string;
   initialStart: string;
   initialEnd: string;
 }) {
@@ -22,50 +27,50 @@ export function ZWindowSettingsForm({
 
   function save() {
     startTransition(async () => {
-      const result = await saveZWindowSettings(start, end);
+      const result = await saveZWindowSettings(start, end, venueId);
       if ("error" in result) {
         showToast("error", result.error);
         return;
       }
-      showToast("success", "تم حفظ نافذة تقرير Z");
+      showToast("success", `تم حفظ نافذة Z لـ ${venueLabel}`);
     });
   }
 
   function reset() {
     startTransition(async () => {
-      const result = await resetZWindowSettings();
+      const result = await resetZWindowSettings(venueId);
       if ("error" in result) {
         showToast("error", result.error);
         return;
       }
       setStart("23:00");
       setEnd("01:00");
-      showToast("success", "تمت إعادة النافذة الافتراضية 23:00 – 01:00");
+      showToast("success", `افتراضي ${venueLabel}: 23:00 – 01:00`);
     });
   }
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-base-content/60">
-        تقرير Z يُطبع فقط داخل هذه النافذة (يمكن أن تمتد لليوم التالي، مثل 23:00
-        إلى 01:00). تقرير X متاح في أي وقت.
+    <div className="space-y-3 rounded-xl border border-base-300/70 p-3">
+      <p className="font-black">{venueLabel}</p>
+      <p className="text-xs text-base-content/50">
+        يوم عمل مستقل عن الفرع الآخر — X/Z لا يختلطان
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-control">
-          <span className="label-text mb-1 font-bold">من الساعة</span>
+          <span className="label-text mb-1 text-xs font-bold">من</span>
           <input
             type="time"
-            className="input input-bordered"
+            className="input input-bordered input-sm"
             value={start}
             onChange={(e) => setStart(e.target.value)}
             disabled={pending}
           />
         </label>
         <label className="form-control">
-          <span className="label-text mb-1 font-bold">إلى الساعة</span>
+          <span className="label-text mb-1 text-xs font-bold">إلى</span>
           <input
             type="time"
-            className="input input-bordered"
+            className="input input-bordered input-sm"
             value={end}
             onChange={(e) => setEnd(e.target.value)}
             disabled={pending}
@@ -75,25 +80,25 @@ export function ZWindowSettingsForm({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className="btn btn-primary gap-2 rounded-xl"
+          className="btn btn-primary btn-sm gap-1.5 rounded-lg"
           disabled={pending}
           onClick={save}
         >
           {pending ? (
-            <LoaderCircle className="size-4 animate-spin" />
+            <LoaderCircle className="size-3.5 animate-spin" />
           ) : (
-            <Save className="size-4" />
+            <Save className="size-3.5" />
           )}
           حفظ
         </button>
         <button
           type="button"
-          className="btn btn-ghost gap-2 rounded-xl"
+          className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
           disabled={pending}
           onClick={reset}
         >
-          <RotateCcw className="size-4" />
-          افتراضي 23:00–01:00
+          <RotateCcw className="size-3.5" />
+          23:00–01:00
         </button>
       </div>
     </div>

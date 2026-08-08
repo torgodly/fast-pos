@@ -9,12 +9,11 @@ import {
   getZWindowEnd,
   getZWindowStart,
 } from "@/lib/settings";
+import { getVenueName } from "@/lib/venues";
 
 export default async function AdminSettingsPage() {
   await requireAdmin();
   const footerMessage = getReceiptFooterMessage();
-  const zStart = getZWindowStart();
-  const zEnd = getZWindowEnd();
 
   return (
     <div className="space-y-7">
@@ -26,7 +25,7 @@ export default async function AdminSettingsPage() {
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الإعدادات</h2>
             <p className="text-sm text-base-content/45">
-              كلمة المرور، الفاتورة، ونافذة تقرير Z
+              كلمة المرور، الفاتورة، ونافذة Z لكل فرع
             </p>
           </div>
         </div>
@@ -39,13 +38,26 @@ export default async function AdminSettingsPage() {
               <Clock3 className="size-5" />
             </span>
             <div>
-              <h3 className="font-black">نافذة طباعة تقرير Z</h3>
+              <h3 className="font-black">نافذة تقرير Z لكل فرع</h3>
               <p className="text-xs text-base-content/45">
-                نهاية يوم العمل — الافتراضي 23:00 إلى 01:00
+                المطعم والكافيه مستقلان — كل فرع له يوم عمل وX/Z خاص به
               </p>
             </div>
           </div>
-          <ZWindowSettingsForm initialStart={zStart} initialEnd={zEnd} />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <ZWindowSettingsForm
+              venueId="restaurant"
+              venueLabel={getVenueName("restaurant")}
+              initialStart={getZWindowStart("restaurant")}
+              initialEnd={getZWindowEnd("restaurant")}
+            />
+            <ZWindowSettingsForm
+              venueId="cafe"
+              venueLabel={getVenueName("cafe")}
+              initialStart={getZWindowStart("cafe")}
+              initialEnd={getZWindowEnd("cafe")}
+            />
+          </div>
         </div>
       </section>
 

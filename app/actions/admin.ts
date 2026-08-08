@@ -563,22 +563,33 @@ export async function resetReceiptSettings(): Promise<ActionResult> {
 export async function saveZWindowSettings(
   start: string,
   end: string,
+  venueId: string,
 ): Promise<ActionResult> {
   await assertAdmin();
+  if (!isVenueId(venueId)) {
+    return { error: "فرع غير صالح" };
+  }
   const startOk = /^\d{1,2}:\d{2}$/.test(start.trim());
   const endOk = /^\d{1,2}:\d{2}$/.test(end.trim());
   if (!startOk || !endOk) {
     return { error: "صيغة الوقت غير صحيحة (HH:MM)" };
   }
-  setZWindow(start, end);
+  setZWindow(start, end, venueId);
   revalidatePath("/admin/settings");
+  revalidatePath(`/cashier/${venueId}/shift`);
   return { ok: true };
 }
 
-export async function resetZWindowSettings(): Promise<ActionResult> {
+export async function resetZWindowSettings(
+  venueId: string,
+): Promise<ActionResult> {
   await assertAdmin();
-  resetZWindow();
+  if (!isVenueId(venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+  resetZWindow(venueId);
   revalidatePath("/admin/settings");
+  revalidatePath(`/cashier/${venueId}/shift`);
   return { ok: true };
 }
 

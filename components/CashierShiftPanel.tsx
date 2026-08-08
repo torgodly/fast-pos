@@ -16,6 +16,7 @@ import { formatMoney } from "@/lib/venues";
 
 export function CashierShiftPanel({
   venueId,
+  venueLabel,
   lastZLabel,
   zWindowStart,
   zWindowEnd,
@@ -23,6 +24,7 @@ export function CashierShiftPanel({
   preview,
 }: {
   venueId: string;
+  venueLabel: string;
   lastZLabel: string | null;
   zWindowStart: string;
   zWindowEnd: string;
@@ -58,14 +60,14 @@ export function CashierShiftPanel({
         <div className="space-y-3">
           <div>
             <p className="text-xs font-bold text-base-content/45">
-              تقارير يوم العمل
+              تقارير {venueLabel} فقط — مستقلة عن الفرع الآخر
             </p>
             <h3 className="text-lg font-black">X في أي وقت · Z نهاية اليوم</h3>
             <p className="mt-1 text-sm text-base-content/50">
               الفترة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
             </p>
             <p className="text-xs text-base-content/45">
-              نافذة Z: {zWindowStart} – {zWindowEnd}
+              نافذة Z لـ {venueLabel}: {zWindowStart} – {zWindowEnd}
               {canPrintZ ? " · متاحة الآن" : " · خارج النافذة"}
             </p>
           </div>

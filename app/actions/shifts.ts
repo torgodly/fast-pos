@@ -52,10 +52,10 @@ async function printDayReport(
     return { error: "فقط الكاشير الرئيسي يمكنه طباعة تقارير X و Z" };
   }
 
-  if (kind === "Z" && !isWithinZWindow()) {
+  if (kind === "Z" && !isWithinZWindow(new Date(), venueId)) {
     const status = getDayReportStatus(venueId);
     return {
-      error: `تقرير Z يُطبع فقط في نهاية اليوم (${status.zWindowStart} – ${status.zWindowEnd})`,
+      error: `تقرير Z لهذا الفرع يُطبع فقط (${status.zWindowStart} – ${status.zWindowEnd})`,
     };
   }
 
@@ -86,8 +86,8 @@ async function printDayReport(
       ok: true,
       message:
         kind === "Z"
-          ? "تمت طباعة تقرير Z وإقفال يوم العمل"
-          : "تمت طباعة تقرير X (من آخر Z حتى الآن)",
+          ? `تمت طباعة Z لـ ${data.venueName} وبدء يوم جديد لهذا الفرع فقط`
+          : `تمت طباعة X لـ ${data.venueName} (من آخر Z لهذا الفرع حتى الآن)`,
     };
   } catch (error) {
     revalidateCashier(venueId);

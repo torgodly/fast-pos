@@ -1,3 +1,4 @@
+import type { VenueId } from "@/lib/types";
 import { getSqlite } from "./db/index";
 
 const DEFAULT_FOOTER = "شكراً لزيارتكم — نراكم قريباً";
@@ -7,6 +8,13 @@ const DEFAULT_Z_END = "01:00";
 export const SETTING_RECEIPT_FOOTER = "receipt_footer_message";
 export const SETTING_Z_WINDOW_START = "z_window_start";
 export const SETTING_Z_WINDOW_END = "z_window_end";
+
+function zStartKey(venueId: VenueId) {
+  return `z_window_start_${venueId}`;
+}
+function zEndKey(venueId: VenueId) {
+  return `z_window_end_${venueId}`;
+}
 
 function getSetting(key: string): string | null {
   const sqlite = getSqlite();
@@ -43,23 +51,50 @@ export function clearReceiptFooterMessage() {
     .run(SETTING_RECEIPT_FOOTER);
 }
 
-/** HH:mm — start of Z print window (default 23:00). */
-export function getZWindowStart(): string {
+/** HH:mm — per-venue Z window start (default 23:00). Falls back to legacy global key. */
+export function getZWindowStart(venueId?: VenueId): string {
+  if (venueId) {
+    return (
+      getSetting(zStartKey(venueId)) ||
+      getSetting(SETTING_Z_WINDOW_START) ||
+      DEFAULT_Z_START
+    );
+  }
   return getSetting(SETTING_Z_WINDOW_START) || DEFAULT_Z_START;
 }
 
-/** HH:mm — end of Z print window (default 01:00, may be next calendar day). */
-export function getZWindowEnd(): string {
+/** HH:mm — per-venue Z window end (default 01:00). */
+export function getZWindowEnd(venueId?: VenueId): string {
+  if (venueId) {
+    return (
+      getSetting(zEndKey(venueId)) ||
+      getSetting(SETTING_Z_WINDOW_END) ||
+      DEFAULT_Z_END
+    );
+  }
   return getSetting(SETTING_Z_WINDOW_END) || DEFAULT_Z_END;
 }
 
-export function setZWindow(start: string, end: string) {
-  setSetting(SETTING_Z_WINDOW_START, normalizeTime(start) || DEFAULT_Z_START);
-  setSetting(SETTING_Z_WINDOW_END, normalizeTime(end) || DEFAULT_Z_END);
+export function setZWindow(start: string, end: string, venueId?: VenueId) {
+  const s = normalizeTime(start) || DEFAULT_Z_START;
+  const e = normalizeTime(end) || DEFAULT_Z_END;
+  if (venueId) {
+    setSetting(zStartKey(venueId), s);
+    setSetting(zEndKey(venueId), e);
+    return;
+  }
+  setSetting(SETTING_Z_WINDOW_START, s);
+  setSetting(SETTING_Z_WINDOW_END, e);
 }
 
-export function resetZWindow() {
+export function resetZWindow(venueId?: VenueId) {
   const sqlite = getSqlite();
+  if (venueId) {
+    sqlite
+      .prepare("DELETE FROM app_settings WHERE key IN (?, ?)")
+      .run(zStartKey(venueId), zEndKey(venueId));
+    return;
+  }
   sqlite
     .prepare("DELETE FROM app_settings WHERE key IN (?, ?)")
     .run(SETTING_Z_WINDOW_START, SETTING_Z_WINDOW_END);
@@ -79,17 +114,30 @@ function minutesOfDay(hhmm: string): number {
   return h! * 60 + m!;
 }
 
-/** True if `date` is inside the overnight-capable Z window. */
+/** True if `date` is inside the venue's overnight-capable Z window. */
 export function isWithinZWindow(
   date = new Date(),
-  start = getZWindowStart(),
-  end = getZWindowEnd(),
+  startOrVenue?: string | VenueId,
+  end?: string,
 ): boolean {
+  let start = DEFAULT_Z_START;
+  let finish = DEFAULT_Z_END;
+
+  if (startOrVenue === "cafe" || startOrVenue === "restaurant") {
+    start = getZWindowStart(startOrVenue);
+    finish = getZWindowEnd(startOrVenue);
+  } else if (typeof startOrVenue === "string" && end) {
+    start = startOrVenue;
+    finish = end;
+  } else {
+    start = getZWindowStart();
+    finish = getZWindowEnd();
+  }
+
   const now = date.getHours() * 60 + date.getMinutes();
   const from = minutesOfDay(start);
-  const to = minutesOfDay(end);
+  const to = minutesOfDay(finish);
   if (from === to) return true;
   if (from < to) return now >= from && now <= to;
-  // Overnight window e.g. 23:00 → 01:00
   return now >= from || now <= to;
 }

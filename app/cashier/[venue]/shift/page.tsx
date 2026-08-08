@@ -8,7 +8,7 @@ import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { buildDayReportData, getDayReportStatus } from "@/lib/shifts/core";
-import { isVenueId } from "@/lib/venues";
+import { getVenueName, isVenueId } from "@/lib/venues";
 
 export default async function CashierShiftPage({
   params,
@@ -26,6 +26,7 @@ export default async function CashierShiftPage({
 
   const status = getDayReportStatus(venue);
   const preview = buildDayReportData(venue, "X", session.name);
+  const venueLabel = getVenueName(venue);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
@@ -36,10 +37,10 @@ export default async function CashierShiftPage({
             <Clock3 className="size-4 shrink-0 text-primary" />
             <div className="min-w-0">
               <h2 className="truncate text-sm font-black sm:text-base">
-                تقارير X و Z
+                تقارير X و Z · {venueLabel}
               </h2>
               <p className="truncate text-xs text-base-content/45">
-                بدون فتح وردية — البيع دائماً متاح
+                مبيعات هذا الفرع فقط — لا تشمل {venue === "cafe" ? "المطعم" : "الكافيه"}
               </p>
             </div>
           </div>
@@ -54,6 +55,7 @@ export default async function CashierShiftPage({
 
         <CashierShiftPanel
           venueId={venue}
+          venueLabel={venueLabel}
           lastZLabel={status.lastZLabel}
           zWindowStart={status.zWindowStart}
           zWindowEnd={status.zWindowEnd}
