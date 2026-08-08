@@ -545,3 +545,48 @@ export async function resetReceiptSettings(): Promise<ActionResult> {
   revalidatePath("/admin/settings");
   return { ok: true };
 }
+
+export async function changeAdminPassword(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session || session.role !== "admin") {
+    return { error: "غير مصرح" };
+  }
+
+  const currentPassword = input.currentPassword.trim();
+  const newPassword = input.newPassword.trim();
+  const confirmPassword = input.confirmPassword.trim();
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return { error: "أكمل جميع الحقول" };
+  }
+  if (newPassword.length < 6) {
+    return { error: "كلمة المرور الجديدة يجب ألا تقل عن 6 أحرف" };
+  }
+  if (newPassword !== confirmPassword) {
+    return { error: "تأكيد كلمة المرور غير متطابق" };
+  }
+  if (newPassword === currentPassword) {
+    return { error: "اختر كلمة مرور مختلفة عن الحالية" };
+  }
+
+  const user = db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, session.userId), eq(users.role, "admin")))
+    .get();
+
+  if (!user?.passwordHash || !bcrypt.compareSync(currentPassword, user.passwordHash)) {
+    return { error: "كلمة المرور الحالية غير صحيحة" };
+  }
+
+  db.update(users)
+    .set({ passwordHash: bcrypt.hashSync(newPassword, 10) })
+    .where(eq(users.id, user.id))
+    .run();
+
+  return { ok: true };
+}

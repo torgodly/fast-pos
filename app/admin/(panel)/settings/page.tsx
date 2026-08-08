@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { Receipt, Settings2 } from "lucide-react";
+import { KeyRound, Receipt, Settings2 } from "lucide-react";
+import { ChangeAdminPasswordForm } from "@/components/admin/ChangeAdminPasswordForm";
 import { ReceiptSettingsForm } from "@/components/admin/ReceiptSettingsForm";
 import { requireAdmin } from "@/app/actions/auth";
 import { getReceiptFooterMessage } from "@/lib/settings";
@@ -16,13 +17,30 @@ export default async function AdminSettingsPage() {
             <Settings2 className="size-6" />
           </span>
           <div>
-            <h2 className="text-2xl font-black sm:text-3xl">إعدادات الإيصال</h2>
+            <h2 className="text-2xl font-black sm:text-3xl">الإعدادات</h2>
             <p className="text-sm text-base-content/45">
-              رسالة الفاتورة وشعار المطعم
+              كلمة مرور المدير ورسالة الفاتورة
             </p>
           </div>
         </div>
       </div>
+
+      <section className="premium-card card">
+        <div className="card-body gap-5 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-warning/10 text-warning">
+              <KeyRound className="size-5" />
+            </span>
+            <div>
+              <h3 className="font-black">تغيير كلمة مرور المدير</h3>
+              <p className="text-xs text-base-content/45">
+                أدخل كلمة المرور الحالية ثم الجديدة
+              </p>
+            </div>
+          </div>
+          <ChangeAdminPasswordForm />
+        </div>
+      </section>
 
       <section className="premium-card card">
         <div className="card-body gap-6 p-5 sm:p-6">
@@ -33,7 +51,7 @@ export default async function AdminSettingsPage() {
             <div>
               <h3 className="font-black">شعار الفاتورة</h3>
               <p className="text-xs text-base-content/45">
-                يُطبع أعلى فاتورة الكاشier وصفحة الاختبار
+                يُطبع أعلى فاتورة الكاشير وصفحة الاختبار
               </p>
             </div>
           </div>

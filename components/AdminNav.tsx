@@ -25,7 +25,7 @@ const links = [
   { href: "/admin/staff", label: "الموظفون", icon: UsersRound },
   { href: "/admin/printers", label: "الطابعات", icon: Printer },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
-  { href: "/admin/settings", label: "إعدادات الإيصال", icon: Settings2 },
+  { href: "/admin/settings", label: "الإعدادات", icon: Settings2 },
 ];
 
 export function AdminNav({ name }: { name: string }) {
