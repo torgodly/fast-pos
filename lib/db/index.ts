@@ -6,6 +6,7 @@ import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateReportGroups } from "./migrate-report-groups";
+import { migrateRestaurantMenu } from "./migrate-restaurant-menu";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -78,6 +79,7 @@ function createDb() {
   runSeedSafely(db);
   try {
     migrateReportGroups(sqlite);
+    migrateRestaurantMenu(sqlite);
   } catch {
     // best-effort remap for existing installs
   }

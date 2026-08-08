@@ -1,13 +1,49 @@
 import type Database from "better-sqlite3";
 import {
-  DEFAULT_REPORT_GROUP,
+  DEFAULT_CAFE_GROUP,
+  DEFAULT_RESTAURANT_GROUP,
+  DISPLAY_PRINTER_GROUPS,
   LEGACY_CATEGORY_TO_GROUP,
-  REPORT_GROUP_NAMES,
+  reportGroupsForVenue,
 } from "@/lib/reports/groups";
 
+function pickPrinter(
+  sqlite: Database.Database,
+  venueId: string,
+  kind: "kitchen" | "display",
+): number | null {
+  const rows = sqlite
+    .prepare(
+      `SELECT id, name FROM printers
+       WHERE venue_id = ? AND role IN ('kitchen', 'both') AND active = 1
+       ORDER BY id`,
+    )
+    .all(venueId) as Array<{ id: number; name: string }>;
+
+  if (rows.length === 0) return null;
+
+  if (kind === "display") {
+    const display = rows.find(
+      (p) =>
+        p.name.includes("دسبلي") ||
+        p.name.includes("ديسبلي") ||
+        p.name.includes("display") ||
+        p.name.includes("Display") ||
+        p.name.includes("مشروبات"),
+    );
+    if (display) return display.id;
+    return rows.length > 1 ? rows[rows.length - 1]!.id : rows[0]!.id;
+  }
+
+  const kitchen = rows.find(
+    (p) => p.name.includes("مطبخ") && !p.name.includes("مشروبات"),
+  );
+  return kitchen?.id ?? rows[0]!.id;
+}
+
 /**
- * Ensure each venue has the 7 Arabic report groups and remaps items
- * from legacy categories. Safe to run repeatedly.
+ * Ensure each venue has its report groups and remaps items.
+ * Also fixes category→printer links and clears stale item printer overrides.
  */
 export function migrateReportGroups(sqlite: Database.Database) {
   const venues = sqlite
@@ -15,6 +51,10 @@ export function migrateReportGroups(sqlite: Database.Database) {
     .all() as Array<{ id: string }>;
 
   for (const venue of venues) {
+    const groupNames = reportGroupsForVenue(venue.id);
+    const defaultGroup =
+      venue.id === "restaurant" ? DEFAULT_RESTAURANT_GROUP : DEFAULT_CAFE_GROUP;
+
     const existing = sqlite
       .prepare(
         `SELECT id, name, kitchen_printer_id FROM categories WHERE venue_id = ?`,
@@ -25,46 +65,29 @@ export function migrateReportGroups(sqlite: Database.Database) {
       kitchen_printer_id: number | null;
     }>;
 
-    const kitchenPrinter =
-      (
-        sqlite
-          .prepare(
-            `SELECT id FROM printers
-             WHERE venue_id = ? AND role IN ('kitchen', 'both') AND active = 1
-             ORDER BY name LIMIT 1`,
-          )
-          .get(venue.id) as { id: number } | undefined
-      )?.id ?? null;
-
-    const drinksPrinter =
-      (
-        sqlite
-          .prepare(
-            `SELECT id FROM printers
-             WHERE venue_id = ? AND role IN ('kitchen', 'both') AND active = 1
-             ORDER BY name DESC LIMIT 1`,
-          )
-          .get(venue.id) as { id: number } | undefined
-      )?.id ?? kitchenPrinter;
+    const kitchenPrinter = pickPrinter(sqlite, venue.id, "kitchen");
+    const displayPrinter =
+      pickPrinter(sqlite, venue.id, "display") ?? kitchenPrinter;
 
     const groupIds = new Map<string, number>();
 
-    REPORT_GROUP_NAMES.forEach((name, index) => {
+    groupNames.forEach((name, index) => {
+      const printerId = DISPLAY_PRINTER_GROUPS.has(name)
+        ? displayPrinter
+        : kitchenPrinter;
+
       const found = existing.find((c) => c.name === name);
       if (found) {
         groupIds.set(name, found.id);
         sqlite
           .prepare(
-            `UPDATE categories SET sort_order = ?, active = 1 WHERE id = ?`,
+            `UPDATE categories
+             SET sort_order = ?, active = 1, kitchen_printer_id = ?
+             WHERE id = ?`,
           )
-          .run(index + 1, found.id);
+          .run(index + 1, printerId, found.id);
         return;
       }
-
-      const printerId =
-        name === "مشروبات باردة" || name === "مشروبات ساخنة"
-          ? drinksPrinter
-          : kitchenPrinter;
 
       const result = sqlite
         .prepare(
@@ -75,16 +98,19 @@ export function migrateReportGroups(sqlite: Database.Database) {
       groupIds.set(name, Number(result.lastInsertRowid));
     });
 
-    const defaultGroupId = groupIds.get(DEFAULT_REPORT_GROUP)!;
+    const defaultGroupId = groupIds.get(defaultGroup)!;
 
     for (const cat of existing) {
-      if ((REPORT_GROUP_NAMES as readonly string[]).includes(cat.name)) {
+      if (groupNames.includes(cat.name)) {
         continue;
       }
 
       const targetName =
-        LEGACY_CATEGORY_TO_GROUP[cat.name] ?? DEFAULT_REPORT_GROUP;
-      const targetId = groupIds.get(targetName) ?? defaultGroupId;
+        LEGACY_CATEGORY_TO_GROUP[cat.name] ?? defaultGroup;
+      const targetId =
+        groupIds.get(targetName) ??
+        groupIds.get(defaultGroup) ??
+        defaultGroupId;
 
       sqlite
         .prepare(`UPDATE items SET category_id = ? WHERE category_id = ?`)
@@ -93,13 +119,20 @@ export function migrateReportGroups(sqlite: Database.Database) {
       sqlite.prepare(`DELETE FROM categories WHERE id = ?`).run(cat.id);
     }
 
-    // Deactivate any extra active categories that are not in the 7 groups
     sqlite
       .prepare(
         `UPDATE categories SET active = 0
          WHERE venue_id = ?
-           AND name NOT IN (${REPORT_GROUP_NAMES.map(() => "?").join(",")})`,
+           AND name NOT IN (${groupNames.map(() => "?").join(",")})`,
       )
-      .run(venue.id, ...REPORT_GROUP_NAMES);
+      .run(venue.id, ...groupNames);
+
+    // Stale item-level printer overrides cause معجنات → مطبخ instead of دسبلي
+    sqlite
+      .prepare(
+        `UPDATE items SET kitchen_printer_id = NULL
+         WHERE venue_id = ? AND kitchen_printer_id IS NOT NULL`,
+      )
+      .run(venue.id);
   }
 }

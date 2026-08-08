@@ -8,7 +8,7 @@ import {
   shifts,
   users,
 } from "@/lib/db/schema";
-import { REPORT_GROUP_NAMES } from "@/lib/reports/groups";
+import { reportGroupsForVenue } from "@/lib/reports/groups";
 import type { VenueId } from "@/lib/types";
 import { formatDateTime, getVenueName } from "@/lib/venues";
 import { inputDate } from "@/lib/reports/filters";
@@ -112,7 +112,7 @@ export function buildShiftReportData(
     ]),
   );
 
-  const groups = REPORT_GROUP_NAMES.map((name) => ({
+  const groups = reportGroupsForVenue(shift.venueId).map((name) => ({
     name,
     qty: byName.get(name)?.qty ?? 0,
     revenue: byName.get(name)?.revenue ?? 0,

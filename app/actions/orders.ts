@@ -27,7 +27,6 @@ import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
 import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
-import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { getOpenShift } from "@/lib/shifts/core";
 
@@ -296,41 +295,27 @@ async function sendPendingKitchenTickets(options: {
       .where(eq(categories.id, item.categoryId))
       .get();
 
+    // Category printer wins (item-level overrides were causing معجنات → مطبخ)
     const resolvedPrinterId =
       category?.kitchenPrinterId ?? item.kitchenPrinterId ?? null;
 
-    let printer = resolvedPrinterId
+    const printer = resolvedPrinterId
       ? db
           .select()
           .from(printers)
           .where(
             and(
               eq(printers.id, resolvedPrinterId),
-              kitchenPrinterRolesFilter,
+              eq(printers.venueId, options.venueId),
               eq(printers.active, true),
             ),
           )
           .get()
       : null;
 
-    // Venue fallback when category/item has no kitchen printer linked
-    if (!printer) {
-      printer = db
-        .select()
-        .from(printers)
-        .where(
-          and(
-            eq(printers.venueId, options.venueId),
-            kitchenPrinterRolesFilter,
-            eq(printers.active, true),
-          ),
-        )
-        .get();
-    }
-
     if (!printer) {
       return {
-        error: `لا توجد طابعة مطبخ للصنف "${line.itemName}" — اربط التصنيف من الإدارة ← الأصناف`,
+        error: `لا توجد طابعة مربوطة للصنف "${line.itemName}" — اربط التصنيف من الإدارة ← الأصناف`,
       };
     }
 
