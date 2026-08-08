@@ -299,27 +299,38 @@ async function sendPendingKitchenTickets(options: {
     const resolvedPrinterId =
       category?.kitchenPrinterId ?? item.kitchenPrinterId ?? null;
 
-    if (!resolvedPrinterId) {
-      return {
-        error: `تصنيف "${category?.name ?? line.itemName}" بدون طابعة مطبخ — اربط التصنيف من الإدارة ← الأصناف`,
-      };
-    }
+    let printer = resolvedPrinterId
+      ? db
+          .select()
+          .from(printers)
+          .where(
+            and(
+              eq(printers.id, resolvedPrinterId),
+              kitchenPrinterRolesFilter,
+              eq(printers.active, true),
+            ),
+          )
+          .get()
+      : null;
 
-    const printer = db
-      .select()
-      .from(printers)
-      .where(
-        and(
-          eq(printers.id, resolvedPrinterId),
-          kitchenPrinterRolesFilter,
-          eq(printers.active, true),
-        ),
-      )
-      .get();
+    // Venue fallback when category/item has no kitchen printer linked
+    if (!printer) {
+      printer = db
+        .select()
+        .from(printers)
+        .where(
+          and(
+            eq(printers.venueId, options.venueId),
+            kitchenPrinterRolesFilter,
+            eq(printers.active, true),
+          ),
+        )
+        .get();
+    }
 
     if (!printer) {
       return {
-        error: `طابعة المطبخ لتصنيف "${category?.name ?? line.itemName}" غير متاحة`,
+        error: `لا توجد طابعة مطبخ للصنف "${line.itemName}" — اربط التصنيف من الإدارة ← الأصناف`,
       };
     }
 
@@ -803,16 +814,36 @@ export async function payQuickSale(
       .run();
   }
 
+  const savedLines = db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.orderId, order.id))
+    .all();
+  if (savedLines.length === 0) {
+    db.delete(orders).where(eq(orders.id, order.id)).run();
+    return { error: "فشل حفظ أصناف البيع السريع" };
+  }
+
+  function abortQuickSale() {
+    db.delete(orderItems).where(eq(orderItems.orderId, order.id)).run();
+    db.delete(orders).where(eq(orders.id, order.id)).run();
+  }
+
+  // Fast sell must always print kitchen before checkout receipt
   const kitchenResult = await sendPendingKitchenTickets({
     orderId: order.id,
     venueId,
     tableName: "بيع سريع",
     staffName: session.name,
+    requirePending: true,
   });
   if ("error" in kitchenResult) {
-    db.delete(orderItems).where(eq(orderItems.orderId, order.id)).run();
-    db.delete(orders).where(eq(orders.id, order.id)).run();
+    abortQuickSale();
     return { error: `المطبخ: ${kitchenResult.error}` };
+  }
+  if (kitchenResult.skipped || kitchenResult.printedTo.length === 0) {
+    abortQuickSale();
+    return { error: "المطبخ: لم يتم طباعة تذكرة المطبخ — تحقق من طابعات المطبخ" };
   }
 
   const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
@@ -850,10 +881,9 @@ export async function payQuickSale(
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
 
-  const kitchenNote =
-    !kitchenResult.skipped && kitchenResult.printedTo.length > 0
-      ? ` + مطبخ (${kitchenResult.printedTo.map((p) => p.printerName).join("، ")})`
-      : "";
+  const kitchenNote = ` + مطبخ (${kitchenResult.printedTo
+    .map((p) => p.printerName)
+    .join("، ")})`;
 
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
