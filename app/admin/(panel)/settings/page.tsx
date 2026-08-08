@@ -38,9 +38,10 @@ export default async function AdminSettingsPage() {
               <Clock3 className="size-5" />
             </span>
             <div>
-              <h3 className="font-black">نافذة تقرير Z لكل فرع</h3>
+              <h3 className="font-black">متى يُسمح بطباعة Z؟</h3>
               <p className="text-xs text-base-content/45">
-                المطعم والكافيه مستقلان — كل فرع له يوم عمل وX/Z خاص به
+                ليس وقت دوام — فقط ساعة الإقفال. خارجها زر Z مقفول. يوم العمل =
+                من آخر Z حتى الـ Z التالي تلقائياً.
               </p>
             </div>
           </div>

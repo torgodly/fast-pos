@@ -62,13 +62,15 @@ export function CashierShiftPanel({
             <p className="text-xs font-bold text-base-content/45">
               تقارير {venueLabel} فقط — مستقلة عن الفرع الآخر
             </p>
-            <h3 className="text-lg font-black">X في أي وقت · Z نهاية اليوم</h3>
+            <h3 className="text-lg font-black">X أي وقت · Z فقط عند الإقفال</h3>
             <p className="mt-1 text-sm text-base-content/50">
-              الفترة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
+              المبيعات المعروضة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
             </p>
             <p className="text-xs text-base-content/45">
-              نافذة Z لـ {venueLabel}: {zWindowStart} – {zWindowEnd}
-              {canPrintZ ? " · متاحة الآن" : " · خارج النافذة"}
+              زر Z يعمل فقط بين {zWindowStart} و {zWindowEnd}
+              {canPrintZ
+                ? " — متاح الآن"
+                : " — مقفول الآن (لا يمكن إقفال اليوم مبكراً)"}
             </p>
           </div>
 
@@ -123,8 +125,9 @@ export function CashierShiftPanel({
             </button>
           </div>
           {!canPrintZ ? (
-            <p className="text-xs text-warning">
-              زر Z يُفعّل فقط بين {zWindowStart} و {zWindowEnd} (يضبطه المدير)
+            <p className="text-xs font-bold text-warning">
+              لا يمكن طباعة Z الآن — انتظروا وقت الإقفال ({zWindowStart}–
+              {zWindowEnd})
             </p>
           ) : null}
         </div>
@@ -137,8 +140,8 @@ export function CashierShiftPanel({
           </div>
           <h3 className="text-xl font-black">تأكيد تقرير Z</h3>
           <p className="mt-2 text-sm leading-7 text-base-content/60">
-            سيُطبع ملخص يوم العمل من آخر Z حتى الآن، ويبدأ يوم عمل جديد بعدها.
-            البيع يستمر عادياً — لا حاجة لفتح وردية.
+            سيُطبع ملخص مبيعات {venueLabel} من آخر Z حتى الآن. بعدها يبدأ عدّاد
+            يوم جديد لهذا الفرع فقط. البيع يستمر بدون فتح وردية.
           </p>
           <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
             <button

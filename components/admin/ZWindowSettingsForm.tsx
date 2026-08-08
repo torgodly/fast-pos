@@ -32,7 +32,7 @@ export function ZWindowSettingsForm({
         showToast("error", result.error);
         return;
       }
-      showToast("success", `تم حفظ نافذة Z لـ ${venueLabel}`);
+      showToast("success", `تم حفظ وقت السماح بـ Z لـ ${venueLabel}`);
     });
   }
 
@@ -45,19 +45,23 @@ export function ZWindowSettingsForm({
       }
       setStart("23:00");
       setEnd("01:00");
-      showToast("success", `افتراضي ${venueLabel}: 23:00 – 01:00`);
+      showToast("success", `${venueLabel}: Z فقط من 23:00 إلى 01:00`);
     });
   }
 
   return (
     <div className="space-y-3 rounded-xl border border-base-300/70 p-3">
       <p className="font-black">{venueLabel}</p>
-      <p className="text-xs text-base-content/50">
-        يوم عمل مستقل عن الفرع الآخر — X/Z لا يختلطان
+      <p className="text-xs leading-5 text-base-content/55">
+        يُسمح بطباعة <span className="font-black">Z</span> فقط بين هاتين
+        الساعتين (وقت الإقفال). لا يوجد ضبط لبداية الدوام — المبيعات تُحسب من
+        آخر Z تلقائياً.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-control">
-          <span className="label-text mb-1 text-xs font-bold">من</span>
+          <span className="label-text mb-1 text-xs font-bold">
+            يبدأ السماح بـ Z
+          </span>
           <input
             type="time"
             className="input input-bordered input-sm"
@@ -67,7 +71,9 @@ export function ZWindowSettingsForm({
           />
         </label>
         <label className="form-control">
-          <span className="label-text mb-1 text-xs font-bold">إلى</span>
+          <span className="label-text mb-1 text-xs font-bold">
+            ينتهي السماح بـ Z
+          </span>
           <input
             type="time"
             className="input input-bordered input-sm"

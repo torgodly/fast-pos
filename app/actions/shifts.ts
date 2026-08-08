@@ -55,7 +55,7 @@ async function printDayReport(
   if (kind === "Z" && !isWithinZWindow(new Date(), venueId)) {
     const status = getDayReportStatus(venueId);
     return {
-      error: `تقرير Z لهذا الفرع يُطبع فقط (${status.zWindowStart} – ${status.zWindowEnd})`,
+      error: `لا يمكن إقفال اليوم الآن — طباعة Z مسموحة فقط بين ${status.zWindowStart} و ${status.zWindowEnd}`,
     };
   }
 
