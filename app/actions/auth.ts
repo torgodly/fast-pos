@@ -17,7 +17,11 @@ export async function requireAdmin() {
 
 export async function requireWaiter(venueId: string) {
   const session = await getSession();
-  if (!session || session.role !== "waiter") {
+  if (
+    !session ||
+    session.role !== "waiter" ||
+    session.venueId !== venueId
+  ) {
     redirect(`/pin/${venueId}`);
   }
   return session;
@@ -25,7 +29,11 @@ export async function requireWaiter(venueId: string) {
 
 export async function requireCashier(venueId: string) {
   const session = await getSession();
-  if (!session || session.role !== "cashier") {
+  if (
+    !session ||
+    session.role !== "cashier" ||
+    session.venueId !== venueId
+  ) {
     redirect(`/pin/${venueId}`);
   }
   return session;

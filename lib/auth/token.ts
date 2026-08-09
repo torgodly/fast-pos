@@ -11,9 +11,21 @@ export type SessionPayload = {
   venueId: VenueId | null;
 };
 
-function getSecret() {
-  const secret = process.env.SESSION_SECRET ?? "fast-pos-dev-secret-change-me";
+export function getSessionSecretBytes() {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET is required in production. Set a strong random value.",
+      );
+    }
+    return new TextEncoder().encode("fast-pos-dev-secret-change-me");
+  }
   return new TextEncoder().encode(secret);
+}
+
+function getSecret() {
+  return getSessionSecretBytes();
 }
 
 export async function signSessionToken(payload: SessionPayload) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
   Delete,
@@ -10,34 +10,31 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-export function PinPad({ venueId, venueName }: { venueId: string; venueName: string }) {
+const PIN_LENGTH = 4;
+
+export function PinPad({
+  venueId,
+  venueName,
+}: {
+  venueId: string;
+  venueName: string;
+}) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const submittingRef = useRef(false);
 
-  function press(digit: string) {
-    setError(null);
-    setPin((prev) => (prev.length >= 6 ? prev : prev + digit));
-  }
+  function login(currentPin: string) {
+    if (submittingRef.current || currentPin.length < PIN_LENGTH) return;
+    submittingRef.current = true;
 
-  function clear() {
-    setPin("");
-    setError(null);
-  }
-
-  function backspace() {
-    setPin((prev) => prev.slice(0, -1));
-    setError(null);
-  }
-
-  function submit() {
     startTransition(async () => {
       setError(null);
       try {
         const response = await fetch("/api/auth/pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ venueId, pin }),
+          body: JSON.stringify({ venueId, pin: currentPin }),
         });
         const result = await response.json();
         if (result.ok && result.redirectTo) {
@@ -49,8 +46,35 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
       } catch {
         setError("تعذر الاتصال بالسيرفر");
         setPin("");
+      } finally {
+        submittingRef.current = false;
       }
     });
+  }
+
+  function press(digit: string) {
+    if (pending || submittingRef.current) return;
+    setError(null);
+    setPin((prev) => {
+      if (prev.length >= PIN_LENGTH) return prev;
+      const next = prev + digit;
+      if (next.length === PIN_LENGTH) {
+        queueMicrotask(() => login(next));
+      }
+      return next;
+    });
+  }
+
+  function clear() {
+    if (pending || submittingRef.current) return;
+    setPin("");
+    setError(null);
+  }
+
+  function backspace() {
+    if (pending || submittingRef.current) return;
+    setPin((prev) => prev.slice(0, -1));
+    setError(null);
   }
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"];
@@ -67,11 +91,11 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
             دخول {venueName}
           </h1>
           <p className="text-xs text-base-content/55 sm:text-sm">
-            استخدم رمز الموظف للمتابعة
+            أدخل الرمز المكوّن من 4 أرقام
           </p>
 
           <div className="my-2 flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14">
-            {Array.from({ length: 4 }).map((_, i) => (
+            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
               <span
                 key={i}
                 className={`size-2.5 rounded-full transition-all sm:size-3 ${
@@ -84,7 +108,10 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
           </div>
 
           {error && (
-            <div role="alert" className="alert alert-error alert-soft w-full py-2 text-sm">
+            <div
+              role="alert"
+              className="alert alert-error alert-soft w-full py-2 text-sm"
+            >
               <span>{error}</span>
             </div>
           )}
@@ -136,8 +163,8 @@ export function PinPad({ venueId, venueName }: { venueId: string; venueName: str
           <button
             type="button"
             className="btn btn-primary btn-lg mt-1 w-full rounded-2xl shadow-lg shadow-primary/20"
-            onClick={submit}
-            disabled={pending || pin.length < 4}
+            onClick={() => login(pin)}
+            disabled={pending || pin.length < PIN_LENGTH}
           >
             {pending ? (
               <>
