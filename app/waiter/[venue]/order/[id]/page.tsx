@@ -15,6 +15,7 @@ import {
   orders,
   tables,
 } from "@/lib/db/schema";
+import { availableAtVenue } from "@/lib/menu/scope";
 import { isVenueId } from "@/lib/venues";
 
 export default async function WaiterOrderPage({
@@ -51,14 +52,19 @@ export default async function WaiterOrderPage({
   const cats = db
     .select()
     .from(categories)
-    .where(and(eq(categories.venueId, venue), eq(categories.active, true)))
+    .where(
+      and(
+        availableAtVenue(categories.venueId, venue),
+        eq(categories.active, true),
+      ),
+    )
     .orderBy(asc(categories.sortOrder))
     .all();
 
   const menuItems = db
     .select()
     .from(items)
-    .where(eq(items.venueId, venue))
+    .where(availableAtVenue(items.venueId, venue))
     .all();
 
   const lines = db
@@ -70,7 +76,7 @@ export default async function WaiterOrderPage({
   return (
     <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
-      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 p-1 sm:p-1.5">
+      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
         <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
           <p className="truncate text-xs font-black">
             #{order.id} · {table?.name ?? "بدون طاولة"}
@@ -112,6 +118,10 @@ export default async function WaiterOrderPage({
             <KitchenConfirmButton
               orderId={orderId}
               disabled={lines.length === 0}
+              allSent={
+                lines.length > 0 &&
+                lines.every((line) => (line.kitchenSentQty ?? 0) >= line.qty)
+              }
             />
           }
         />

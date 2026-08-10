@@ -9,6 +9,7 @@ import { QuickSaleBoard } from "@/components/QuickSaleBoard";
 import { db } from "@/lib/db";
 import { categories, items } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
+import { availableAtVenue } from "@/lib/menu/scope";
 
 export default async function CashierQuickPage({
   params,
@@ -27,20 +28,25 @@ export default async function CashierQuickPage({
   const cats = db
     .select()
     .from(categories)
-    .where(and(eq(categories.venueId, venue), eq(categories.active, true)))
+    .where(
+      and(
+        availableAtVenue(categories.venueId, venue),
+        eq(categories.active, true),
+      ),
+    )
     .orderBy(asc(categories.sortOrder))
     .all();
 
   const menuItems = db
     .select()
     .from(items)
-    .where(and(eq(items.venueId, venue), eq(items.active, true)))
+    .where(and(availableAtVenue(items.venueId, venue), eq(items.active, true)))
     .all();
 
   return (
     <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
-      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 p-1 sm:p-1.5">
+      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
         <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
           <p className="truncate text-xs font-black">
             بيع سريع

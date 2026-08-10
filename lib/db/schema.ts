@@ -36,9 +36,8 @@ export const users = sqliteTable(
 
 export const categories = sqliteTable("categories", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  venueId: text("venue_id")
-    .notNull()
-    .references(() => venues.id),
+  /** null = shared (cafe + restaurant) */
+  venueId: text("venue_id").references(() => venues.id),
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   kitchenPrinterId: integer("kitchen_printer_id").references(() => printers.id),
@@ -74,9 +73,8 @@ export const cashierStations = sqliteTable("cashier_stations", {
 
 export const items = sqliteTable("items", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  venueId: text("venue_id")
-    .notNull()
-    .references(() => venues.id),
+  /** null = shared (cafe + restaurant) */
+  venueId: text("venue_id").references(() => venues.id),
   categoryId: integer("category_id")
     .notNull()
     .references(() => categories.id),

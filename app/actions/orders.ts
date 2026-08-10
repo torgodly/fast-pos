@@ -27,6 +27,8 @@ import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
 import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
+import { resolveKitchenPrinterForVenue } from "@/lib/printers";
+import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 
 function recalcOrderTotal(orderId: number) {
@@ -121,13 +123,17 @@ export async function addItemToOrder(orderId: number, itemId: number) {
     return { error: "هذه الطاولة مع سفرادجي آخر" };
   }
 
+  if (!isVenueId(order.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
   const item = db
     .select()
     .from(items)
     .where(
       and(
         eq(items.id, itemId),
-        eq(items.venueId, order.venueId),
+        availableAtVenue(items.venueId, order.venueId),
         eq(items.active, true),
       ),
     )
@@ -294,23 +300,13 @@ async function sendPendingKitchenTickets(options: {
       .where(eq(categories.id, item.categoryId))
       .get();
 
-    // Category printer wins (item-level overrides were causing معجنات → مطبخ)
-    const resolvedPrinterId =
-      category?.kitchenPrinterId ?? item.kitchenPrinterId ?? null;
-
-    const printer = resolvedPrinterId
-      ? db
-          .select()
-          .from(printers)
-          .where(
-            and(
-              eq(printers.id, resolvedPrinterId),
-              eq(printers.venueId, options.venueId),
-              eq(printers.active, true),
-            ),
-          )
-          .get()
-      : null;
+    // Category printer wins when it belongs to this venue; otherwise auto-pick
+    const printer = resolveKitchenPrinterForVenue({
+      venueId: options.venueId,
+      categoryName: category?.name,
+      categoryPrinterId: category?.kitchenPrinterId,
+      itemPrinterId: item.kitchenPrinterId,
+    });
 
     if (!printer) {
       return {
@@ -738,7 +734,7 @@ export async function payQuickSale(
       .where(
         and(
           eq(items.id, line.itemId),
-          eq(items.venueId, venueId),
+          availableAtVenue(items.venueId, venueId),
           eq(items.active, true),
         ),
       )

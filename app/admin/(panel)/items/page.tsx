@@ -6,6 +6,7 @@ import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { categories, items, printers } from "@/lib/db/schema";
+import { availableAtVenue } from "@/lib/menu/scope";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import { getVenueName } from "@/lib/venues";
 
@@ -21,14 +22,14 @@ export default async function AdminItemsPage({
   const cats = db
     .select()
     .from(categories)
-    .where(eq(categories.venueId, venue))
+    .where(availableAtVenue(categories.venueId, venue))
     .orderBy(asc(categories.sortOrder))
     .all();
 
   const allItems = db
     .select()
     .from(items)
-    .where(eq(items.venueId, venue))
+    .where(availableAtVenue(items.venueId, venue))
     .all();
 
   const kitchenPrinters = db
@@ -60,7 +61,7 @@ export default async function AdminItemsPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">إدارة الأصناف</h2>
             <p className="text-sm text-base-content/45">
-              أنشئ التصنيفات وأضف الأصناف داخل كل مجموعة — {getVenueName(venue)}
+              تصنيفات وأصناف {getVenueName(venue)} + المشتركة بين الفرعين
             </p>
           </div>
         </div>
@@ -75,6 +76,7 @@ export default async function AdminItemsPage({
           sortOrder: cat.sortOrder,
           kitchenPrinterId: cat.kitchenPrinterId,
           active: cat.active,
+          venueId: cat.venueId,
         }))}
         items={allItems.map((item) => ({
           id: item.id,
@@ -82,6 +84,7 @@ export default async function AdminItemsPage({
           categoryId: item.categoryId,
           price: item.price,
           active: item.active,
+          venueId: item.venueId,
         }))}
         kitchenPrinters={kitchenPrinters.map((p) => ({
           id: p.id,

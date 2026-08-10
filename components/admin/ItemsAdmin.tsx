@@ -24,7 +24,12 @@ import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { ToggleActiveButton } from "@/components/admin/ToggleActiveButton";
 import { ActionFeedback } from "@/components/ActionFeedback";
 import type { VenueId } from "@/lib/types";
-import { formatMoney } from "@/lib/venues";
+import {
+  menuScopeLabel,
+  venueIdToScope,
+  type MenuVenueScope,
+} from "@/lib/menu/scope";
+import { formatMoney, getVenueName } from "@/lib/venues";
 
 type CategoryRow = {
   id: number;
@@ -32,6 +37,7 @@ type CategoryRow = {
   sortOrder: number;
   kitchenPrinterId: number | null;
   active: boolean;
+  venueId: string | null;
 };
 
 type ItemRow = {
@@ -40,6 +46,7 @@ type ItemRow = {
   categoryId: number;
   price: number;
   active: boolean;
+  venueId: string | null;
 };
 
 type PrinterOption = {
@@ -101,12 +108,26 @@ export function ItemsAdmin({
     | { mode: "edit"; category: CategoryRow }
     | null
   >(null);
+  const [categoryScopeDraft, setCategoryScopeDraft] =
+    useState<MenuVenueScope>(venueId);
 
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
 
   const editingCategory =
     categoryModal?.mode === "edit" ? categoryModal.category : null;
   const editingItem = itemModal?.mode === "edit" ? itemModal.item : null;
+
+  function openCategoryCreate() {
+    setError(null);
+    setCategoryScopeDraft(venueId);
+    setCategoryModal({ mode: "create" });
+  }
+
+  function openCategoryEdit(category: CategoryRow) {
+    setError(null);
+    setCategoryScopeDraft(venueIdToScope(category.venueId));
+    setCategoryModal({ mode: "edit", category });
+  }
 
   function printerName(id: number | null) {
     if (!id) return null;
@@ -123,7 +144,6 @@ export function ItemsAdmin({
   function submitCategory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    formData.set("venueId", venueId);
 
     startTransition(async () => {
       setError(null);
@@ -140,9 +160,9 @@ export function ItemsAdmin({
   function submitItem(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
-    formData.set("venueId", venueId);
     if (selected && itemModal?.mode === "create") {
       formData.set("categoryId", String(selected.id));
+      formData.set("venueScope", venueIdToScope(selected.venueId));
     }
 
     startTransition(async () => {
@@ -157,25 +177,88 @@ export function ItemsAdmin({
     });
   }
 
+  function ScopeBadge({ venueScopeId }: { venueScopeId: string | null }) {
+    const scope = venueIdToScope(venueScopeId);
+    const tone =
+      scope === "shared"
+        ? "badge-secondary"
+        : scope === "restaurant"
+          ? "badge-primary"
+          : "badge-accent";
+    return (
+      <span className={`badge badge-sm ${tone} badge-soft`}>
+        {menuScopeLabel(scope)}
+      </span>
+    );
+  }
+
+  function ScopeSelect({
+    name,
+    defaultScope,
+    locked,
+    onChange,
+  }: {
+    name: string;
+    defaultScope: MenuVenueScope;
+    locked?: boolean;
+    onChange?: (scope: MenuVenueScope) => void;
+  }) {
+    if (locked) {
+      return (
+        <>
+          <input type="hidden" name={name} value={defaultScope} />
+          <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
+            النطاق: <strong>{menuScopeLabel(defaultScope)}</strong>
+            <span className="ms-1 text-xs text-base-content/45">
+              (يطابق التصنيف)
+            </span>
+          </div>
+        </>
+      );
+    }
+    return (
+      <label className="form-control w-full">
+        <span className="label-text mb-2 font-bold">النطاق</span>
+        <select
+          name={name}
+          className="select select-bordered w-full"
+          defaultValue={defaultScope}
+          required
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === "shared" || value === "restaurant" || value === "cafe") {
+              onChange?.(value);
+            }
+          }}
+        >
+          <option value={venueId}>{getVenueName(venueId)} فقط</option>
+          <option value="shared">مشترك (مطعم + كافيه)</option>
+          <option value={venueId === "cafe" ? "restaurant" : "cafe"}>
+            {getVenueName(venueId === "cafe" ? "restaurant" : "cafe")} فقط
+          </option>
+        </select>
+      </label>
+    );
+  }
+
   return (
     <>
       {/* Quick guide */}
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
-            n: "1",
+            title: "اختر النطاق",
+            desc: "مطعم / كافيه / مشترك",
+          },
+          {
+            n: "2",
             title: "أنشئ تصنيفاً",
             desc: "قهوة، إفطار، حلويات…",
           },
           {
-            n: "2",
-            title: "اختر طابعة المطبخ",
-            desc: "مرّة واحدة لكل تصنيف",
-          },
-          {
             n: "3",
             title: "أضف الأصناف",
-            desc: "داخل التصنيف المختار",
+            desc: "مرة واحدة للمشترك بين الفرعين",
           },
         ].map((step) => (
           <div
@@ -217,10 +300,7 @@ export function ItemsAdmin({
               <button
                 type="button"
                 className="btn btn-primary btn-sm gap-1.5 rounded-xl"
-                onClick={() => {
-                  setError(null);
-                  setCategoryModal({ mode: "create" });
-                }}
+                onClick={openCategoryCreate}
               >
                 <FolderPlus className="size-4" />
                 تصنيف جديد
@@ -234,7 +314,7 @@ export function ItemsAdmin({
                 <button
                   type="button"
                   className="btn btn-outline btn-sm mt-4 rounded-xl"
-                  onClick={() => setCategoryModal({ mode: "create" })}
+                  onClick={openCategoryCreate}
                 >
                   إنشاء أول تصنيف
                 </button>
@@ -248,6 +328,7 @@ export function ItemsAdmin({
                   const isSelected = cat.id === selectedId;
                   const hasPrinter = !!cat.kitchenPrinterId;
                   const printer = printerName(cat.kitchenPrinterId);
+                  const isShared = cat.venueId == null;
 
                   return (
                     <button
@@ -270,19 +351,27 @@ export function ItemsAdmin({
                         >
                           <FolderOpen className="size-4" />
                         </span>
-                        {hasPrinter ? (
+                        {isShared || hasPrinter ? (
                           <CheckCircle2 className="size-4 shrink-0 text-success" />
                         ) : (
                           <AlertCircle className="size-4 shrink-0 text-warning" />
                         )}
                       </span>
                       <span className="mt-2 block min-w-0">
+                        <span className="mb-1 inline-flex">
+                          <ScopeBadge venueScopeId={cat.venueId} />
+                        </span>
                         <span className="block line-clamp-2 text-sm font-black leading-5">
                           {cat.name}
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-base-content/45">
                           <span>{count} صنف</span>
-                          {printer ? (
+                          {isShared ? (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span>طابعة تلقائية حسب الفرع</span>
+                            </>
+                          ) : printer ? (
                             <>
                               <span aria-hidden>·</span>
                               <span className="truncate">{printer}</span>
@@ -322,6 +411,7 @@ export function ItemsAdmin({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-xl font-black">{selected.name}</h3>
+                      <ScopeBadge venueScopeId={selected.venueId} />
                       {!selected.active ? (
                         <span className="badge badge-ghost badge-sm">معطّل</span>
                       ) : null}
@@ -329,11 +419,13 @@ export function ItemsAdmin({
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-base-content/55">
                       <span className="inline-flex items-center gap-1.5">
                         <Printer className="size-3.5" />
-                        {printerName(selected.kitchenPrinterId) ?? (
-                          <span className="font-bold text-warning">
-                            لم تُحدَّد طابعة
-                          </span>
-                        )}
+                        {selected.venueId == null
+                          ? "طابعة تلقائية حسب الفرع"
+                          : (printerName(selected.kitchenPrinterId) ?? (
+                              <span className="font-bold text-warning">
+                                لم تُحدَّد طابعة
+                              </span>
+                            ))}
                       </span>
                       <span>ترتيب: {selected.sortOrder}</span>
                       <span>{selectedItems.length} صنف</span>
@@ -343,10 +435,7 @@ export function ItemsAdmin({
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
-                      onClick={() => {
-                        setError(null);
-                        setCategoryModal({ mode: "edit", category: selected });
-                      }}
+                      onClick={() => openCategoryEdit(selected)}
                     >
                       <Pencil className="size-3.5" />
                       تعديل التصنيف
@@ -483,6 +572,16 @@ export function ItemsAdmin({
           {editingCategory ? (
             <input type="hidden" name="id" value={editingCategory.id} />
           ) : null}
+          <ScopeSelect
+            key={
+              categoryModal
+                ? `${categoryModal.mode}-${editingCategory?.id ?? "new"}`
+                : "cat-closed"
+            }
+            name="venueScope"
+            defaultScope={categoryScopeDraft}
+            onChange={setCategoryScopeDraft}
+          />
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم التصنيف</span>
             <input
@@ -504,27 +603,35 @@ export function ItemsAdmin({
                 required
               />
             </label>
-            <label className="form-control w-full">
-              <span className="label-text mb-2 font-bold">طابعة المطبخ</span>
-              <select
-                name="kitchenPrinterId"
-                className="select select-bordered w-full"
-                defaultValue={editingCategory?.kitchenPrinterId ?? ""}
-              >
-                <option value="">— بدون —</option>
-                {(editingCategory ? allKitchenPrinters : kitchenPrinters).map(
-                  (p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ),
-                )}
-              </select>
-            </label>
+            {categoryScopeDraft === "shared" ? (
+              <div className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
+                التصنيف المشترك يختار طابعة المطبخ تلقائياً عند الطلب حسب
+                الفرع (مطعم أو كافيه).
+                <input type="hidden" name="kitchenPrinterId" value="" />
+              </div>
+            ) : (
+              <label className="form-control w-full">
+                <span className="label-text mb-2 font-bold">طابعة المطبخ</span>
+                <select
+                  name="kitchenPrinterId"
+                  className="select select-bordered w-full"
+                  defaultValue={editingCategory?.kitchenPrinterId ?? ""}
+                >
+                  <option value="">— بدون —</option>
+                  {(editingCategory ? allKitchenPrinters : kitchenPrinters).map(
+                    (p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+            )}
           </div>
           <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
-            كل الأصناف في هذا التصنيف تُطبع على الطابعة المختارة عند إرسال
-            الطلب للمطبخ.
+            الأصناف داخل التصنيف ترث نفس النطاق. المشترك يظهر في المطعم
+            والكافيه معاً دون تكرار.
           </p>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
@@ -563,6 +670,15 @@ export function ItemsAdmin({
           {!editingItem && selected ? (
             <input type="hidden" name="categoryId" value={selected.id} />
           ) : null}
+          <ScopeSelect
+            name="venueScope"
+            defaultScope={
+              editingItem
+                ? venueIdToScope(editingItem.venueId)
+                : venueIdToScope(selected?.venueId ?? venueId)
+            }
+            locked
+          />
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الصنف</span>
             <input
@@ -584,7 +700,9 @@ export function ItemsAdmin({
               >
                 {cats
                   .filter(
-                    (c) => c.active || c.id === editingItem.categoryId,
+                    (c) =>
+                      (c.active || c.id === editingItem.categoryId) &&
+                      c.venueId === editingItem.venueId,
                   )
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((c) => (

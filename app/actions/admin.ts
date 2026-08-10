@@ -32,6 +32,10 @@ import type {
 } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
 import {
+  parseMenuVenueScope,
+  scopeToVenueId,
+} from "@/lib/menu/scope";
+import {
   isPrinterRole,
   kitchenPrinterRolesFilter,
   supportsCheckout,
@@ -98,7 +102,7 @@ function syncCheckoutStation(
 export async function upsertCategory(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const venueId = String(formData.get("venueId") ?? "");
+  const scope = parseMenuVenueScope(String(formData.get("venueScope") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
   const kitchenPrinterRaw = String(formData.get("kitchenPrinterId") ?? "");
@@ -106,11 +110,20 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
     ? Number(kitchenPrinterRaw)
     : null;
 
-  if (!isVenueId(venueId) || !name) {
+  if (!scope || !name) {
     return { error: "بيانات التصنيف غير مكتملة" };
   }
 
-  if (kitchenPrinterId) {
+  const venueId = scopeToVenueId(scope);
+
+  // Shared categories resolve printers per selling venue at print time.
+  if (scope === "shared" && kitchenPrinterId) {
+    return {
+      error: "التصنيف المشترك لا يُربط بطابعة واحدة — تُختار تلقائياً حسب الفرع",
+    };
+  }
+
+  if (kitchenPrinterId && venueId) {
     const printer = db
       .select()
       .from(printers)
@@ -131,14 +144,32 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
     name,
     sortOrder,
     venueId,
-    kitchenPrinterId: kitchenPrinterId || null,
+    kitchenPrinterId: scope === "shared" ? null : kitchenPrinterId || null,
   };
 
   if (id) {
-    db.update(categories)
-      .set(values)
+    const existing = db
+      .select()
+      .from(categories)
       .where(eq(categories.id, id))
-      .run();
+      .get();
+    if (!existing) return { error: "التصنيف غير موجود" };
+
+    const linkedItems = db
+      .select()
+      .from(items)
+      .where(eq(items.categoryId, id))
+      .all();
+    for (const item of linkedItems) {
+      if (item.venueId !== venueId) {
+        return {
+          error:
+            "لا يمكن تغيير نطاق التصنيف — الأصناف بداخله بنطاق مختلف. غيّر الأصناف أولاً أو أنشئ تصنيفاً جديداً",
+        };
+      }
+    }
+
+    db.update(categories).set(values).where(eq(categories.id, id)).run();
   } else {
     db.insert(categories)
       .values({ ...values, active: true })
@@ -173,13 +204,28 @@ export async function deleteCategory(id: number): Promise<ActionResult> {
 export async function upsertItem(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const venueId = String(formData.get("venueId") ?? "");
+  const scope = parseMenuVenueScope(String(formData.get("venueScope") ?? ""));
   const categoryId = Number(formData.get("categoryId"));
   const name = String(formData.get("name") ?? "").trim();
   const price = Number(formData.get("price"));
 
-  if (!isVenueId(venueId) || !name || !categoryId || Number.isNaN(price)) {
+  if (!scope || !name || !categoryId || Number.isNaN(price) || price < 0) {
     return { error: "بيانات الصنف غير مكتملة" };
+  }
+
+  const venueId = scopeToVenueId(scope);
+  const category = db
+    .select()
+    .from(categories)
+    .where(eq(categories.id, categoryId))
+    .get();
+  if (!category) return { error: "التصنيف غير موجود" };
+
+  if (category.venueId !== venueId) {
+    return {
+      error:
+        "نطاق الصنف يجب أن يطابق نطاق التصنيف (مشترك مع مشترك، مطعم مع مطعم…)",
+    };
   }
 
   const values = {

@@ -1,16 +1,19 @@
 "use client";
 
 import { useTransition } from "react";
-import { LoaderCircle, Printer } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Printer } from "lucide-react";
 import { confirmKitchenOrder } from "@/app/actions/orders";
 import { useToast } from "@/components/ToastProvider";
 
 export function KitchenConfirmButton({
   orderId,
   disabled,
+  allSent = false,
 }: {
   orderId: number;
   disabled?: boolean;
+  /** True when every line qty is already printed to kitchen. */
+  allSent?: boolean;
 }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -29,10 +32,22 @@ export function KitchenConfirmButton({
     });
   }
 
+  if (allSent) {
+    return (
+      <div
+        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-success/40 bg-success/10 text-xs font-black text-success"
+        role="status"
+      >
+        <CheckCircle2 className="size-4" />
+        تم الإرسال للمطبخ
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-sm h-9 min-h-9 w-full gap-1.5 rounded-md text-xs"
+      className="btn btn-secondary btn-sm h-10 min-h-10 w-full gap-1.5 rounded-md text-xs"
       disabled={pending || disabled}
       onClick={confirm}
     >

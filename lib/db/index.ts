@@ -8,6 +8,7 @@ import { venues } from "./schema";
 import { migrateReportGroups } from "./migrate-report-groups";
 import { migrateCafeMenu } from "./migrate-cafe-menu";
 import { migrateRestaurantMenu } from "./migrate-restaurant-menu";
+import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -76,6 +77,7 @@ function createDb() {
 
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
+  migrateNullableMenuVenue(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
   try {
@@ -120,7 +122,7 @@ function ensureSchema(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      venue_id TEXT NOT NULL REFERENCES venues(id),
+      venue_id TEXT REFERENCES venues(id),
       name TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
@@ -146,7 +148,7 @@ function ensureSchema(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      venue_id TEXT NOT NULL REFERENCES venues(id),
+      venue_id TEXT REFERENCES venues(id),
       category_id INTEGER NOT NULL REFERENCES categories(id),
       name TEXT NOT NULL,
       price REAL NOT NULL,

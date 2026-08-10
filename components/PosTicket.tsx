@@ -45,52 +45,52 @@ export function PosTicketLines({
         return (
           <li
             key={line.key}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 py-0.5"
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 py-1"
           >
             <div className="min-w-0">
-              <p className="truncate text-[11px] font-bold leading-4">
+              <p className="truncate text-xs font-bold leading-5">
                 {line.name}
                 {kitchenSent > 0 ? (
-                  <span className="ms-1 text-[9px] font-bold text-warning">
-                    ك{kitchenSent}
+                  <span className="ms-1 text-[10px] font-bold text-warning">
+                    مطبخ {kitchenSent}
                   </span>
                 ) : null}
               </p>
             </div>
-            <div className="inline-flex items-center rounded border border-base-300">
+            <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
               <button
                 type="button"
-                className="grid size-6 place-items-center text-base-content/70 disabled:opacity-30"
+                className="grid size-10 place-items-center text-base-content/70 disabled:opacity-30"
                 disabled={pending || !canReduce}
                 onClick={() => onChangeQty(line.key, line.qty - 1)}
                 aria-label="تقليل"
               >
-                <Minus className="size-3" />
+                <Minus className="size-4" strokeWidth={2.5} />
               </button>
-              <span className="w-5 text-center text-[11px] font-black tabular-nums">
+              <span className="min-w-8 px-0.5 text-center text-sm font-black tabular-nums">
                 {line.qty}
               </span>
               <button
                 type="button"
-                className="grid size-6 place-items-center text-base-content/70 disabled:opacity-30"
+                className="grid size-10 place-items-center text-base-content/70 disabled:opacity-30"
                 disabled={pending}
                 onClick={() => onChangeQty(line.key, line.qty + 1)}
                 aria-label="زيادة"
               >
-                <Plus className="size-3" />
+                <Plus className="size-4" strokeWidth={2.5} />
               </button>
             </div>
-            <p className="w-[4.75rem] shrink-0 whitespace-nowrap text-end text-[11px] font-black tabular-nums text-primary">
+            <p className="min-w-[5.25rem] shrink-0 whitespace-nowrap text-end text-xs font-black tabular-nums text-primary">
               {formatMoney(line.lineTotal)}
             </p>
             <button
               type="button"
-              className="grid size-6 place-items-center text-error/80 disabled:opacity-20"
+              className="grid size-10 place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20"
               disabled={pending || !canRemove}
               onClick={() => onRemove(line.key)}
               aria-label="حذف"
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-4.5" />
             </button>
           </li>
         );
@@ -121,7 +121,7 @@ export function PosTicketPanel({
   onRemove: (key: string | number) => void;
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border border-base-300 bg-base-100">
+    <aside className="flex h-full min-h-0 flex-col overflow-hidden border border-base-300 bg-base-100">
       <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-2 py-1">
         <p className="text-[11px] font-black">
           {title ?? "فاتورة"}
@@ -133,7 +133,7 @@ export function PosTicketPanel({
           {formatMoney(total)}
         </p>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1.5">
+      <div className="touch-scroll min-h-0 flex-1 px-1.5">
         <PosTicketLines
           lines={lines}
           pending={pending}
@@ -208,7 +208,7 @@ export function PosMobileSheet({
         aria-label="إغلاق"
         onClick={onClose}
       />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col border-t border-base-300 bg-base-100">
+      <div className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col overflow-hidden border-t border-base-300 bg-base-100">
         <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-2 py-1.5">
           <p className="text-xs font-black">
             {title}{" "}
@@ -223,7 +223,7 @@ export function PosMobileSheet({
             <X className="size-4" />
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-1.5">{children}</div>
+        <div className="touch-scroll min-h-0 flex-1 px-1.5">{children}</div>
         <div className="shrink-0 space-y-1.5 border-t border-base-300 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {footer}
         </div>

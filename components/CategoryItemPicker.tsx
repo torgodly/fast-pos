@@ -67,9 +67,9 @@ export function CategoryItemPicker({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-      <div className="shrink-0 overflow-x-auto">
-        <div className="flex w-max min-w-full gap-1">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
+      <div className="touch-scroll-x shrink-0">
+        <div className="flex w-max min-w-full gap-1 pb-0.5">
           {categoriesWithItems.map((cat) => {
             const picked = categoryCounts[cat.id] ?? 0;
             const active = cat.id === activeCategoryId;
@@ -100,7 +100,7 @@ export function CategoryItemPicker({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      <div className="touch-scroll min-h-0 flex-1">
         <div className="grid grid-cols-4 gap-1 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
           {activeItems.map((item) => {
             const available = item.active !== false;
@@ -114,7 +114,7 @@ export function CategoryItemPicker({
                   onAddItem(item);
                 }}
                 title={available ? item.name : "غير متوفر"}
-                className={`flex min-h-11 touch-manipulation flex-col justify-between rounded-md border px-1.5 py-1 text-right active:bg-primary/10 disabled:opacity-50 ${
+                className={`flex min-h-11 flex-col justify-between rounded-md border px-1.5 py-1 text-right active:bg-primary/10 disabled:opacity-50 ${
                   available
                     ? "border-base-300 bg-base-100 hover:border-primary/50"
                     : "border-base-300 bg-base-200"
