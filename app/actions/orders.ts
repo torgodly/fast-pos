@@ -27,7 +27,7 @@ import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
 import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
-import { resolveKitchenPrinterForVenue } from "@/lib/printers";
+import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-printer";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 
