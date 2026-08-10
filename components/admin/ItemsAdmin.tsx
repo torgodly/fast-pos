@@ -29,7 +29,7 @@ import {
   venueIdToScope,
   type MenuVenueScope,
 } from "@/lib/menu/scope";
-import { formatMoney, getVenueName } from "@/lib/venues";
+import { formatMoney } from "@/lib/venues";
 
 type CategoryRow = {
   id: number;
@@ -192,52 +192,62 @@ export function ItemsAdmin({
     );
   }
 
-  function ScopeSelect({
-    name,
-    defaultScope,
-    locked,
+  function CategoryScopePicker({
+    value,
     onChange,
   }: {
-    name: string;
-    defaultScope: MenuVenueScope;
-    locked?: boolean;
-    onChange?: (scope: MenuVenueScope) => void;
+    value: MenuVenueScope;
+    onChange: (scope: MenuVenueScope) => void;
   }) {
-    if (locked) {
-      return (
-        <>
-          <input type="hidden" name={name} value={defaultScope} />
-          <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
-            النطاق: <strong>{menuScopeLabel(defaultScope)}</strong>
-            <span className="ms-1 text-xs text-base-content/45">
-              (يطابق التصنيف)
-            </span>
-          </div>
-        </>
-      );
-    }
+    const options: { id: MenuVenueScope; label: string; hint: string }[] = [
+      {
+        id: "restaurant",
+        label: "مطعم فقط",
+        hint: "يظهر في المطعم",
+      },
+      {
+        id: "cafe",
+        label: "كافيه فقط",
+        hint: "يظهر في الكافيه",
+      },
+      {
+        id: "shared",
+        label: "مشترك",
+        hint: "مطعم + كافيه معاً",
+      },
+    ];
+
     return (
-      <label className="form-control w-full">
-        <span className="label-text mb-2 font-bold">النطاق</span>
-        <select
-          name={name}
-          className="select select-bordered w-full"
-          defaultValue={defaultScope}
-          required
-          onChange={(event) => {
-            const value = event.target.value;
-            if (value === "shared" || value === "restaurant" || value === "cafe") {
-              onChange?.(value);
-            }
-          }}
-        >
-          <option value={venueId}>{getVenueName(venueId)} فقط</option>
-          <option value="shared">مشترك (مطعم + كافيه)</option>
-          <option value={venueId === "cafe" ? "restaurant" : "cafe"}>
-            {getVenueName(venueId === "cafe" ? "restaurant" : "cafe")} فقط
-          </option>
-        </select>
-      </label>
+      <div className="space-y-2">
+        <p className="text-sm font-black">أين يظهر هذا التصنيف؟</p>
+        <input type="hidden" name="venueScope" value={value} />
+        <div className="grid grid-cols-3 gap-2">
+          {options.map((option) => {
+            const active = value === option.id;
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => onChange(option.id)}
+                className={`rounded-xl border px-2 py-3 text-center transition ${
+                  active
+                    ? "border-primary bg-primary text-primary-content shadow-md"
+                    : "border-base-300 bg-base-100 hover:border-primary/40"
+                }`}
+              >
+                <span className="block text-sm font-black">{option.label}</span>
+                <span
+                  className={`mt-0.5 block text-[10px] leading-tight ${
+                    active ? "text-primary-content/80" : "text-base-content/45"
+                  }`}
+                >
+                  {option.hint}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     );
   }
 
@@ -572,14 +582,8 @@ export function ItemsAdmin({
           {editingCategory ? (
             <input type="hidden" name="id" value={editingCategory.id} />
           ) : null}
-          <ScopeSelect
-            key={
-              categoryModal
-                ? `${categoryModal.mode}-${editingCategory?.id ?? "new"}`
-                : "cat-closed"
-            }
-            name="venueScope"
-            defaultScope={categoryScopeDraft}
+          <CategoryScopePicker
+            value={categoryScopeDraft}
             onChange={setCategoryScopeDraft}
           />
           <label className="form-control w-full">
@@ -604,9 +608,9 @@ export function ItemsAdmin({
               />
             </label>
             {categoryScopeDraft === "shared" ? (
-              <div className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
-                التصنيف المشترك يختار طابعة المطبخ تلقائياً عند الطلب حسب
-                الفرع (مطعم أو كافيه).
+              <div className="rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-2 text-xs text-base-content/70">
+                <strong className="text-secondary">مشترك:</strong> يظهر في
+                المطعم والكافيه. طابعة المطبخ تُختار تلقائياً حسب الفرع.
                 <input type="hidden" name="kitchenPrinterId" value="" />
               </div>
             ) : (
@@ -629,10 +633,17 @@ export function ItemsAdmin({
               </label>
             )}
           </div>
-          <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
-            الأصناف داخل التصنيف ترث نفس النطاق. المشترك يظهر في المطعم
-            والكافيه معاً دون تكرار.
-          </p>
+          {editingCategory ? (
+            <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
+              تغيير النطاق إلى <strong>مشترك</strong> يجعل كل أصناف هذا التصنيف
+              مشتركة أيضاً.
+            </p>
+          ) : (
+            <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
+              اختر <strong>مشترك</strong> إذا كان التصنيف والأصناف نفسها في
+              المطعم والكافيه — بدون تكرار.
+            </p>
+          )}
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
             <button
@@ -670,15 +681,26 @@ export function ItemsAdmin({
           {!editingItem && selected ? (
             <input type="hidden" name="categoryId" value={selected.id} />
           ) : null}
-          <ScopeSelect
-            name="venueScope"
-            defaultScope={
-              editingItem
-                ? venueIdToScope(editingItem.venueId)
-                : venueIdToScope(selected?.venueId ?? venueId)
-            }
-            locked
-          />
+          <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
+            النطاق:{" "}
+            <strong>
+              {menuScopeLabel(
+                venueIdToScope(
+                  editingItem?.venueId ?? selected?.venueId ?? venueId,
+                ),
+              )}
+            </strong>
+            <span className="ms-1 text-xs text-base-content/45">
+              (يطابق التصنيف)
+            </span>
+            <input
+              type="hidden"
+              name="venueScope"
+              value={venueIdToScope(
+                editingItem?.venueId ?? selected?.venueId ?? venueId,
+              )}
+            />
+          </div>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الصنف</span>
             <input

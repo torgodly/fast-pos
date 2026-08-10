@@ -155,21 +155,12 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
       .get();
     if (!existing) return { error: "التصنيف غير موجود" };
 
-    const linkedItems = db
-      .select()
-      .from(items)
-      .where(eq(items.categoryId, id))
-      .all();
-    for (const item of linkedItems) {
-      if (item.venueId !== venueId) {
-        return {
-          error:
-            "لا يمكن تغيير نطاق التصنيف — الأصناف بداخله بنطاق مختلف. غيّر الأصناف أولاً أو أنشئ تصنيفاً جديداً",
-        };
-      }
-    }
-
     db.update(categories).set(values).where(eq(categories.id, id)).run();
+    // Keep items in sync with the category scope (shared / cafe / restaurant).
+    db.update(items)
+      .set({ venueId })
+      .where(eq(items.categoryId, id))
+      .run();
   } else {
     db.insert(categories)
       .values({ ...values, active: true })
