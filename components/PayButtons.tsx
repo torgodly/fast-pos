@@ -69,23 +69,23 @@ export function PayButtons({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-1">
+      <div className="grid grid-cols-2 gap-1.5">
         <button
           type="button"
-          className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-md"
+          className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
           disabled={pending}
           onClick={() => askConfirm("cash")}
         >
-          <Banknote className="size-3.5" />
+          <Banknote className="size-4" />
           نقدي
         </button>
         <button
           type="button"
-          className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-md"
+          className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
           disabled={pending}
           onClick={() => askConfirm("card")}
         >
-          <CreditCard className="size-3.5" />
+          <CreditCard className="size-4" />
           بطاقة
         </button>
       </div>

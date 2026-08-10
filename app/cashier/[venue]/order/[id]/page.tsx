@@ -79,8 +79,8 @@ export default async function CashierOrderPage({
     <div className="flex h-dvh flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
       <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
-        <div className="flex h-8 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2">
-          <p className="truncate text-xs font-black">
+        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2.5">
+          <p className="truncate text-sm font-black">
             #{order.id} · {table?.name ?? "بيع سريع"}
             {waiter ? (
               <span className="font-bold text-base-content/45">

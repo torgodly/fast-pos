@@ -60,16 +60,16 @@ export function CategoryItemPicker({
 
   if (items.length === 0) {
     return (
-      <p className="py-8 text-center text-xs text-base-content/45">
+      <p className="py-8 text-center text-sm text-base-content/45">
         لا توجد أصناف متاحة
       </p>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-1.5 overflow-hidden">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden">
       <div className="touch-scroll-x shrink-0">
-        <div className="flex w-max min-w-full gap-1 pb-0.5">
+        <div className="flex w-max min-w-full gap-1.5 pb-0.5">
           {categoriesWithItems.map((cat) => {
             const picked = categoryCounts[cat.id] ?? 0;
             const active = cat.id === activeCategoryId;
@@ -78,7 +78,7 @@ export function CategoryItemPicker({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategoryId(cat.id)}
-                className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2.5 text-[11px] font-bold ${
+                className={`inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-bold ${
                   active
                     ? "bg-primary text-primary-content"
                     : "border border-base-300 bg-base-100 text-base-content hover:bg-base-200"
@@ -87,7 +87,7 @@ export function CategoryItemPicker({
                 {cat.name}
                 {picked > 0 ? (
                   <span
-                    className={`rounded px-1 text-[10px] font-black ${
+                    className={`rounded-md px-1.5 text-xs font-black ${
                       active ? "bg-white/20" : "bg-primary/15 text-primary"
                     }`}
                   >
@@ -101,7 +101,8 @@ export function CategoryItemPicker({
       </div>
 
       <div className="touch-scroll min-h-0 flex-1">
-        <div className="grid grid-cols-4 gap-1 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7">
+        {/* Fewer columns = readable tiles on 1024×768 POS monitors */}
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {activeItems.map((item) => {
             const available = item.active !== false;
             return (
@@ -114,21 +115,21 @@ export function CategoryItemPicker({
                   onAddItem(item);
                 }}
                 title={available ? item.name : "غير متوفر"}
-                className={`flex min-h-11 flex-col justify-between rounded-md border px-1.5 py-1 text-right active:bg-primary/10 disabled:opacity-50 ${
+                className={`flex min-h-16 flex-col justify-between rounded-lg border px-2 py-1.5 text-right active:bg-primary/10 disabled:opacity-50 ${
                   available
                     ? "border-base-300 bg-base-100 hover:border-primary/50"
                     : "border-base-300 bg-base-200"
                 }`}
               >
                 <span
-                  className={`line-clamp-2 text-[10px] font-bold leading-tight sm:text-[11px] ${
+                  className={`line-clamp-2 text-sm font-bold leading-snug ${
                     available ? "" : "text-base-content/45"
                   }`}
                 >
                   {item.name}
                 </span>
                 <span
-                  className={`mt-0.5 text-[10px] font-black tabular-nums sm:text-[11px] ${
+                  className={`mt-1 text-xs font-black tabular-nums ${
                     available ? "text-primary" : "text-error"
                   }`}
                 >
@@ -161,7 +162,7 @@ export function CategoryPickSummary({
       {rows.map(({ cat, qty }) => (
         <span
           key={cat.id}
-          className="rounded border border-base-300 px-1.5 py-0.5 text-[10px] font-bold"
+          className="rounded border border-base-300 px-1.5 py-0.5 text-xs font-bold"
         >
           {cat.name}{" "}
           <span className="text-primary">{qty}</span>

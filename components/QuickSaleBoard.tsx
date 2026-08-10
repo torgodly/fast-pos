@@ -153,23 +153,23 @@ export function QuickSaleBoard({
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
   const payFooter = (
-    <div className="grid grid-cols-2 gap-1">
+    <div className="grid grid-cols-2 gap-1.5">
       <button
         type="button"
-        className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-md"
+        className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
         disabled={pending || cart.length === 0}
         onClick={() => askConfirm("cash")}
       >
-        <Banknote className="size-3.5" />
+        <Banknote className="size-4" />
         نقدي
       </button>
       <button
         type="button"
-        className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-md"
+        className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
         disabled={pending || cart.length === 0}
         onClick={() => askConfirm("card")}
       >
-        <CreditCard className="size-3.5" />
+        <CreditCard className="size-4" />
         بطاقة
       </button>
     </div>
@@ -178,10 +178,10 @@ export function QuickSaleBoard({
   const mobileFooter = (
     <>
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold text-base-content/50">
+        <span className="text-sm font-bold text-base-content/50">
           الإجمالي
         </span>
-        <span className="text-base font-black tabular-nums text-primary">
+        <span className="text-lg font-black tabular-nums text-primary">
           {formatMoney(total)}
         </span>
       </div>

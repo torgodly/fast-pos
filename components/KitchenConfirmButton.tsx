@@ -35,10 +35,10 @@ export function KitchenConfirmButton({
   if (allSent) {
     return (
       <div
-        className="flex h-10 w-full items-center justify-center gap-1.5 rounded-md border border-success/40 bg-success/10 text-xs font-black text-success"
+        className="flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-success/40 bg-success/10 text-sm font-black text-success"
         role="status"
       >
-        <CheckCircle2 className="size-4" />
+        <CheckCircle2 className="size-4.5" />
         تم الإرسال للمطبخ
       </div>
     );
@@ -47,14 +47,14 @@ export function KitchenConfirmButton({
   return (
     <button
       type="button"
-      className="btn btn-secondary btn-sm h-10 min-h-10 w-full gap-1.5 rounded-md text-xs"
+      className="btn btn-secondary btn-sm h-11 min-h-11 w-full gap-1.5 rounded-lg text-sm"
       disabled={pending || disabled}
       onClick={confirm}
     >
       {pending ? (
-        <LoaderCircle className="size-3.5 animate-spin" />
+        <LoaderCircle className="size-4 animate-spin" />
       ) : (
-        <Printer className="size-3.5" />
+        <Printer className="size-4" />
       )}
       {pending ? "جاري الإرسال..." : "تأكيد للمطبخ"}
     </button>

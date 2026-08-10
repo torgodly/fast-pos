@@ -97,10 +97,10 @@ export function OrderMenu({
   const footerBlock = (
     <>
       <div className="flex items-center justify-between lg:hidden">
-        <span className="text-[11px] font-bold text-base-content/50">
+        <span className="text-sm font-bold text-base-content/50">
           الإجمالي
         </span>
-        <span className="text-base font-black tabular-nums text-primary">
+        <span className="text-lg font-black tabular-nums text-primary">
           {formatMoney(total)}
         </span>
       </div>
