@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { Boxes } from "lucide-react";
 import { ItemsAdmin } from "@/components/admin/ItemsAdmin";
+import { MenuExcelBar } from "@/components/admin/MenuExcelBar";
 import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
@@ -67,6 +68,8 @@ export default async function AdminItemsPage({
         </div>
         <VenueTabs basePath="/admin/items" venue={venue} />
       </div>
+
+      <MenuExcelBar />
 
       <ItemsAdmin
         venueId={venue}

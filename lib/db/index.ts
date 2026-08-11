@@ -5,12 +5,8 @@ import fs from "fs";
 import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
-import { migrateReportGroups } from "./migrate-report-groups";
-import { migrateCafeMenu } from "./migrate-cafe-menu";
-import { migrateRestaurantMenu } from "./migrate-restaurant-menu";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
 import { migrateTables } from "./migrate-tables";
-import { dedupeSharedCategories } from "./dedupe-shared-categories";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -83,11 +79,7 @@ function createDb() {
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
   try {
-    migrateReportGroups(sqlite);
-    migrateRestaurantMenu(sqlite);
-    migrateCafeMenu(sqlite);
     migrateTables(sqlite);
-    dedupeSharedCategories(sqlite);
   } catch {
     // best-effort remap for existing installs
   }
