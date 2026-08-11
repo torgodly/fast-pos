@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { categories, items, printers } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
+import type { VenueId } from "@/lib/types";
 import { getVenueName } from "@/lib/venues";
 
 export default async function AdminItemsPage({
@@ -49,7 +50,7 @@ export default async function AdminItemsPage({
   const allKitchenPrinters = db
     .select()
     .from(printers)
-    .where(and(eq(printers.venueId, venue), kitchenPrinterRolesFilter))
+    .where(kitchenPrinterRolesFilter)
     .all();
 
   return (
@@ -78,6 +79,8 @@ export default async function AdminItemsPage({
           name: cat.name,
           sortOrder: cat.sortOrder,
           kitchenPrinterId: cat.kitchenPrinterId,
+          restaurantKitchenPrinterId: cat.restaurantKitchenPrinterId,
+          cafeKitchenPrinterId: cat.cafeKitchenPrinterId,
           active: cat.active,
           venueId: cat.venueId,
         }))}
@@ -93,11 +96,13 @@ export default async function AdminItemsPage({
           id: p.id,
           name: p.name,
           active: p.active,
+          venueId: p.venueId as VenueId,
         }))}
         allKitchenPrinters={allKitchenPrinters.map((p) => ({
           id: p.id,
           name: p.name,
           active: p.active,
+          venueId: p.venueId as VenueId,
         }))}
       />
     </div>

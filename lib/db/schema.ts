@@ -41,6 +41,12 @@ export const categories = sqliteTable("categories", {
   name: text("name").notNull(),
   sortOrder: integer("sort_order").notNull().default(0),
   kitchenPrinterId: integer("kitchen_printer_id").references(() => printers.id),
+  restaurantKitchenPrinterId: integer(
+    "restaurant_kitchen_printer_id",
+  ).references(() => printers.id),
+  cafeKitchenPrinterId: integer("cafe_kitchen_printer_id").references(
+    () => printers.id,
+  ),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 

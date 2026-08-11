@@ -34,10 +34,25 @@ export function resolveKitchenPrinterForVenue(options: {
   venueId: VenueId;
   categoryName: string | null | undefined;
   categoryPrinterId: number | null | undefined;
+  restaurantPrinterId?: number | null;
+  cafePrinterId?: number | null;
   itemPrinterId: number | null | undefined;
 }): PrinterRow | null {
-  const { venueId, categoryName, categoryPrinterId, itemPrinterId } = options;
-  const candidateId = categoryPrinterId ?? itemPrinterId ?? null;
+  const {
+    venueId,
+    categoryName,
+    categoryPrinterId,
+    restaurantPrinterId,
+    cafePrinterId,
+    itemPrinterId,
+  } = options;
+  const venueLinked =
+    venueId === "cafe" ? cafePrinterId : restaurantPrinterId;
+  const managed =
+    restaurantPrinterId != null || cafePrinterId != null;
+  const candidateId = managed
+    ? (venueLinked ?? null)
+    : (venueLinked ?? categoryPrinterId ?? itemPrinterId ?? null);
 
   if (candidateId) {
     const linked = db
@@ -54,6 +69,9 @@ export function resolveKitchenPrinterForVenue(options: {
       .get();
     if (linked) return linked;
   }
+
+  // Once a shared category has per-venue printers, do not auto-pick the other branch.
+  if (managed) return null;
 
   const venuePrinters = db
     .select()

@@ -306,6 +306,8 @@ async function sendPendingKitchenTickets(options: {
       venueId: options.venueId,
       categoryName: category?.name,
       categoryPrinterId: category?.kitchenPrinterId,
+      restaurantPrinterId: category?.restaurantKitchenPrinterId,
+      cafePrinterId: category?.cafeKitchenPrinterId,
       itemPrinterId: item.kitchenPrinterId,
     });
 

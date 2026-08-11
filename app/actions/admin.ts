@@ -166,52 +166,100 @@ function mergeSameNamedCategoriesInto(keepId: number, name: string) {
   }
 }
 
+function parseOptionalPrinterId(raw: FormDataEntryValue | null) {
+  const value = String(raw ?? "").trim();
+  if (!value) return null;
+  const id = Number(value);
+  return Number.isFinite(id) ? id : null;
+}
+
+function kitchenPrinterForVenue(
+  printerId: number,
+  venueId: VenueId,
+  allowInactive: boolean,
+) {
+  const printer = db
+    .select()
+    .from(printers)
+    .where(
+      and(
+        eq(printers.id, printerId),
+        eq(printers.venueId, venueId),
+        kitchenPrinterRolesFilter,
+      ),
+    )
+    .get();
+  if (!printer || (!allowInactive && !printer.active)) {
+    return null;
+  }
+  return printer;
+}
+
 export async function upsertCategory(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const scope = parseMenuVenueScope(String(formData.get("venueScope") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
-  const kitchenPrinterRaw = String(formData.get("kitchenPrinterId") ?? "");
-  const kitchenPrinterId = kitchenPrinterRaw
-    ? Number(kitchenPrinterRaw)
-    : null;
+  const kitchenPrinterId = parseOptionalPrinterId(
+    formData.get("kitchenPrinterId"),
+  );
+  const restaurantKitchenPrinterId = parseOptionalPrinterId(
+    formData.get("restaurantKitchenPrinterId"),
+  );
+  const cafeKitchenPrinterId = parseOptionalPrinterId(
+    formData.get("cafeKitchenPrinterId"),
+  );
 
   if (!scope || !name) {
     return { error: "بيانات التصنيف غير مكتملة" };
   }
 
   const venueId = scopeToVenueId(scope);
+  const allowInactive = Boolean(id);
 
-  // Shared categories resolve printers per selling venue at print time.
-  if (scope === "shared" && kitchenPrinterId) {
-    return {
-      error: "التصنيف المشترك لا يُربط بطابعة واحدة — تُختار تلقائياً حسب الفرع",
-    };
-  }
-
-  if (kitchenPrinterId && venueId) {
-    const printer = db
-      .select()
-      .from(printers)
-      .where(
-        and(
-          eq(printers.id, kitchenPrinterId),
-          eq(printers.venueId, venueId),
-          kitchenPrinterRolesFilter,
-        ),
+  if (scope === "shared") {
+    if (
+      restaurantKitchenPrinterId &&
+      !kitchenPrinterForVenue(
+        restaurantKitchenPrinterId,
+        "restaurant",
+        allowInactive,
       )
-      .get();
-    if (!printer || (!id && !printer.active)) {
-      return { error: "طابعة المطبخ غير صالحة" };
+    ) {
+      return { error: "طابعة مطبخ المطعم غير صالحة" };
     }
+    if (
+      cafeKitchenPrinterId &&
+      !kitchenPrinterForVenue(cafeKitchenPrinterId, "cafe", allowInactive)
+    ) {
+      return { error: "طابعة مطبخ الكافيه غير صالحة" };
+    }
+  } else if (
+    kitchenPrinterId &&
+    venueId &&
+    !kitchenPrinterForVenue(kitchenPrinterId, venueId, allowInactive)
+  ) {
+    return { error: "طابعة المطبخ غير صالحة" };
   }
 
   const values = {
     name,
     sortOrder,
     venueId,
-    kitchenPrinterId: scope === "shared" ? null : kitchenPrinterId || null,
+    kitchenPrinterId: scope === "shared" ? null : kitchenPrinterId,
+    restaurantKitchenPrinterId:
+      scope === "shared"
+        ? restaurantKitchenPrinterId
+        : venueId === "restaurant"
+          ? kitchenPrinterId
+          : null,
+    cafeKitchenPrinterId:
+      scope === "shared"
+        ? cafeKitchenPrinterId
+        : venueId === "cafe"
+          ? kitchenPrinterId
+          : null,
   };
 
   if (id) {
@@ -612,6 +660,14 @@ export async function deletePrinter(id: number): Promise<ActionResult> {
   db.update(categories)
     .set({ kitchenPrinterId: null })
     .where(eq(categories.kitchenPrinterId, id))
+    .run();
+  db.update(categories)
+    .set({ restaurantKitchenPrinterId: null })
+    .where(eq(categories.restaurantKitchenPrinterId, id))
+    .run();
+  db.update(categories)
+    .set({ cafeKitchenPrinterId: null })
+    .where(eq(categories.cafeKitchenPrinterId, id))
     .run();
   db.delete(printers).where(eq(printers.id, id)).run();
   revalidatePrinters();

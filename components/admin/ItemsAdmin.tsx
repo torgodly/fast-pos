@@ -43,6 +43,8 @@ type CategoryRow = {
   name: string;
   sortOrder: number;
   kitchenPrinterId: number | null;
+  restaurantKitchenPrinterId: number | null;
+  cafeKitchenPrinterId: number | null;
   active: boolean;
   venueId: string | null;
 };
@@ -60,6 +62,7 @@ type PrinterOption = {
   id: number;
   name: string;
   active: boolean;
+  venueId: VenueId;
 };
 
 type ItemModalState =
@@ -149,6 +152,26 @@ export function ItemsAdmin({
   function printerName(id: number | null) {
     if (!id) return null;
     return allKitchenPrinters.find((p) => p.id === id)?.name ?? null;
+  }
+
+  function printersForVenue(target: VenueId, activeOnly = false) {
+    return allKitchenPrinters.filter(
+      (printer) =>
+        printer.venueId === target && (!activeOnly || printer.active),
+    );
+  }
+
+  function sharedPrinterSummary(cat: CategoryRow) {
+    const restaurant = printerName(cat.restaurantKitchenPrinterId);
+    const cafe = printerName(cat.cafeKitchenPrinterId);
+    if (restaurant && cafe) return `مطعم: ${restaurant} · كافيه: ${cafe}`;
+    if (restaurant) return `مطعم: ${restaurant} · كافيه: لم تُحدَّد`;
+    if (cafe) return `مطعم: لم تُحدَّد · كافيه: ${cafe}`;
+    return null;
+  }
+
+  function sharedHasPrinters(cat: CategoryRow) {
+    return Boolean(cat.restaurantKitchenPrinterId || cat.cafeKitchenPrinterId);
   }
 
   function closeModals() {
@@ -410,9 +433,13 @@ export function ItemsAdmin({
                     (i) => i.categoryId === cat.id,
                   ).length;
                   const isSelected = cat.id === selectedId;
-                  const hasPrinter = !!cat.kitchenPrinterId;
-                  const printer = printerName(cat.kitchenPrinterId);
                   const isShared = cat.venueId == null;
+                  const hasPrinter = isShared
+                    ? sharedHasPrinters(cat)
+                    : !!cat.kitchenPrinterId;
+                  const printer = isShared
+                    ? sharedPrinterSummary(cat)
+                    : printerName(cat.kitchenPrinterId);
 
                   return (
                     <button
@@ -435,7 +462,7 @@ export function ItemsAdmin({
                         >
                           <FolderOpen className="size-4" />
                         </span>
-                        {isShared || hasPrinter ? (
+                        {hasPrinter ? (
                           <CheckCircle2 className="size-4 shrink-0 text-success" />
                         ) : (
                           <AlertCircle className="size-4 shrink-0 text-warning" />
@@ -450,12 +477,7 @@ export function ItemsAdmin({
                         </span>
                         <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] text-base-content/45">
                           <span>{count} صنف</span>
-                          {isShared ? (
-                            <>
-                              <span aria-hidden>·</span>
-                              <span>طابعة تلقائية حسب الفرع</span>
-                            </>
-                          ) : printer ? (
+                          {printer ? (
                             <>
                               <span aria-hidden>·</span>
                               <span className="truncate">{printer}</span>
@@ -504,7 +526,13 @@ export function ItemsAdmin({
                       <span className="inline-flex items-center gap-1.5">
                         <Printer className="size-3.5" />
                         {selected.venueId == null
-                          ? "طابعة تلقائية حسب الفرع"
+                          ? sharedHasPrinters(selected)
+                            ? sharedPrinterSummary(selected)
+                            : (
+                                <span className="font-bold text-warning">
+                                  لم تُحدَّد طابعات الفرعين
+                                </span>
+                              )
                           : (printerName(selected.kitchenPrinterId) ?? (
                               <span className="font-bold text-warning">
                                 لم تُحدَّد طابعة
@@ -761,31 +789,90 @@ export function ItemsAdmin({
               />
             </label>
             {categoryScopeDraft === "shared" ? (
-              <div className="rounded-lg border border-secondary/30 bg-secondary/10 px-3 py-2 text-xs text-base-content/70">
-                <strong className="text-secondary">مشترك:</strong> يظهر في
-                المطعم والكافيه. طابعة المطبخ تُختار تلقائياً حسب الفرع.
-                <input type="hidden" name="kitchenPrinterId" value="" />
-              </div>
+              <input type="hidden" name="kitchenPrinterId" value="" />
             ) : (
               <label className="form-control w-full">
                 <span className="label-text mb-2 font-bold">طابعة المطبخ</span>
                 <select
+                  key={`${categoryScopeDraft}-${editingCategory?.id ?? "new"}`}
                   name="kitchenPrinterId"
                   className="select select-bordered w-full"
-                  defaultValue={editingCategory?.kitchenPrinterId ?? ""}
+                  defaultValue={
+                    categoryScopeDraft === "restaurant"
+                      ? (editingCategory?.restaurantKitchenPrinterId ??
+                        editingCategory?.kitchenPrinterId ??
+                        "")
+                      : (editingCategory?.cafeKitchenPrinterId ??
+                        editingCategory?.kitchenPrinterId ??
+                        "")
+                  }
                 >
                   <option value="">— بدون —</option>
-                  {(editingCategory ? allKitchenPrinters : kitchenPrinters).map(
-                    (p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ),
-                  )}
+                  {(categoryScopeDraft === venueId
+                    ? kitchenPrinters
+                    : printersForVenue(categoryScopeDraft, !editingCategory)
+                  ).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                      {!p.active ? " (معطّلة)" : ""}
+                    </option>
+                  ))}
                 </select>
               </label>
             )}
           </div>
+          {categoryScopeDraft === "shared" ? (
+            <div className="space-y-3 rounded-xl border border-secondary/30 bg-secondary/10 p-3">
+              <p className="text-xs text-base-content/70">
+                <strong className="text-secondary">مشترك:</strong> يظهر في
+                المطعم والكافيه. اختر طابعة مطبخ لكل فرع.
+              </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="form-control w-full">
+                  <span className="label-text mb-2 font-bold">
+                    طابعة مطبخ المطعم
+                  </span>
+                  <select
+                    key={`restaurant-${editingCategory?.id ?? "new"}`}
+                    name="restaurantKitchenPrinterId"
+                    className="select select-bordered w-full"
+                    defaultValue={
+                      editingCategory?.restaurantKitchenPrinterId ?? ""
+                    }
+                  >
+                    <option value="">— بدون —</option>
+                    {printersForVenue("restaurant", !editingCategory).map(
+                      (p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                          {!p.active ? " (معطّلة)" : ""}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+                <label className="form-control w-full">
+                  <span className="label-text mb-2 font-bold">
+                    طابعة مطبخ الكافيه
+                  </span>
+                  <select
+                    key={`cafe-${editingCategory?.id ?? "new"}`}
+                    name="cafeKitchenPrinterId"
+                    className="select select-bordered w-full"
+                    defaultValue={editingCategory?.cafeKitchenPrinterId ?? ""}
+                  >
+                    <option value="">— بدون —</option>
+                    {printersForVenue("cafe", !editingCategory).map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                        {!p.active ? " (معطّلة)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          ) : null}
           {editingCategory ? (
             <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
               تغيير النطاق إلى <strong>مشترك</strong> يجعل كل أصناف هذا التصنيف

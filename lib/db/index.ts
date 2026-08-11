@@ -255,6 +255,22 @@ function ensureSchema(sqlite: Database.Database) {
   }
 
   try {
+    sqlite.exec(
+      `ALTER TABLE categories ADD COLUMN restaurant_kitchen_printer_id INTEGER REFERENCES printers(id)`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE categories ADD COLUMN cafe_kitchen_printer_id INTEGER REFERENCES printers(id)`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
     sqlite.exec(`
       UPDATE categories
       SET kitchen_printer_id = (
