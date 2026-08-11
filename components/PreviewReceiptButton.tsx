@@ -15,11 +15,13 @@ export function PreviewReceiptButton({
   venueId,
   cart,
   disabled,
+  compact = false,
 }: {
   orderId?: number;
   venueId?: string;
   cart?: QuickSaleLine[];
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -57,7 +59,9 @@ export function PreviewReceiptButton({
   return (
     <button
       type="button"
-      className="btn btn-outline btn-sm h-11 min-h-11 w-full gap-1.5 rounded-lg text-sm"
+      className={`btn btn-outline btn-sm rounded-lg ${
+        compact ? "h-9 min-h-9 gap-1 px-2 text-xs" : "h-11 min-h-11 w-full gap-1.5 text-sm"
+      }`}
       disabled={pending || disabled}
       onClick={run}
     >
@@ -66,7 +70,11 @@ export function PreviewReceiptButton({
       ) : (
         <ReceiptText className="size-4" />
       )}
-      {pending ? "جاري الطباعة..." : "طباعة الفاتورة للعميل"}
+      {pending
+        ? "جاري…"
+        : compact
+          ? "فاتورة"
+          : "طباعة الفاتورة للعميل"}
     </button>
   );
 }

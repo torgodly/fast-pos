@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
-import { cancelOpenOrder } from "@/app/actions/orders";
+import { CancelTableButton } from "@/components/CancelTableButton";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PayButtons } from "@/components/PayButtons";
@@ -107,20 +107,10 @@ export default async function CashierOrderPage({
               <ArrowRight className="size-3.5" />
               رجوع
             </Link>
-            <form
-              action={async () => {
-                "use server";
-                await cancelOpenOrder(orderId);
-              }}
-            >
-              <button
-                type="submit"
-                className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md text-error"
-              >
-                <Trash2 className="size-3.5" />
-                إلغاء
-              </button>
-            </form>
+            <CancelTableButton
+              orderId={orderId}
+              hasItems={lines.length > 0}
+            />
           </div>
         </div>
 

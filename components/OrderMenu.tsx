@@ -190,8 +190,8 @@ export function OrderMenu({
       <div
         className={`grid min-h-0 min-w-0 flex-1 overflow-hidden ${
           ticketAlwaysVisible
-            ? "grid-rows-[minmax(0,1fr)_minmax(13rem,40%)] md:grid-rows-1 md:grid-cols-[minmax(0,1fr)_minmax(16rem,36%)]"
-            : "grid-rows-[minmax(0,1fr)] pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:pb-0"
+            ? "grid-cols-[minmax(0,1fr)_minmax(10.75rem,36%)] sm:grid-cols-[minmax(0,1fr)_minmax(16rem,34%)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,32%)]"
+            : "grid-rows-[minmax(0,1fr)] pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:grid-rows-1 lg:pb-0"
         }`}
       >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-base-300 bg-base-100 p-1.5">
@@ -200,6 +200,7 @@ export function OrderMenu({
             items={items}
             categoryCounts={categoryCounts}
             pending={pending}
+            dense={ticketAlwaysVisible}
             onAddItem={(item) => add(item.id)}
           />
         </div>
@@ -210,6 +211,7 @@ export function OrderMenu({
           }`}
         >
           <PosTicketPanel
+            title="الطلب"
             itemCount={itemCount}
             total={total}
             lines={ticketLines}

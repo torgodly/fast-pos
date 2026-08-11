@@ -63,14 +63,19 @@ export function CancelKitchenItemDialog({
 
   if (warning) {
     return (
-      <div className="fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center">
+      <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-4">
         <button
           type="button"
-          className="absolute inset-0 bg-neutral/50"
+          className="absolute inset-0 bg-neutral/55"
           aria-label="إغلاق"
           onClick={onClose}
         />
-        <div className="relative w-full max-w-md space-y-3 rounded-2xl border border-warning/40 bg-base-100 p-4 shadow-2xl">
+        <div
+          className="relative w-full max-w-md space-y-3 rounded-t-3xl border border-warning/40 bg-base-100 p-5 shadow-2xl sm:rounded-3xl"
+          style={{
+            paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+          }}
+        >
           <h3 className="text-lg font-black">أُلغي من الفاتورة</h3>
           <ActionFeedback tone="warning" message={warning} />
           <button
@@ -86,17 +91,20 @@ export function CancelKitchenItemDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center sm:p-4">
       <button
         type="button"
-        className="absolute inset-0 bg-neutral/50"
+        className="absolute inset-0 bg-neutral/55"
         aria-label="إغلاق"
         disabled={pending}
         onClick={onClose}
       />
       <form
         onSubmit={submit}
-        className="relative w-full max-w-md space-y-3 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-2xl"
+        className="relative max-h-[90dvh] w-full max-w-md space-y-3 overflow-y-auto rounded-t-3xl border border-base-300 bg-base-100 p-5 shadow-2xl sm:rounded-3xl"
+        style={{
+          paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+        }}
       >
         <div className="flex items-start gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-error/10 text-error">

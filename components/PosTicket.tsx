@@ -47,12 +47,63 @@ export function PosTicketLines({
         const kitchenSent = line.kitchenSent ?? 0;
         const canReduce = line.canReduce ?? line.qty > kitchenSent;
         const canRemove = line.canRemove ?? kitchenSent === 0;
+        if (compact) {
+          return (
+            <li key={line.key} className="border-b border-base-300/70 py-1.5">
+              <div className="flex items-start justify-between gap-1">
+                <p className="min-w-0 text-[13px] font-black leading-4">
+                  {line.name}
+                  {kitchenSent > 0 ? (
+                    <span className="ms-1 text-[10px] font-bold text-warning">
+                      مطبخ {kitchenSent}
+                    </span>
+                  ) : null}
+                </p>
+                <p className="shrink-0 text-[12px] font-black tabular-nums text-primary">
+                  {formatMoney(line.lineTotal)}
+                </p>
+              </div>
+              <div className="mt-1 flex items-center justify-between">
+                <div className="inline-flex items-center overflow-hidden rounded-md border border-base-300">
+                  <button
+                    type="button"
+                    className="grid size-7 place-items-center disabled:opacity-30"
+                    disabled={pending || !canReduce}
+                    onClick={() => onChangeQty(line.key, line.qty - 1)}
+                    aria-label="تقليل"
+                  >
+                    <Minus className="size-3.5" strokeWidth={2.5} />
+                  </button>
+                  <span className="min-w-6 text-center text-sm font-black tabular-nums">
+                    {line.qty}
+                  </span>
+                  <button
+                    type="button"
+                    className="grid size-7 place-items-center disabled:opacity-30"
+                    disabled={pending}
+                    onClick={() => onChangeQty(line.key, line.qty + 1)}
+                    aria-label="زيادة"
+                  >
+                    <Plus className="size-3.5" strokeWidth={2.5} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="grid size-7 place-items-center rounded-md text-error disabled:opacity-20"
+                  disabled={pending || !canRemove}
+                  onClick={() => onRemove(line.key)}
+                  aria-label="حذف"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </li>
+          );
+        }
         return (
           <li
             key={line.key}
-            className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 ${
-              compact ? "py-1" : "py-1.5"
-            }`}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 py-1.5"
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-bold leading-5">
@@ -153,12 +204,20 @@ export function PosTicketPanel({
           onRemove={onRemove}
         />
       </div>
-      <div className="shrink-0 space-y-1.5 border-t border-base-300 px-2.5 py-2">
+      <div
+        className={`shrink-0 border-t border-base-300 ${
+          compact ? "space-y-1 px-2 py-1.5" : "space-y-1.5 px-2.5 py-2"
+        }`}
+      >
         <div className="flex items-center justify-between">
           <span className="text-sm font-bold text-base-content/50">
             الإجمالي
           </span>
-          <span className="shrink-0 whitespace-nowrap text-lg font-black tabular-nums text-primary">
+          <span
+            className={`shrink-0 whitespace-nowrap font-black tabular-nums text-primary ${
+              compact ? "text-base" : "text-lg"
+            }`}
+          >
             {formatMoney(total)}
           </span>
         </div>

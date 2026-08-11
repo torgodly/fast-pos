@@ -84,10 +84,13 @@ export default async function WaiterOrderPage({
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
-      <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
-        <div className="flex h-10 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2.5">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
+        <div className="mb-1 flex h-9 shrink-0 items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-100 px-2">
           <p className="truncate text-sm font-black">
-            #{order.id} · {table?.name ?? "بدون طاولة"}
+            {table?.name ?? "بدون طاولة"}
+            <span className="ms-1 font-bold text-base-content/40">
+              #{order.id}
+            </span>
           </p>
           <div className="flex shrink-0 gap-0.5">
             <Link
@@ -121,10 +124,11 @@ export default async function WaiterOrderPage({
             removedByName: row.removedByName,
           }))}
           footer={
-            <div className="space-y-1">
+            <div className="grid grid-cols-[1fr_auto] gap-1">
               <KitchenConfirmButton
                 key="kitchen"
                 orderId={orderId}
+                compact
                 disabled={lines.length === 0}
                 allSent={
                   lines.length > 0 &&
@@ -134,6 +138,7 @@ export default async function WaiterOrderPage({
               <PreviewReceiptButton
                 key="preview"
                 orderId={orderId}
+                compact
                 disabled={lines.length === 0}
               />
             </div>

@@ -18,12 +18,14 @@ export function CategoryItemPicker({
   items,
   categoryCounts,
   pending = false,
+  dense = false,
   onAddItem,
 }: {
   categories: MenuCategory[];
   items: MenuItem[];
   categoryCounts: Record<number, number>;
   pending?: boolean;
+  dense?: boolean;
   onAddItem: (item: MenuItem) => void;
 }) {
   const categoriesWithItems = useMemo(
@@ -80,7 +82,9 @@ export function CategoryItemPicker({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategoryId(cat.id)}
-                className={`inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-bold ${
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-bold ${
+                  dense ? "h-9" : "h-11"
+                } ${
                   active
                     ? "bg-primary text-primary-content"
                     : "border border-base-300 bg-base-100 text-base-content hover:bg-base-200"
@@ -104,7 +108,13 @@ export function CategoryItemPicker({
 
       <div ref={listRef} className="touch-scroll">
         {/* Fewer columns = readable tiles on 1024×768 POS monitors */}
-        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+        <div
+          className={`grid gap-1.5 ${
+            dense
+              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+              : "grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+          }`}
+        >
           {activeItems.map((item) => {
             const available = item.active !== false;
             return (
