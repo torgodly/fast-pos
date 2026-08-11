@@ -51,6 +51,7 @@ export function OrderMenu({
   footer,
   isMainCashier = false,
   cancelledLines = [],
+  ticketAlwaysVisible = false,
 }: {
   orderId: number;
   categories: MenuCategory[];
@@ -60,6 +61,7 @@ export function OrderMenu({
   footer?: ReactNode;
   isMainCashier?: boolean;
   cancelledLines?: CancelledTicketLine[];
+  ticketAlwaysVisible?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [cartOpen, setCartOpen] = useState(false);
@@ -176,9 +178,22 @@ export function OrderMenu({
     </>
   );
 
+  const ticketFooter = (
+    <>
+      {cancelledBlock}
+      {footer}
+    </>
+  );
+
   return (
     <>
-      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:pb-0">
+      <div
+        className={`grid min-h-0 min-w-0 flex-1 overflow-hidden ${
+          ticketAlwaysVisible
+            ? "grid-rows-[minmax(0,1fr)_minmax(13rem,40%)] md:grid-rows-1 md:grid-cols-[minmax(0,1fr)_minmax(16rem,36%)]"
+            : "grid-rows-[minmax(0,1fr)] pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:pb-0"
+        }`}
+      >
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-base-300 bg-base-100 p-1.5">
           <CategoryItemPicker
             categories={categories}
@@ -189,52 +204,56 @@ export function OrderMenu({
           />
         </div>
 
-        <div className="hidden min-h-0 lg:flex lg:flex-col">
+        <div
+          className={`min-h-0 ${
+            ticketAlwaysVisible ? "flex flex-col" : "hidden lg:flex lg:flex-col"
+          }`}
+        >
           <PosTicketPanel
             itemCount={itemCount}
             total={total}
             lines={ticketLines}
             pending={pending}
             emptyLabel="لا أصناف"
+            compact={ticketAlwaysVisible}
             onChangeQty={changeQty}
             onRemove={remove}
-            footer={
-              <>
-                {cancelledBlock}
-                {footer}
-              </>
-            }
+            footer={ticketFooter}
           />
         </div>
       </div>
 
-      <PosMobileBar
-        itemCount={itemCount}
-        total={total}
-        actionLabel="فاتورة"
-        onOpen={() => setCartOpen(true)}
-      />
+      {ticketAlwaysVisible ? null : (
+        <>
+          <PosMobileBar
+            itemCount={itemCount}
+            total={total}
+            actionLabel="فاتورة"
+            onOpen={() => setCartOpen(true)}
+          />
 
-      <PosMobileSheet
-        open={cartOpen}
-        title="فاتورة"
-        itemCount={itemCount}
-        onClose={() => setCartOpen(false)}
-        footer={
-          <>
-            {cancelledBlock}
-            {footerBlock}
-          </>
-        }
-      >
-        <PosTicketLines
-          lines={ticketLines}
-          pending={pending}
-          emptyLabel="لا أصناف"
-          onChangeQty={changeQty}
-          onRemove={remove}
-        />
-      </PosMobileSheet>
+          <PosMobileSheet
+            open={cartOpen}
+            title="فاتورة"
+            itemCount={itemCount}
+            onClose={() => setCartOpen(false)}
+            footer={
+              <>
+                {cancelledBlock}
+                {footerBlock}
+              </>
+            }
+          >
+            <PosTicketLines
+              lines={ticketLines}
+              pending={pending}
+              emptyLabel="لا أصناف"
+              onChangeQty={changeQty}
+              onRemove={remove}
+            />
+          </PosMobileSheet>
+        </>
+      )}
 
       <CancelKitchenItemDialog
         target={cancelTarget}

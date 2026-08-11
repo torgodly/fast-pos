@@ -20,12 +20,14 @@ export function PosTicketLines({
   lines,
   pending = false,
   emptyLabel = "فارغة",
+  compact = false,
   onChangeQty,
   onRemove,
 }: {
   lines: PosTicketLine[];
   pending?: boolean;
   emptyLabel?: string;
+  compact?: boolean;
   onChangeQty: (key: string | number, qty: number) => void;
   onRemove: (key: string | number) => void;
 }) {
@@ -37,6 +39,8 @@ export function PosTicketLines({
     );
   }
 
+  const btn = compact ? "size-8" : "size-10";
+
   return (
     <ul className="divide-y divide-base-300/60">
       {lines.map((line) => {
@@ -46,7 +50,9 @@ export function PosTicketLines({
         return (
           <li
             key={line.key}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1.5 py-1.5"
+            className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 ${
+              compact ? "py-1" : "py-1.5"
+            }`}
           >
             <div className="min-w-0">
               <p className="truncate text-sm font-bold leading-5">
@@ -61,7 +67,7 @@ export function PosTicketLines({
             <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
               <button
                 type="button"
-                className="grid size-10 place-items-center text-base-content/70 disabled:opacity-30"
+                className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
                 disabled={pending || !canReduce}
                 onClick={() => onChangeQty(line.key, line.qty - 1)}
                 aria-label="تقليل"
@@ -73,7 +79,7 @@ export function PosTicketLines({
               </span>
               <button
                 type="button"
-                className="grid size-10 place-items-center text-base-content/70 disabled:opacity-30"
+                className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
                 disabled={pending}
                 onClick={() => onChangeQty(line.key, line.qty + 1)}
                 aria-label="زيادة"
@@ -81,17 +87,17 @@ export function PosTicketLines({
                 <Plus className="size-4" strokeWidth={2.5} />
               </button>
             </div>
-            <p className="min-w-[5.5rem] shrink-0 whitespace-nowrap text-end text-sm font-black tabular-nums text-primary">
+            <p className="min-w-[4.75rem] shrink-0 whitespace-nowrap text-end text-sm font-black tabular-nums text-primary">
               {formatMoney(line.lineTotal)}
             </p>
             <button
               type="button"
-              className="grid size-10 place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20"
+              className={`grid ${btn} place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20`}
               disabled={pending || !canRemove}
               onClick={() => onRemove(line.key)}
               aria-label="حذف"
             >
-              <Trash2 className="size-4.5" />
+              <Trash2 className="size-4" />
             </button>
           </li>
         );
@@ -108,6 +114,7 @@ export function PosTicketPanel({
   footer,
   pending,
   emptyLabel,
+  compact = false,
   onChangeQty,
   onRemove,
 }: {
@@ -118,6 +125,7 @@ export function PosTicketPanel({
   footer?: ReactNode;
   pending?: boolean;
   emptyLabel?: string;
+  compact?: boolean;
   onChangeQty: (key: string | number, qty: number) => void;
   onRemove: (key: string | number) => void;
 }) {
@@ -140,6 +148,7 @@ export function PosTicketPanel({
           lines={lines}
           pending={pending}
           emptyLabel={emptyLabel}
+          compact={compact}
           onChangeQty={onChangeQty}
           onRemove={onRemove}
         />

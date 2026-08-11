@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { and, asc, eq } from "drizzle-orm";
-import { ArrowRight, Trash2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { requireWaiter } from "@/app/actions/auth";
-import { cancelOpenOrder } from "@/app/actions/orders";
+import { CancelTableButton } from "@/components/CancelTableButton";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
 import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { OrderMenu } from "@/components/OrderMenu";
@@ -97,22 +97,12 @@ export default async function WaiterOrderPage({
               <ArrowRight className="size-3.5" />
               رجوع
             </Link>
-            {lines.length === 0 && (
-              <form
-                action={async () => {
-                  "use server";
-                  await cancelOpenOrder(orderId);
-                }}
-              >
-                <button
-                  type="submit"
-                  className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md text-error"
-                >
-                  <Trash2 className="size-3.5" />
-                  إلغاء
-                </button>
-              </form>
-            )}
+            {lines.every((line) => (line.kitchenSentQty ?? 0) === 0) ? (
+              <CancelTableButton
+                orderId={orderId}
+                hasItems={lines.length > 0}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -122,6 +112,7 @@ export default async function WaiterOrderPage({
           items={menuItems}
           lines={lines}
           total={order.total}
+          ticketAlwaysVisible
           cancelledLines={cancelled.map((row) => ({
             id: row.id,
             name: row.itemName,

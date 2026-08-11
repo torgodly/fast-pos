@@ -1486,8 +1486,9 @@ export async function cancelOpenOrder(orderId: number) {
     .where(eq(orderItems.orderId, orderId))
     .all();
 
-  if (lines.length > 0 && session.role !== "cashier") {
-    return { error: "لا يمكن إلغاء فاتورة تحتوي أصنافاً" };
+  const kitchenSent = lines.some((line) => (line.kitchenSentQty ?? 0) > 0);
+  if (kitchenSent && session.role !== "cashier") {
+    return { error: "لا يمكن إلغاء الطاولة بعد إرسال المطبخ" };
   }
 
   db.update(orders)
