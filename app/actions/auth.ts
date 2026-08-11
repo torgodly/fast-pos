@@ -20,11 +20,8 @@ export async function requireAdmin() {
 
 export async function requireWaiter(venueId: string) {
   const session = await getSession();
-  if (
-    !session ||
-    session.role !== "waiter" ||
-    session.venueId !== venueId
-  ) {
+  // Staff are shared across venues — only the role matters.
+  if (!session || session.role !== "waiter") {
     redirect(`/pin/${venueId}`);
   }
   return session;
@@ -32,11 +29,7 @@ export async function requireWaiter(venueId: string) {
 
 export async function requireCashier(venueId: string) {
   const session = await getSession();
-  if (
-    !session ||
-    session.role !== "cashier" ||
-    session.venueId !== venueId
-  ) {
+  if (!session || session.role !== "cashier") {
     redirect(`/pin/${venueId}`);
   }
   return session;

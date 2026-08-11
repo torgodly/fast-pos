@@ -268,13 +268,6 @@ export async function setItemActive(id: number, active: boolean) {
   const session = await assertAdminOrMainCashier();
   const item = db.select().from(items).where(eq(items.id, id)).get();
   if (!item) return;
-  if (
-    session.role === "cashier" &&
-    item.venueId != null &&
-    item.venueId !== session.venueId
-  ) {
-    throw new Error("غير مصرح");
-  }
   db.update(items).set({ active }).where(eq(items.id, id)).run();
   revalidateFloorMenu(item.venueId ?? session.venueId);
 }
@@ -291,7 +284,7 @@ export async function deleteItem(id: number): Promise<ActionResult> {
 }
 
 export async function upsertTable(formData: FormData): Promise<ActionResult> {
-  const session = await assertAdminOrMainCashier();
+  await assertAdminOrMainCashier();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const venueId = String(formData.get("venueId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -299,19 +292,8 @@ export async function upsertTable(formData: FormData): Promise<ActionResult> {
   if (!isVenueId(venueId) || !name) {
     return { error: "اسم الطاولة مطلوب" };
   }
-  if (session.role === "cashier" && session.venueId !== venueId) {
-    return { error: "غير مصرح" };
-  }
 
   if (id) {
-    const existing = db.select().from(tables).where(eq(tables.id, id)).get();
-    if (
-      session.role === "cashier" &&
-      existing &&
-      existing.venueId !== session.venueId
-    ) {
-      return { error: "غير مصرح" };
-    }
     db.update(tables).set({ venueId, name }).where(eq(tables.id, id)).run();
   } else {
     db.insert(tables).values({ venueId, name, active: true }).run();
@@ -322,23 +304,17 @@ export async function upsertTable(formData: FormData): Promise<ActionResult> {
 }
 
 export async function setTableActive(id: number, active: boolean) {
-  const session = await assertAdminOrMainCashier();
+  await assertAdminOrMainCashier();
   const table = db.select().from(tables).where(eq(tables.id, id)).get();
   if (!table) return;
-  if (session.role === "cashier" && table.venueId !== session.venueId) {
-    throw new Error("غير مصرح");
-  }
   db.update(tables).set({ active }).where(eq(tables.id, id)).run();
   revalidateFloorMenu(table.venueId);
 }
 
 export async function deleteTable(id: number): Promise<ActionResult> {
-  const session = await assertAdminOrMainCashier();
+  await assertAdminOrMainCashier();
   const table = db.select().from(tables).where(eq(tables.id, id)).get();
   if (!table) return { error: "الطاولة غير موجودة" };
-  if (session.role === "cashier" && table.venueId !== session.venueId) {
-    return { error: "غير مصرح" };
-  }
   const openOrder = db
     .select({ id: orders.id })
     .from(orders)
