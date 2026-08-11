@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  FolderInput,
   FolderOpen,
   FolderPlus,
   PackagePlus,
@@ -18,6 +19,7 @@ import {
   deleteCategory,
   deleteItem,
   deleteItems,
+  moveItemsToCategory,
   setCategoryActive,
   setItemActive,
   setItemsActive,
@@ -124,8 +126,9 @@ export function ItemsAdmin({
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [bulkConfirm, setBulkConfirm] = useState<
-    "enable" | "disable" | "delete" | null
+    "enable" | "disable" | "delete" | "move" | null
   >(null);
+  const [bulkCategoryId, setBulkCategoryId] = useState<number | null>(null);
 
   const editingCategory =
     categoryModal?.mode === "edit" ? categoryModal.category : null;
@@ -180,18 +183,34 @@ export function ItemsAdmin({
     if (!bulkConfirm || selectedItemIds.length === 0) return;
     const ids = selectedItemIds;
     const action = bulkConfirm;
+    const targetCategoryId = bulkCategoryId;
+    if (action === "move") {
+      if (targetCategoryId == null) {
+        setError("اختر التصنيف الجديد");
+        return;
+      }
+      if (targetCategoryId === selectedId) {
+        setError("الأصناف في هذا التصنيف بالفعل");
+        return;
+      }
+    }
     startTransition(async () => {
       setError(null);
       const result =
         action === "delete"
           ? await deleteItems(ids)
-          : await setItemsActive(ids, action === "enable");
+          : action === "move"
+            ? await moveItemsToCategory(ids, targetCategoryId!)
+            : await setItemsActive(ids, action === "enable");
       if (result && "error" in result) {
         setError(result.error);
         return;
       }
       setBulkConfirm(null);
       setSelectedItemIds([]);
+      if (action === "move" && targetCategoryId != null) {
+        setSelectedId(targetCategoryId);
+      }
       router.refresh();
     });
   }
@@ -554,6 +573,22 @@ export function ItemsAdmin({
                       </button>
                       <button
                         type="button"
+                        className="btn btn-outline btn-sm gap-1.5 rounded-lg"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          setBulkCategoryId(
+                            sortedCats.find((cat) => cat.id !== selectedId)?.id ??
+                              null,
+                          );
+                          setBulkConfirm("move");
+                        }}
+                      >
+                        <FolderInput className="size-3.5" />
+                        نقل تصنيف
+                      </button>
+                      <button
+                        type="button"
                         className="btn btn-error btn-outline btn-sm gap-1.5 rounded-lg"
                         disabled={pending}
                         onClick={() => {
@@ -787,18 +822,50 @@ export function ItemsAdmin({
             ? "تأكيد الحذف"
             : bulkConfirm === "disable"
               ? "تأكيد الإيقاف"
-              : "تأكيد التشغيل"
+              : bulkConfirm === "move"
+                ? "نقل الأصناف"
+                : "تأكيد التشغيل"
         }
         onClose={closeModals}
         pending={pending}
       >
-        <p className="text-sm leading-7 text-base-content/70">
-          {bulkConfirm === "delete"
-            ? `حذف ${selectedItemIds.length} صنفاً نهائياً؟ لا يمكن التراجع.`
-            : bulkConfirm === "disable"
-              ? `إيقاف ${selectedItemIds.length} صنفاً؟ لن تظهر في شاشات البيع.`
-              : `تشغيل ${selectedItemIds.length} صنفاً؟ ستظهر في شاشات البيع.`}
-        </p>
+        {bulkConfirm === "move" ? (
+          <div className="space-y-3">
+            <p className="text-sm leading-7 text-base-content/70">
+              نقل {selectedItemIds.length} صنفاً إلى تصنيف آخر. نطاق الصنف
+              سيطابق التصنيف الجديد.
+            </p>
+            <label className="form-control w-full">
+              <span className="label-text mb-2 font-bold">التصنيف الجديد</span>
+              <select
+                className="select select-bordered w-full"
+                value={bulkCategoryId ?? ""}
+                onChange={(event) =>
+                  setBulkCategoryId(
+                    event.target.value ? Number(event.target.value) : null,
+                  )
+                }
+              >
+                <option value="">— اختر —</option>
+                {sortedCats.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.name}
+                    {cat.id === selectedId ? " (الحالي)" : ""}
+                    {` · ${menuScopeLabel(venueIdToScope(cat.venueId))}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        ) : (
+          <p className="text-sm leading-7 text-base-content/70">
+            {bulkConfirm === "delete"
+              ? `حذف ${selectedItemIds.length} صنفاً نهائياً؟ لا يمكن التراجع.`
+              : bulkConfirm === "disable"
+                ? `إيقاف ${selectedItemIds.length} صنفاً؟ لن تظهر في شاشات البيع.`
+                : `تشغيل ${selectedItemIds.length} صنفاً؟ ستظهر في شاشات البيع.`}
+          </p>
+        )}
         <ActionFeedback tone="error" message={error} />
         <div className="modal-action mt-4">
           <button
@@ -816,7 +883,9 @@ export function ItemsAdmin({
                 ? "btn-error"
                 : bulkConfirm === "disable"
                   ? "btn-warning"
-                  : "btn-success"
+                  : bulkConfirm === "move"
+                    ? "btn-primary"
+                    : "btn-success"
             }`}
             disabled={pending}
             onClick={runBulkAction}
@@ -825,7 +894,9 @@ export function ItemsAdmin({
               ? "نعم، احذف"
               : bulkConfirm === "disable"
                 ? "نعم، أوقف"
-                : "نعم، شغّل"}
+                : bulkConfirm === "move"
+                  ? "نعم، انقل"
+                  : "نعم، شغّل"}
           </button>
         </div>
       </AdminModal>

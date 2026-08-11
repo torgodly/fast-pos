@@ -311,6 +311,30 @@ export async function deleteItems(ids: number[]): Promise<ActionResult> {
   return { ok: true };
 }
 
+export async function moveItemsToCategory(
+  ids: number[],
+  categoryId: number,
+): Promise<ActionResult> {
+  await assertAdmin();
+  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+  if (unique.length === 0) return { error: "لم يُحدَّد أي صنف" };
+
+  const category = db
+    .select()
+    .from(categories)
+    .where(eq(categories.id, categoryId))
+    .get();
+  if (!category) return { error: "التصنيف غير موجود" };
+
+  db.update(items)
+    .set({ categoryId: category.id, venueId: category.venueId })
+    .where(inArray(items.id, unique))
+    .run();
+  revalidateFloorMenu();
+  revalidatePath("/admin/items");
+  return { ok: true };
+}
+
 export async function upsertTable(formData: FormData): Promise<ActionResult> {
   await assertAdminOrMainCashier();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
