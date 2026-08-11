@@ -7,8 +7,9 @@ export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
   const ref = useRef<T>(null);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+    const node = ref.current;
+    if (!node) return;
+    const scroller: HTMLElement = node;
 
     let active = false;
     let moved = false;
@@ -21,8 +22,8 @@ export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
       active = true;
       moved = false;
       start = axis === "y" ? event.clientY : event.clientX;
-      origin = axis === "y" ? el.scrollTop : el.scrollLeft;
-      el.setPointerCapture(event.pointerId);
+      origin = axis === "y" ? scroller.scrollTop : scroller.scrollLeft;
+      scroller.setPointerCapture(event.pointerId);
     }
 
     function onMove(event: PointerEvent) {
@@ -32,8 +33,8 @@ export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
       if (!moved && Math.abs(delta) < threshold) return;
       moved = true;
       event.preventDefault();
-      if (axis === "y") el.scrollTop = origin - delta;
-      else el.scrollLeft = origin - delta;
+      if (axis === "y") scroller.scrollTop = origin - delta;
+      else scroller.scrollLeft = origin - delta;
     }
 
     function onUp() {
@@ -47,18 +48,18 @@ export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
       moved = false;
     }
 
-    el.addEventListener("pointerdown", onDown);
-    el.addEventListener("pointermove", onMove, { passive: false });
-    el.addEventListener("pointerup", onUp);
-    el.addEventListener("pointercancel", onUp);
-    el.addEventListener("click", onClick, true);
+    scroller.addEventListener("pointerdown", onDown);
+    scroller.addEventListener("pointermove", onMove, { passive: false });
+    scroller.addEventListener("pointerup", onUp);
+    scroller.addEventListener("pointercancel", onUp);
+    scroller.addEventListener("click", onClick, true);
 
     return () => {
-      el.removeEventListener("pointerdown", onDown);
-      el.removeEventListener("pointermove", onMove);
-      el.removeEventListener("pointerup", onUp);
-      el.removeEventListener("pointercancel", onUp);
-      el.removeEventListener("click", onClick, true);
+      scroller.removeEventListener("pointerdown", onDown);
+      scroller.removeEventListener("pointermove", onMove);
+      scroller.removeEventListener("pointerup", onUp);
+      scroller.removeEventListener("pointercancel", onUp);
+      scroller.removeEventListener("click", onClick, true);
     };
   }, [axis]);
 
