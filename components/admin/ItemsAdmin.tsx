@@ -8,14 +8,19 @@ import {
   FolderPlus,
   PackagePlus,
   Pencil,
+  Power,
+  PowerOff,
   Printer,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import {
   deleteCategory,
   deleteItem,
+  deleteItems,
   setCategoryActive,
   setItemActive,
+  setItemsActive,
   upsertCategory,
   upsertItem,
 } from "@/app/actions/admin";
@@ -94,6 +99,11 @@ export function ItemsAdmin({
     });
   }, [sortedCats]);
 
+  useEffect(() => {
+    setSelectedItemIds([]);
+    setBulkConfirm(null);
+  }, [selectedId]);
+
   const selected = sortedCats.find((c) => c.id === selectedId) ?? null;
   const selectedItems = useMemo(
     () =>
@@ -112,6 +122,10 @@ export function ItemsAdmin({
     useState<MenuVenueScope>(venueId);
 
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [bulkConfirm, setBulkConfirm] = useState<
+    "enable" | "disable" | "delete" | null
+  >(null);
 
   const editingCategory =
     categoryModal?.mode === "edit" ? categoryModal.category : null;
@@ -138,7 +152,48 @@ export function ItemsAdmin({
     if (pending) return;
     setCategoryModal(null);
     setItemModal(null);
+    setBulkConfirm(null);
     setError(null);
+  }
+
+  const allVisibleSelected =
+    selectedItems.length > 0 &&
+    selectedItems.every((item) => selectedItemIds.includes(item.id));
+
+  function toggleItemSelected(id: number) {
+    setSelectedItemIds((current) =>
+      current.includes(id)
+        ? current.filter((itemId) => itemId !== id)
+        : [...current, id],
+    );
+  }
+
+  function toggleSelectAll() {
+    if (allVisibleSelected) {
+      setSelectedItemIds([]);
+      return;
+    }
+    setSelectedItemIds(selectedItems.map((item) => item.id));
+  }
+
+  function runBulkAction() {
+    if (!bulkConfirm || selectedItemIds.length === 0) return;
+    const ids = selectedItemIds;
+    const action = bulkConfirm;
+    startTransition(async () => {
+      setError(null);
+      const result =
+        action === "delete"
+          ? await deleteItems(ids)
+          : await setItemsActive(ids, action === "enable");
+      if (result && "error" in result) {
+        setError(result.error);
+        return;
+      }
+      setBulkConfirm(null);
+      setSelectedItemIds([]);
+      router.refresh();
+    });
   }
 
   function submitCategory(event: React.FormEvent<HTMLFormElement>) {
@@ -465,20 +520,65 @@ export function ItemsAdmin({
               </div>
 
               {/* Items header */}
-              <div className="flex items-center justify-between gap-3 px-4 py-3 sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
                 <p className="font-black">الأصناف</p>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm gap-1.5 rounded-lg"
-                  disabled={!selected.active}
-                  onClick={() => {
-                    setError(null);
-                    setItemModal({ mode: "create" });
-                  }}
-                >
-                  <PackagePlus className="size-3.5" />
-                  إضافة صنف
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedItemIds.length > 0 ? (
+                    <>
+                      <span className="text-xs font-bold text-base-content/50">
+                        {selectedItemIds.length} محدد
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-success btn-sm gap-1.5 rounded-lg"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          setBulkConfirm("enable");
+                        }}
+                      >
+                        <Power className="size-3.5" />
+                        تشغيل
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          setBulkConfirm("disable");
+                        }}
+                      >
+                        <PowerOff className="size-3.5" />
+                        إيقاف
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-error btn-outline btn-sm gap-1.5 rounded-lg"
+                        disabled={pending}
+                        onClick={() => {
+                          setError(null);
+                          setBulkConfirm("delete");
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                        حذف
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm gap-1.5 rounded-lg"
+                    disabled={!selected.active}
+                    onClick={() => {
+                      setError(null);
+                      setItemModal({ mode: "create" });
+                    }}
+                  >
+                    <PackagePlus className="size-3.5" />
+                    إضافة صنف
+                  </button>
+                </div>
               </div>
 
               {/* Items list */}
@@ -504,6 +604,15 @@ export function ItemsAdmin({
                     <table className="table">
                       <thead>
                         <tr className="bg-base-200/50 text-base-content/50">
+                          <th className="w-10">
+                            <input
+                              type="checkbox"
+                              className="checkbox checkbox-sm"
+                              checked={allVisibleSelected}
+                              onChange={toggleSelectAll}
+                              aria-label="تحديد الكل"
+                            />
+                          </th>
                           <th>اسم الصنف</th>
                           <th>السعر</th>
                           <th className="w-20 text-center">الحالة</th>
@@ -516,6 +625,15 @@ export function ItemsAdmin({
                             key={item.id}
                             className={!item.active ? "opacity-45" : ""}
                           >
+                            <td>
+                              <input
+                                type="checkbox"
+                                className="checkbox checkbox-sm"
+                                checked={selectedItemIds.includes(item.id)}
+                                onChange={() => toggleItemSelected(item.id)}
+                                aria-label={`تحديد ${item.name}`}
+                              />
+                            </td>
                             <td className="font-bold">{item.name}</td>
                             <td className="font-bold text-primary">
                               {formatMoney(item.price)}
@@ -659,6 +777,57 @@ export function ItemsAdmin({
             </button>
           </div>
         </form>
+      </AdminModal>
+
+      {/* ── Bulk confirm ── */}
+      <AdminModal
+        open={bulkConfirm !== null}
+        title={
+          bulkConfirm === "delete"
+            ? "تأكيد الحذف"
+            : bulkConfirm === "disable"
+              ? "تأكيد الإيقاف"
+              : "تأكيد التشغيل"
+        }
+        onClose={closeModals}
+        pending={pending}
+      >
+        <p className="text-sm leading-7 text-base-content/70">
+          {bulkConfirm === "delete"
+            ? `حذف ${selectedItemIds.length} صنفاً نهائياً؟ لا يمكن التراجع.`
+            : bulkConfirm === "disable"
+              ? `إيقاف ${selectedItemIds.length} صنفاً؟ لن تظهر في شاشات البيع.`
+              : `تشغيل ${selectedItemIds.length} صنفاً؟ ستظهر في شاشات البيع.`}
+        </p>
+        <ActionFeedback tone="error" message={error} />
+        <div className="modal-action mt-4">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={closeModals}
+            disabled={pending}
+          >
+            إلغاء
+          </button>
+          <button
+            type="button"
+            className={`btn ${
+              bulkConfirm === "delete"
+                ? "btn-error"
+                : bulkConfirm === "disable"
+                  ? "btn-warning"
+                  : "btn-success"
+            }`}
+            disabled={pending}
+            onClick={runBulkAction}
+          >
+            {bulkConfirm === "delete"
+              ? "نعم، احذف"
+              : bulkConfirm === "disable"
+                ? "نعم، أوقف"
+                : "نعم، شغّل"}
+          </button>
+        </div>
       </AdminModal>
 
       {/* ── Item modal ── */}

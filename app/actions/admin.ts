@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -279,6 +279,34 @@ export async function deleteItem(id: number): Promise<ActionResult> {
     .where(eq(orderItems.itemId, id))
     .run();
   db.delete(items).where(eq(items.id, id)).run();
+  revalidatePath("/admin/items");
+  return { ok: true };
+}
+
+export async function setItemsActive(
+  ids: number[],
+  active: boolean,
+): Promise<ActionResult> {
+  await assertAdminOrMainCashier();
+  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+  if (unique.length === 0) return { error: "لم يُحدَّد أي صنف" };
+
+  db.update(items).set({ active }).where(inArray(items.id, unique)).run();
+  revalidateFloorMenu();
+  return { ok: true };
+}
+
+export async function deleteItems(ids: number[]): Promise<ActionResult> {
+  await assertAdmin();
+  const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
+  if (unique.length === 0) return { error: "لم يُحدَّد أي صنف" };
+
+  db.update(orderItems)
+    .set({ itemId: null })
+    .where(inArray(orderItems.itemId, unique))
+    .run();
+  db.delete(items).where(inArray(items.id, unique)).run();
+  revalidateFloorMenu();
   revalidatePath("/admin/items");
   return { ok: true };
 }
