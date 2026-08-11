@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   AlertTriangle,
   Banknote,
@@ -24,7 +24,7 @@ import { PrintReportButton } from "@/components/PrintReportButton";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
-import { categories, users } from "@/lib/db/schema";
+import { categories, printers, users } from "@/lib/db/schema";
 import {
   defaultReportRange,
   inputDate,
@@ -118,6 +118,23 @@ export default async function AdminReportsPage({
     .where(eq(categories.venueId, venue))
     .all();
 
+  const reportPrinters = db
+    .select({
+      id: printers.id,
+      name: printers.name,
+      connectionType: printers.connectionType,
+      role: printers.role,
+    })
+    .from(printers)
+    .where(and(eq(printers.venueId, venue), eq(printers.active, true)))
+    .orderBy(asc(printers.name))
+    .all();
+
+  const preferredPrinters = [
+    ...reportPrinters.filter((printer) => printer.role !== "kitchen"),
+    ...reportPrinters.filter((printer) => printer.role === "kitchen"),
+  ];
+
   const waiters = db
     .select({ id: users.id, name: users.name, active: users.active })
     .from(users)
@@ -168,7 +185,14 @@ export default async function AdminReportsPage({
             </p>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <PrintReportButton filters={printFilters} />
+            <PrintReportButton
+              filters={printFilters}
+              printers={preferredPrinters.map((printer) => ({
+                id: printer.id,
+                name: printer.name,
+                connectionType: printer.connectionType,
+              }))}
+            />
             <Link
               href={presetHref(`${today}T00:00`, `${today}T23:59`)}
               className={`btn btn-sm rounded-xl ${

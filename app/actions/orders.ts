@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
+import { db, getSqlite } from "@/lib/db";
 import {
+  cancelledItems,
   categories,
   items,
   orderItems,
@@ -31,6 +32,7 @@ import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-print
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
+import { cancelledReceiptLines } from "@/lib/orders/cancelled";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -231,6 +233,245 @@ export async function updateOrderItemQty(
 
 export async function removeOrderItem(orderItemId: number) {
   return updateOrderItemQty(orderItemId, 0);
+}
+
+export async function cancelPrintedOrderItem(
+  orderItemId: number,
+  removeQty: number,
+  reason: string,
+): Promise<
+  | { ok: true; kitchenNotified: boolean; warning?: string }
+  | { error: string }
+> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier") {
+    return { error: "غير مصرح" };
+  }
+
+  const me = db.select().from(users).where(eq(users.id, session.userId)).get();
+  if (!me?.isMainCashier) {
+    return { error: "فقط الكاشير الرئيسي يمكنه إلغاء صنف بعد المطبخ" };
+  }
+
+  const note = reason.trim();
+  if (note.length < 2) {
+    return { error: "اختر أو اكتب سبب الإلغاء" };
+  }
+
+  const qtyToRemove = Math.trunc(removeQty);
+  if (!Number.isFinite(qtyToRemove) || qtyToRemove < 1) {
+    return { error: "حدد كمية صحيحة للإلغاء" };
+  }
+
+  const line = db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.id, orderItemId))
+    .get();
+  if (!line) return { error: "البند غير موجود" };
+
+  const order = db.select().from(orders).where(eq(orders.id, line.orderId)).get();
+  if (!order || order.status !== "open") {
+    return { error: "الإلغاء من هنا للفواتير المفتوحة فقط" };
+  }
+  if (!isVenueId(order.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
+  const kitchenSent = line.kitchenSentQty ?? 0;
+  if (kitchenSent <= 0) {
+    return { error: "هذا الصنف لم يُرسل للمطبخ — احذفه من الفاتورة مباشرة" };
+  }
+  if (qtyToRemove > line.qty) {
+    return { error: "الكمية الملغاة أكبر من الموجود في الفاتورة" };
+  }
+
+  const qtyAfter = line.qty - qtyToRemove;
+  const kitchenVoidQty = Math.min(qtyToRemove, kitchenSent);
+
+  try {
+    getSqlite().transaction(() => {
+      if (qtyAfter > 0) {
+        db.update(orderItems)
+          .set({
+            qty: qtyAfter,
+            lineTotal: qtyAfter * line.unitPrice,
+            kitchenSentQty: Math.min(kitchenSent, qtyAfter),
+          })
+          .where(eq(orderItems.id, orderItemId))
+          .run();
+      } else {
+        db.delete(orderItems).where(eq(orderItems.id, orderItemId)).run();
+      }
+
+      const remaining = db
+        .select()
+        .from(orderItems)
+        .where(eq(orderItems.orderId, order.id))
+        .all();
+      const remainingTotal = remaining.reduce(
+        (sum, row) => sum + row.lineTotal,
+        0,
+      );
+      db.update(orders)
+        .set({ total: remainingTotal })
+        .where(eq(orders.id, order.id))
+        .run();
+
+      db.insert(cancelledItems)
+        .values({
+          orderId: order.id,
+          orderItemId: line.id,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          unitPrice: line.unitPrice,
+          qtyBefore: line.qty,
+          qtyRemoved: qtyToRemove,
+          qtyAfter,
+          lineTotalRemoved: qtyToRemove * line.unitPrice,
+          remainingTotal,
+          remainingItemsJson: JSON.stringify(
+            remaining.map((row) => ({
+              name: row.itemName,
+              qty: row.qty,
+              unitPrice: row.unitPrice,
+              lineTotal: row.lineTotal,
+            })),
+          ),
+          reason: note,
+          removedBy: session.userId,
+          removedByName: session.name,
+          removedByRole: "main_cashier",
+          venueId: order.venueId,
+          kitchenWasSent: true,
+        })
+        .run();
+    })();
+  } catch {
+    return { error: "تعذر حفظ الإلغاء — لم يتغير شيء في الفاتورة" };
+  }
+
+  recordSessionAudit(session, {
+    venueId: order.venueId,
+    kind: "item_cancel",
+    orderId: order.id,
+    success: true,
+    detail: `ألغى ${qtyToRemove}× ${line.itemName} — كان ${line.qty} تبقّى ${qtyAfter} — ${note}`,
+  });
+
+  const kitchenVoid = await printKitchenVoidTicket({
+    orderId: order.id,
+    venueId: order.venueId,
+    tableId: order.tableId,
+    staffName: session.name,
+    itemName: line.itemName,
+    itemId: line.itemId,
+    qty: kitchenVoidQty,
+  });
+
+  if (kitchenVoid.ok) {
+    recordSessionAudit(session, {
+      venueId: order.venueId,
+      kind: "kitchen",
+      orderId: order.id,
+      printerName: kitchenVoid.printerName,
+      success: true,
+      detail: `تذكرة إلغاء مطبخ: −${kitchenVoidQty}× ${line.itemName}`,
+    });
+  } else {
+    recordSessionAudit(session, {
+      venueId: order.venueId,
+      kind: "kitchen",
+      orderId: order.id,
+      success: false,
+      detail: `أُلغي من الفاتورة ولم تُطبع تذكرة المطبخ: ${kitchenVoid.error}`,
+    });
+  }
+
+  revalidateOrderPaths(order.venueId, order.id, "cashier");
+  revalidatePath(`/waiter/${order.venueId}`);
+  revalidatePath(`/waiter/${order.venueId}/order/${order.id}`);
+  revalidatePath("/admin/cancelled-items");
+  revalidatePath("/admin/invoices");
+  revalidatePath(`/admin/invoices/${order.id}`);
+  revalidatePath("/admin/reports");
+  revalidatePath("/admin/audit");
+
+  if (!kitchenVoid.ok) {
+    return {
+      ok: true,
+      kitchenNotified: false,
+      warning: `أُلغي من الفاتورة — أخبر المطبخ يدوياً: ${kitchenVoid.error}`,
+    };
+  }
+
+  return { ok: true, kitchenNotified: true };
+}
+
+async function printKitchenVoidTicket(options: {
+  orderId: number;
+  venueId: VenueId;
+  tableId: number | null;
+  staffName: string;
+  itemName: string;
+  itemId: number | null;
+  qty: number;
+}): Promise<{ ok: true; printerName: string } | { ok: false; error: string }> {
+  if (options.qty <= 0) {
+    return { ok: true, printerName: "" };
+  }
+
+  let printer = null;
+  if (options.itemId) {
+    const item = db.select().from(items).where(eq(items.id, options.itemId)).get();
+    const category = item
+      ? db.select().from(categories).where(eq(categories.id, item.categoryId)).get()
+      : null;
+    printer = resolveKitchenPrinterForVenue({
+      venueId: options.venueId,
+      categoryName: category?.name,
+      categoryPrinterId: category?.kitchenPrinterId,
+      restaurantPrinterId: category?.restaurantKitchenPrinterId,
+      cafePrinterId: category?.cafeKitchenPrinterId,
+      itemPrinterId: item?.kitchenPrinterId,
+    });
+  }
+
+  if (!printer) {
+    return { ok: false, error: "لا توجد طابعة مطبخ لهذا الصنف" };
+  }
+
+  const table = options.tableId
+    ? db.select().from(tables).where(eq(tables.id, options.tableId)).get()
+    : null;
+  const createdAt = new Date()
+    .toLocaleTimeString("ar-LY", { hour: "2-digit", minute: "2-digit" })
+    .replace(/[\u200e\u200f\u061c]/g, "");
+
+  try {
+    await printToPrinter({
+      host: printer.host,
+      port: printer.port,
+      data: buildKitchenEscPos({
+        venueName: getVenueName(options.venueId),
+        orderId: options.orderId,
+        tableName: table?.name ?? "بيع سريع",
+        waiterName: options.staffName,
+        createdAt,
+        kind: "void",
+        lines: [{ name: options.itemName, qty: options.qty }],
+      }),
+    });
+    return { ok: true, printerName: printer.name };
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : `تعذر الاتصال بـ ${printer.name}`,
+    };
+  }
 }
 
 export type PrintTargetResult = {
@@ -538,6 +779,7 @@ async function buildCheckoutReceiptForOrder(
         unitPrice: line.unitPrice,
         lineTotal: line.lineTotal,
       })),
+      cancelledLines: cancelledReceiptLines(order.id),
     },
   };
 }
@@ -669,6 +911,7 @@ export async function payOrder(
       unitPrice: line.unitPrice,
       lineTotal: line.lineTotal,
     })),
+    cancelledLines: cancelledReceiptLines(order.id),
   };
 
   const printResult = await printCheckoutReceipt(
@@ -891,6 +1134,7 @@ export async function payQuickSale(
       unitPrice: line.item.price,
       lineTotal: line.item.price * line.qty,
     })),
+    cancelledLines: cancelledReceiptLines(order.id),
   };
 
   const printResult = await printCheckoutReceipt(
@@ -1155,6 +1399,7 @@ export async function printOpenOrderReceipt(
         unitPrice: line.unitPrice,
         lineTotal: line.lineTotal,
       })),
+      cancelledLines: cancelledReceiptLines(order.id),
     },
     order.venueId,
     session,

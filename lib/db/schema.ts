@@ -161,6 +161,34 @@ export const orderItems = sqliteTable("order_items", {
   kitchenSentQty: integer("kitchen_sent_qty").notNull().default(0),
 });
 
+export const cancelledItems = sqliteTable("cancelled_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orderId: integer("order_id")
+    .notNull()
+    .references(() => orders.id),
+  orderItemId: integer("order_item_id"),
+  itemId: integer("item_id").references(() => items.id),
+  itemName: text("item_name").notNull(),
+  unitPrice: real("unit_price").notNull(),
+  qtyBefore: integer("qty_before").notNull(),
+  qtyRemoved: integer("qty_removed").notNull(),
+  qtyAfter: integer("qty_after").notNull(),
+  lineTotalRemoved: real("line_total_removed").notNull(),
+  remainingTotal: real("remaining_total").notNull(),
+  remainingItemsJson: text("remaining_items_json").notNull(),
+  reason: text("reason").notNull(),
+  removedBy: integer("removed_by").references(() => users.id),
+  removedByName: text("removed_by_name").notNull(),
+  removedByRole: text("removed_by_role").notNull(),
+  venueId: text("venue_id").references(() => venues.id),
+  kitchenWasSent: integer("kitchen_was_sent", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 export const auditEvents = sqliteTable("audit_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   createdAt: text("created_at")
@@ -291,6 +319,7 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
     references: [shifts.id],
   }),
   items: many(orderItems),
+  cancelledItems: many(cancelledItems),
 }));
 
 export const orderItemsRelations = relations(orderItems, ({ one }) => ({
@@ -301,5 +330,16 @@ export const orderItemsRelations = relations(orderItems, ({ one }) => ({
   item: one(items, {
     fields: [orderItems.itemId],
     references: [items.id],
+  }),
+}));
+
+export const cancelledItemsRelations = relations(cancelledItems, ({ one }) => ({
+  order: one(orders, {
+    fields: [cancelledItems.orderId],
+    references: [orders.id],
+  }),
+  removedByUser: one(users, {
+    fields: [cancelledItems.removedBy],
+    references: [users.id],
   }),
 }));

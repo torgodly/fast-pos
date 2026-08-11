@@ -11,6 +11,7 @@ import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import {
+  cancelledItems,
   categories,
   items,
   orderItems,
@@ -29,6 +30,8 @@ export default async function CashierOrderPage({
   const { venue, id } = await params;
   if (!isVenueId(venue)) notFound();
   const session = await requireCashier(venue);
+  const me = db.select().from(users).where(eq(users.id, session.userId)).get();
+  const isMainCashier = !!me?.isMainCashier;
   const orderId = Number(id);
 
   const order = db
@@ -76,6 +79,12 @@ export default async function CashierOrderPage({
     .where(eq(orderItems.orderId, orderId))
     .all();
 
+  const cancelled = db
+    .select()
+    .from(cancelledItems)
+    .where(eq(cancelledItems.orderId, orderId))
+    .all();
+
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
@@ -121,6 +130,14 @@ export default async function CashierOrderPage({
           items={menuItems}
           lines={lines}
           total={order.total}
+          isMainCashier={isMainCashier}
+          cancelledLines={cancelled.map((row) => ({
+            id: row.id,
+            name: row.itemName,
+            qty: row.qtyRemoved,
+            reason: row.reason,
+            removedByName: row.removedByName,
+          }))}
           footer={
             <div className="space-y-1">
               <KitchenConfirmButton

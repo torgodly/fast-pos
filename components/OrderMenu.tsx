@@ -7,6 +7,10 @@ import {
   updateOrderItemQty,
 } from "@/app/actions/orders";
 import {
+  CancelKitchenItemDialog,
+  type CancelKitchenTarget,
+} from "@/components/CancelKitchenItemDialog";
+import {
   CategoryItemPicker,
   type MenuCategory,
   type MenuItem,
@@ -30,6 +34,14 @@ type Line = {
   kitchenSentQty?: number | null;
 };
 
+export type CancelledTicketLine = {
+  id: number;
+  name: string;
+  qty: number;
+  reason: string;
+  removedByName: string;
+};
+
 export function OrderMenu({
   orderId,
   categories,
@@ -37,6 +49,8 @@ export function OrderMenu({
   lines,
   total,
   footer,
+  isMainCashier = false,
+  cancelledLines = [],
 }: {
   orderId: number;
   categories: MenuCategory[];
@@ -44,9 +58,14 @@ export function OrderMenu({
   lines: Line[];
   total: number;
   footer?: ReactNode;
+  isMainCashier?: boolean;
+  cancelledLines?: CancelledTicketLine[];
 }) {
   const [pending, startTransition] = useTransition();
   const [cartOpen, setCartOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<CancelKitchenTarget | null>(
+    null,
+  );
 
   const itemCount = useMemo(
     () => lines.reduce((sum, line) => sum + line.qty, 0),
@@ -67,14 +86,19 @@ export function OrderMenu({
     return counts;
   }, [lines, items, categories]);
 
-  const ticketLines: PosTicketLine[] = lines.map((line) => ({
-    key: line.id,
-    name: line.itemName,
-    qty: line.qty,
-    lineTotal: line.lineTotal,
-    unitPrice: line.unitPrice,
-    kitchenSent: line.kitchenSentQty ?? 0,
-  }));
+  const ticketLines: PosTicketLine[] = lines.map((line) => {
+    const kitchenSent = line.kitchenSentQty ?? 0;
+    return {
+      key: line.id,
+      name: line.itemName,
+      qty: line.qty,
+      lineTotal: line.lineTotal,
+      unitPrice: line.unitPrice,
+      kitchenSent,
+      canReduce: isMainCashier || line.qty > kitchenSent,
+      canRemove: isMainCashier || kitchenSent === 0,
+    };
+  });
 
   function add(itemId: number) {
     startTransition(async () => {
@@ -82,17 +106,61 @@ export function OrderMenu({
     });
   }
 
+  function openKitchenCancel(line: Line, defaultRemoveQty: number) {
+    setCancelTarget({
+      id: line.id,
+      name: line.itemName,
+      qty: line.qty,
+      unitPrice: line.unitPrice,
+      kitchenSent: line.kitchenSentQty ?? 0,
+      defaultRemoveQty,
+    });
+  }
+
   function changeQty(key: string | number, qty: number) {
+    const line = lines.find((row) => row.id === Number(key));
+    if (!line) return;
+    const kitchenSent = line.kitchenSentQty ?? 0;
+    if (isMainCashier && qty < kitchenSent) {
+      openKitchenCancel(line, Math.max(1, line.qty - qty));
+      return;
+    }
     startTransition(async () => {
       await updateOrderItemQty(Number(key), qty);
     });
   }
 
   function remove(key: string | number) {
+    const line = lines.find((row) => row.id === Number(key));
+    if (!line) return;
+    if (isMainCashier && (line.kitchenSentQty ?? 0) > 0) {
+      openKitchenCancel(line, line.qty);
+      return;
+    }
     startTransition(async () => {
       await removeOrderItem(Number(key));
     });
   }
+
+  const cancelledBlock =
+    cancelledLines.length > 0 ? (
+      <div className="rounded-lg border border-error/20 bg-error/5 px-2 py-1.5 text-[11px]">
+        <p className="mb-1 font-black text-error">أُلغي من الكاشير الرئيسي</p>
+        <ul className="space-y-1">
+          {cancelledLines.map((row) => (
+            <li key={row.id}>
+              <span className="font-bold">
+                −{row.qty}× {row.name}
+              </span>
+              <span className="text-base-content/55">
+                {" "}
+                · {row.removedByName} · {row.reason}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ) : null;
 
   const footerBlock = (
     <>
@@ -130,7 +198,12 @@ export function OrderMenu({
             emptyLabel="لا أصناف"
             onChangeQty={changeQty}
             onRemove={remove}
-            footer={footer}
+            footer={
+              <>
+                {cancelledBlock}
+                {footer}
+              </>
+            }
           />
         </div>
       </div>
@@ -147,7 +220,12 @@ export function OrderMenu({
         title="فاتورة"
         itemCount={itemCount}
         onClose={() => setCartOpen(false)}
-        footer={footerBlock}
+        footer={
+          <>
+            {cancelledBlock}
+            {footerBlock}
+          </>
+        }
       >
         <PosTicketLines
           lines={ticketLines}
@@ -157,6 +235,11 @@ export function OrderMenu({
           onRemove={remove}
         />
       </PosMobileSheet>
+
+      <CancelKitchenItemDialog
+        target={cancelTarget}
+        onClose={() => setCancelTarget(null)}
+      />
     </>
   );
 }

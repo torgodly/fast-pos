@@ -1,22 +1,30 @@
 "use server";
 
-import { getCashierStationContext } from "@/app/actions/station";
+import { and, eq } from "drizzle-orm";
 import { getSession } from "@/lib/auth/session";
+import { db } from "@/lib/db";
+import { printers } from "@/lib/db/schema";
+import { recordSessionAudit } from "@/lib/audit";
 import { buildReportSummaryEscPos } from "@/lib/print/escpos";
-import type { ReportSummaryPrintData } from "@/lib/print/receipts";
 import { printToPrinter } from "@/lib/print/network";
 import {
-  type ReportFiltersInput,
-} from "@/lib/reports/filters";
+  buildDetailedSalesReportHtml,
+  type ReportSummaryPrintData,
+} from "@/lib/print/receipts";
+import { type ReportFiltersInput } from "@/lib/reports/filters";
 import { getReportSummary } from "@/lib/reports/summary";
 import { formatDateTime } from "@/lib/venues";
-import { recordSessionAudit } from "@/lib/audit";
 
 async function assertAdmin() {
   const session = await getSession();
   if (!session || session.role !== "admin") {
     throw new Error("غير مصرح");
   }
+  return session;
+}
+
+function byRevenue<T extends { revenue: number }>(rows: T[]) {
+  return [...rows].sort((a, b) => b.revenue - a.revenue);
 }
 
 function summaryToPrintData(
@@ -39,95 +47,99 @@ function summaryToPrintData(
     cancelledCount: summary.cancelledCount,
     openCount: summary.openCount,
     openTotal: summary.openTotal,
-    categorySales: summary.categorySales.slice(0, 8).map((row) => ({
+    categorySales: byRevenue(summary.categorySales).map((row) => ({
       name: row.categoryName,
       qty: row.qty,
       revenue: row.revenue,
     })),
-    itemSales: summary.itemSales.slice(0, 10).map((row) => ({
+    itemSales: byRevenue(summary.itemSales).map((row) => ({
       name: row.itemName,
       qty: row.qty,
       revenue: row.revenue,
     })),
-    waiterPerformance: summary.waiterPerformance.slice(0, 5).map((row) => ({
-      name: row.name,
-      invoices: row.invoices,
-      sales: row.sales,
-    })),
-    cashierPerformance: summary.cashierPerformance.slice(0, 5).map((row) => ({
-      name: row.name,
-      invoices: row.invoices,
-      cash: row.cash,
-      card: row.card,
-      sales: row.sales,
-    })),
+    waiterPerformance: [],
+    cashierPerformance: [],
   };
 }
 
 export async function printReportSummary(
   filters: ReportFiltersInput,
-): Promise<{ error: string } | { ok: true; message: string }> {
+  printerId: number,
+): Promise<
+  | { error: string }
+  | { ok: true; message: string }
+  | {
+      ok: true;
+      message: string;
+      browserPrint: true;
+      receiptHtml: string;
+    }
+> {
   let session;
   try {
-    session = await getSession();
-    await assertAdmin();
+    session = await assertAdmin();
   } catch {
     return { error: "غير مصرح" };
   }
-  if (!session) return { error: "غير مصرح" };
+
+  if (!Number.isFinite(printerId) || printerId < 1) {
+    return { error: "اختر طابعة" };
+  }
+
+  const printer = db
+    .select()
+    .from(printers)
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)))
+    .get();
+  if (!printer) {
+    return { error: "الطابعة غير موجودة أو معطّلة" };
+  }
 
   const summary = getReportSummary(filters);
-  const stationCtx = await getCashierStationContext(summary.venue);
-  if ("error" in stationCtx) {
-    recordSessionAudit(session, {
-      venueId: summary.venue,
-      kind: "report",
-      success: false,
-      detail: stationCtx.error,
-    });
-    return { error: stationCtx.error };
-  }
+  const data = summaryToPrintData(summary);
 
-  if (stationCtx.printer.connectionType === "local") {
-    const detail =
-      "طابعة Chrome المحلية لا تدعم طباعة التقارير من الإدارة — استخدم طابعة شبكة";
+  if (printer.connectionType === "local") {
     recordSessionAudit(session, {
       venueId: summary.venue,
       kind: "report",
-      printerName: stationCtx.printer.name,
-      success: false,
-      detail,
-    });
-    return { error: detail };
-  }
-
-  try {
-    const payload = buildReportSummaryEscPos(summaryToPrintData(summary));
-    await printToPrinter({
-      host: stationCtx.printer.host,
-      port: stationCtx.printer.port,
-      data: payload,
-    });
-    recordSessionAudit(session, {
-      venueId: summary.venue,
-      kind: "report",
-      printerName: stationCtx.printer.name,
+      printerName: printer.name,
       success: true,
-      detail: `تقرير ${summary.fromSql} — ${summary.toSql}`,
+      detail: `تقرير أصناف/مجموعات ${summary.fromSql} — ${summary.toSql} (متصفح)`,
     });
     return {
       ok: true,
-      message: `تمت طباعة التقرير على ${stationCtx.printer.name}`,
+      browserPrint: true,
+      receiptHtml: buildDetailedSalesReportHtml(data),
+      message: `اختر «${printer.name}» في نافذة الطباعة`,
+    };
+  }
+
+  try {
+    await printToPrinter({
+      host: printer.host,
+      port: printer.port,
+      data: buildReportSummaryEscPos(data),
+    });
+    recordSessionAudit(session, {
+      venueId: summary.venue,
+      kind: "report",
+      printerName: printer.name,
+      success: true,
+      detail: `تقرير أصناف/مجموعات ${summary.fromSql} — ${summary.toSql} · ${data.itemSales.length} صنف · ${data.categorySales.length} مجموعة`,
+    });
+    return {
+      ok: true,
+      message: `طُبع التقرير على ${printer.name}`,
     };
   } catch (error) {
     const detail =
       error instanceof Error
         ? error.message
-        : `تعذر الطباعة على ${stationCtx.printer.name}`;
+        : `تعذر الطباعة على ${printer.name}`;
     recordSessionAudit(session, {
       venueId: summary.venue,
       kind: "report",
-      printerName: stationCtx.printer.name,
+      printerName: printer.name,
       success: false,
       detail,
     });

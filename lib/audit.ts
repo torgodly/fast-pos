@@ -12,6 +12,7 @@ export const AUDIT_KINDS = [
   "report",
   "test",
   "invoice_edit",
+  "item_cancel",
 ] as const;
 
 export type AuditKind = (typeof AUDIT_KINDS)[number];
@@ -26,6 +27,7 @@ export const AUDIT_KIND_LABELS: Record<AuditKind, string> = {
   report: "تقرير إدارة",
   test: "اختبار طابعة",
   invoice_edit: "تعديل فاتورة",
+  item_cancel: "إلغاء صنف",
 };
 
 export function isAuditKind(value: string): value is AuditKind {
@@ -94,6 +96,8 @@ export function roleLabel(role: string) {
       return "سفرادجي";
     case "cashier":
       return "كاشير";
+    case "main_cashier":
+      return "كاشير رئيسي";
     default:
       return role;
   }

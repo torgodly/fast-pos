@@ -19,6 +19,7 @@ import {
 import { db } from "@/lib/db";
 import {
   auditEvents,
+  cancelledItems,
   categories,
   items,
   orderItems,
@@ -84,6 +85,13 @@ export default async function AdminInvoicePage({
         eq(items.active, true),
       ),
     )
+    .all();
+
+  const cancelled = db
+    .select()
+    .from(cancelledItems)
+    .where(eq(cancelledItems.orderId, orderId))
+    .orderBy(desc(cancelledItems.id))
     .all();
 
   const history = db
@@ -206,6 +214,58 @@ export default async function AdminInvoicePage({
           categoryId: item.categoryId,
         }))}
       />
+
+      {cancelled.length > 0 ? (
+        <section className="overflow-hidden rounded-3xl border border-error/20 bg-base-100 shadow-sm">
+          <div className="flex items-center justify-between border-b border-error/15 bg-error/5 px-5 py-4">
+            <div>
+              <h3 className="font-black text-error">أصناف ألغاها الكاشير الرئيسي</h3>
+              <p className="text-xs text-base-content/45">
+                الأصناف أعلاه هي الفاتورة النهائية — هنا ما أُزيل منها
+              </p>
+            </div>
+            <Link
+              href={`/admin/cancelled-items?venue=${order.venueId}&q=${order.id}`}
+              className="btn btn-ghost btn-xs"
+            >
+              كل الملغاة
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="table table-sm">
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>أُزيل</th>
+                  <th>كان / تبقّى</th>
+                  <th>من</th>
+                  <th>السبب</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cancelled.map((row) => (
+                  <tr key={row.id}>
+                    <td className="font-bold">{row.itemName}</td>
+                    <td className="font-black text-error">
+                      −{row.qtyRemoved}× · {formatMoney(row.lineTotalRemoved)}
+                    </td>
+                    <td>
+                      {row.qtyBefore} → {row.qtyAfter}
+                    </td>
+                    <td>
+                      <span className="font-bold">{row.removedByName}</span>
+                      <span className="ms-1 text-[11px] text-base-content/45">
+                        {roleLabel(row.removedByRole)}
+                      </span>
+                    </td>
+                    <td className="text-xs">{row.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
 
       <section className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm">
         <div className="border-b border-base-300/60 px-5 py-4">

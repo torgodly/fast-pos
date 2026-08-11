@@ -2,6 +2,7 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import {
   ArrowLeft,
+  Ban,
   Banknote,
   Boxes,
   Clock3,
@@ -12,7 +13,7 @@ import {
 } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
 import { db } from "@/lib/db";
-import { items, orders, tables, users } from "@/lib/db/schema";
+import { cancelledItems, items, orders, tables, users } from "@/lib/db/schema";
 import { formatMoney } from "@/lib/venues";
 
 export default async function AdminHomePage() {
@@ -36,6 +37,7 @@ export default async function AdminHomePage() {
     .from(users)
     .all()
     .filter((u) => u.role !== "admin").length;
+  const cancelledCount = db.select().from(cancelledItems).all().length;
 
   const cards = [
     {
@@ -77,6 +79,14 @@ export default async function AdminHomePage() {
       href: "/admin/staff",
       icon: UsersRound,
       color: "text-accent-content bg-accent/15",
+    },
+    {
+      label: "الأصناف الملغاة",
+      value: String(cancelledCount),
+      hint: "إلغاء بعد تذكرة المطبخ",
+      href: "/admin/cancelled-items",
+      icon: Ban,
+      color: "text-error bg-error/10",
     },
   ];
 

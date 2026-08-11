@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
+  Ban,
   BarChart3,
   Boxes,
   ClipboardList,
@@ -28,6 +29,7 @@ const links = [
   { href: "/admin/printers", label: "الطابعات", icon: Printer },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
   { href: "/admin/invoices", label: "الفواتير", icon: ReceiptText },
+  { href: "/admin/cancelled-items", label: "الأصناف الملغاة", icon: Ban },
   { href: "/admin/audit", label: "التدقيق", icon: ClipboardList },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings2 },
 ];

@@ -58,6 +58,16 @@ export type KitchenReceiptData = {
   lines: ReceiptLine[];
   /** e.g. "2/3" when order is split across multiple kitchen tickets */
   ticketPart?: string;
+  kind?: "order" | "void";
+};
+
+export type CancelledReceiptLine = {
+  name: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+  reason?: string;
+  removedByName?: string;
 };
 
 export type CheckoutReceiptData = {
@@ -71,6 +81,7 @@ export type CheckoutReceiptData = {
   total: number;
   footerMessage?: string;
   lines: Array<ReceiptLine & { unitPrice: number; lineTotal: number }>;
+  cancelledLines?: CancelledReceiptLine[];
 };
 
 function escapeHtml(value: string) {
@@ -252,6 +263,12 @@ function shell(title: string, body: string) {
       color: #000;
     }
 
+    .void-title {
+      margin: 0 0 1.5mm;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
     .total-row td {
       padding-top: 2mm;
       font-size: 17px;
@@ -286,6 +303,35 @@ function shell(title: string, body: string) {
       color: #000;
     }
 
+    .rpt-section {
+      margin: 3mm 0 1.5mm;
+      padding: 1.5mm 0;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 900;
+      border-top: 2px solid #000;
+      border-bottom: 2px solid #000;
+    }
+
+    .rpt-row {
+      padding: 1.6mm 0;
+      border-bottom: 1px dashed #000;
+    }
+
+    .rpt-name {
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .rpt-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 2mm;
+      margin-top: 0.6mm;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
     @media print {
       html, body, .wrap {
         width: 72mm !important;
@@ -316,9 +362,17 @@ export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
     )
     .join("");
 
+  const voidBanner =
+    data.kind === "void"
+      ? `<p class="subtitle">إلغاء — لا تحضّر</p>`
+      : "";
+
   return shell(
-    `طلب مطبخ #${data.orderId}`,
+    data.kind === "void"
+      ? `إلغاء مطبخ #${data.orderId}`
+      : `طلب مطبخ #${data.orderId}`,
     `
+    ${voidBanner}
     <p class="brand">#${data.orderId}${partTag} · ${escapeHtml(data.tableName)}</p>
     <p class="subtitle">${escapeHtml(data.createdAt)} · ${escapeHtml(data.waiterName)}</p>
     <hr class="divider" />
@@ -355,6 +409,32 @@ export function buildCheckoutReceiptHtml(
       </tr>`,
     )
     .join("");
+  const cancelled = data.cancelledLines ?? [];
+  const cancelledHtml =
+    cancelled.length === 0
+      ? ""
+      : `
+    <hr class="divider" />
+    <p class="void-title">أصناف ألغاها الكاشير الرئيسي</p>
+    <table class="items">
+      <tbody>
+        ${cancelled
+          .map(
+            (line) => `
+          <tr>
+            <td class="name">
+              ${escapeHtml(line.name)}
+              <span class="sub">−${line.qty}× · ${money(line.lineTotal)}${
+                line.removedByName
+                  ? ` · ${escapeHtml(line.removedByName)}`
+                  : ""
+              }${line.reason ? ` · ${escapeHtml(line.reason)}` : ""}</span>
+            </td>
+          </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>`;
 
   return shell(
     `إيصال ${data.orderId > 0 ? `رقم ${data.orderId}` : "للعرض"}`,
@@ -384,6 +464,7 @@ export function buildCheckoutReceiptHtml(
       </thead>
       <tbody>${lines}</tbody>
     </table>
+    ${cancelledHtml}
     <hr class="divider" />
     <table class="total-row">
       <tr>
@@ -392,6 +473,66 @@ export function buildCheckoutReceiptHtml(
       </tr>
     </table>
     <p class="foot">${escapeHtml(data.footerMessage?.trim() || "شكراً لزيارتكم")}</p>
+  `,
+  );
+}
+
+function reportSalesRows(
+  rows: Array<{ name: string; qty: number; revenue: number }>,
+) {
+  if (rows.length === 0) {
+    return `<p class="foot">لا بيانات</p>`;
+  }
+  return rows
+    .map(
+      (row, index) => `
+      <div class="rpt-row">
+        <div class="rpt-name">${index + 1}. ${escapeHtml(row.name)}</div>
+        <div class="rpt-meta">
+          <span>${row.qty} قطعة</span>
+          <span>${money(row.revenue)}</span>
+        </div>
+      </div>`,
+    )
+    .join("");
+}
+
+export function buildDetailedSalesReportHtml(data: ReportSummaryPrintData) {
+  return shell(
+    `تقرير مبيعات ${data.venueName}`,
+    `
+    <div class="center">
+      <p class="brand">${escapeHtml(data.venueName)}</p>
+      <p class="subtitle">تقرير المبيعات</p>
+    </div>
+    <hr class="divider" />
+    <table class="meta">
+      ${metaRow("من", data.fromLabel)}
+      ${metaRow("إلى", data.toLabel)}
+      ${metaRow("طباعة", data.printedAt)}
+      ${metaRow("فواتير", String(data.invoiceCount))}
+      ${metaRow("قطع", String(data.totalItems))}
+      ${metaRow("نقدي", money(data.cashTotal))}
+      ${metaRow("بطاقة", money(data.cardTotal))}
+    </table>
+    <table class="total-row">
+      <tr>
+        <td class="label">الإجمالي</td>
+        <td class="value">${money(data.totalSales)}</td>
+      </tr>
+    </table>
+    <p class="rpt-section">المجموعات (${data.categorySales.length})</p>
+    ${reportSalesRows(data.categorySales)}
+    <p class="rpt-section">الأصناف (${data.itemSales.length})</p>
+    ${reportSalesRows(data.itemSales)}
+    <hr class="divider" />
+    <table class="total-row">
+      <tr>
+        <td class="label">الإجمالي النهائي</td>
+        <td class="value">${money(data.totalSales)}</td>
+      </tr>
+    </table>
+    <p class="foot">نهاية التقرير</p>
   `,
   );
 }

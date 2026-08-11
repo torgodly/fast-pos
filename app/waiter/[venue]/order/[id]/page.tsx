@@ -10,6 +10,7 @@ import { OrderMenu } from "@/components/OrderMenu";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import {
+  cancelledItems,
   categories,
   items,
   orderItems,
@@ -74,6 +75,12 @@ export default async function WaiterOrderPage({
     .where(eq(orderItems.orderId, orderId))
     .all();
 
+  const cancelled = db
+    .select()
+    .from(cancelledItems)
+    .where(eq(cancelledItems.orderId, orderId))
+    .all();
+
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
@@ -115,6 +122,13 @@ export default async function WaiterOrderPage({
           items={menuItems}
           lines={lines}
           total={order.total}
+          cancelledLines={cancelled.map((row) => ({
+            id: row.id,
+            name: row.itemName,
+            qty: row.qtyRemoved,
+            reason: row.reason,
+            removedByName: row.removedByName,
+          }))}
           footer={
             <div className="space-y-1">
               <KitchenConfirmButton

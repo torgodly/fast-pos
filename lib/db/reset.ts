@@ -32,6 +32,11 @@ export function applyPartialReset(options: ResetOptions) {
     } catch {
       /* audit table may not exist on very old DBs */
     }
+    try {
+      sqlite.exec("DELETE FROM cancelled_items");
+    } catch {
+      /* cancelled_items may not exist on older DBs */
+    }
     sqlite.exec("DELETE FROM order_items");
     sqlite.exec("DELETE FROM orders");
     try {
@@ -52,6 +57,11 @@ export function applyPartialReset(options: ResetOptions) {
     sqlite.exec("UPDATE orders SET waiter_id = NULL, cashier_id = NULL");
     try {
       sqlite.exec("UPDATE audit_events SET user_id = NULL");
+    } catch {
+      /* ignore */
+    }
+    try {
+      sqlite.exec("UPDATE cancelled_items SET removed_by = NULL");
     } catch {
       /* ignore */
     }

@@ -6,7 +6,6 @@ import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
-import { migrateTables } from "./migrate-tables";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -78,11 +77,6 @@ function createDb() {
   migrateNullableMenuVenue(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
-  try {
-    migrateTables(sqlite);
-  } catch {
-    // best-effort remap for existing installs
-  }
   return db;
 }
 
@@ -219,6 +213,30 @@ function ensureSchema(sqlite: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS audit_events_created_idx ON audit_events(created_at);
     CREATE INDEX IF NOT EXISTS audit_events_venue_idx ON audit_events(venue_id);
+
+    CREATE TABLE IF NOT EXISTS cancelled_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      order_id INTEGER NOT NULL REFERENCES orders(id),
+      order_item_id INTEGER,
+      item_id INTEGER REFERENCES items(id),
+      item_name TEXT NOT NULL,
+      unit_price REAL NOT NULL,
+      qty_before INTEGER NOT NULL,
+      qty_removed INTEGER NOT NULL,
+      qty_after INTEGER NOT NULL,
+      line_total_removed REAL NOT NULL,
+      remaining_total REAL NOT NULL,
+      remaining_items_json TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      removed_by INTEGER REFERENCES users(id),
+      removed_by_name TEXT NOT NULL,
+      removed_by_role TEXT NOT NULL,
+      venue_id TEXT REFERENCES venues(id),
+      kitchen_was_sent INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS cancelled_items_order_idx ON cancelled_items(order_id);
+    CREATE INDEX IF NOT EXISTS cancelled_items_created_idx ON cancelled_items(created_at);
   `);
 
   // Existing databases created before kitchen receipts
@@ -268,22 +286,6 @@ function ensureSchema(sqlite: Database.Database) {
     );
   } catch {
     // column already exists
-  }
-
-  try {
-    sqlite.exec(`
-      UPDATE categories
-      SET kitchen_printer_id = (
-        SELECT i.kitchen_printer_id
-        FROM items i
-        WHERE i.category_id = categories.id
-          AND i.kitchen_printer_id IS NOT NULL
-        LIMIT 1
-      )
-      WHERE kitchen_printer_id IS NULL
-    `);
-  } catch {
-    // migration best-effort for existing databases
   }
 
   try {
