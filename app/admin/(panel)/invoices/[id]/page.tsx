@@ -1,13 +1,38 @@
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
-import { ArrowRight, ReceiptText } from "lucide-react";
+import { and, asc, desc, eq } from "drizzle-orm";
+import {
+  ArrowRight,
+  Banknote,
+  Clock3,
+  CreditCard,
+  ReceiptText,
+  UserRound,
+} from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/app/actions/auth";
 import { InvoiceEditor } from "@/components/admin/InvoiceEditor";
+import {
+  AUDIT_KIND_LABELS,
+  isAuditKind,
+  roleLabel,
+} from "@/lib/audit";
 import { db } from "@/lib/db";
-import { categories, items, orderItems, orders, tables, users } from "@/lib/db/schema";
+import {
+  auditEvents,
+  categories,
+  items,
+  orderItems,
+  orders,
+  tables,
+  users,
+} from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
-import { formatDateTime, formatMoney, getVenueName, isVenueId } from "@/lib/venues";
+import {
+  formatDateTime,
+  formatMoney,
+  getVenueName,
+  isVenueId,
+} from "@/lib/venues";
 
 export default async function AdminInvoicePage({
   params,
@@ -61,41 +86,76 @@ export default async function AdminInvoicePage({
     )
     .all();
 
+  const history = db
+    .select()
+    .from(auditEvents)
+    .where(eq(auditEvents.orderId, orderId))
+    .orderBy(desc(auditEvents.id))
+    .limit(20)
+    .all();
+
   const statusLabel =
     order.status === "paid"
       ? "مدفوعة"
       : order.status === "cancelled"
         ? "ملغاة"
         : "مفتوحة";
+  const statusClass =
+    order.status === "paid"
+      ? "badge-success"
+      : order.status === "cancelled"
+        ? "badge-error"
+        : "badge-warning";
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-            <ReceiptText className="size-6" />
-          </span>
+    <div className="space-y-6 pb-8">
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-5 text-neutral-content shadow-xl sm:p-7">
+        <div className="absolute -left-10 -top-16 size-48 rounded-full border-[28px] border-white/5" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <h2 className="text-2xl font-black">فاتورة #{order.id}</h2>
-            <p className="text-sm text-base-content/45">
-              {getVenueName(order.venueId)} · {table?.name ?? "بيع سريع"} ·{" "}
-              {statusLabel}
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <span className={`badge ${statusClass} badge-lg border-0`}>
+                {statusLabel}
+              </span>
+              <span className="badge badge-ghost border-white/15 bg-white/10 text-white">
+                {getVenueName(order.venueId)}
+              </span>
+            </div>
+            <h2 className="flex items-center gap-2 text-3xl font-black">
+              <ReceiptText className="size-7" />
+              فاتورة #{order.id}
+            </h2>
+            <p className="mt-1 text-sm text-white/65">
+              {table?.name ?? "بيع سريع"} ·{" "}
+              {formatDateTime(order.paidAt ?? order.createdAt)}
             </p>
           </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="rounded-2xl bg-white/10 px-4 py-3">
+              <p className="text-xs text-white/55">الإجمالي</p>
+              <p className="text-2xl font-black">{formatMoney(order.total)}</p>
+            </div>
+            <Link
+              href="/admin/invoices"
+              className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
+            >
+              <ArrowRight className="size-4" />
+              كل الفواتير
+            </Link>
+          </div>
         </div>
-        <Link href="/admin/invoices" className="btn btn-ghost btn-sm gap-1">
-          <ArrowRight className="size-4" />
-          كل الفواتير
-        </Link>
-      </div>
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-base-300 bg-base-100 px-3 py-2">
-          <p className="text-[11px] text-base-content/45">المجموع</p>
-          <p className="text-lg font-black">{formatMoney(order.total)}</p>
-        </div>
-        <div className="rounded-xl border border-base-300 bg-base-100 px-3 py-2">
-          <p className="text-[11px] text-base-content/45">الدفع</p>
+        <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">
+            {order.paymentMethod === "card" ? (
+              <CreditCard className="size-3.5" />
+            ) : (
+              <Banknote className="size-3.5" />
+            )}
+            الدفع
+          </p>
           <p className="font-black">
             {order.paymentMethod === "cash"
               ? "نقدي"
@@ -104,17 +164,26 @@ export default async function AdminInvoicePage({
                 : "—"}
           </p>
         </div>
-        <div className="rounded-xl border border-base-300 bg-base-100 px-3 py-2">
-          <p className="text-[11px] text-base-content/45">السفرادجي / الكاشير</p>
-          <p className="font-bold">
-            {waiter?.name ?? "—"} / {cashier?.name ?? "—"}
+        <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">
+            <UserRound className="size-3.5" />
+            السفرادجي
           </p>
+          <p className="font-black">{waiter?.name ?? "—"}</p>
         </div>
-        <div className="rounded-xl border border-base-300 bg-base-100 px-3 py-2">
-          <p className="text-[11px] text-base-content/45">الوقت</p>
-          <p className="text-sm font-bold">
-            {formatDateTime(order.paidAt ?? order.createdAt)}
+        <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">
+            <UserRound className="size-3.5" />
+            الكاشير
           </p>
+          <p className="font-black">{cashier?.name ?? "—"}</p>
+        </div>
+        <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
+          <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">
+            <Clock3 className="size-3.5" />
+            أُنشئت
+          </p>
+          <p className="text-sm font-black">{formatDateTime(order.createdAt)}</p>
         </div>
       </div>
 
@@ -137,6 +206,65 @@ export default async function AdminInvoicePage({
           categoryId: item.categoryId,
         }))}
       />
+
+      <section className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm">
+        <div className="border-b border-base-300/60 px-5 py-4">
+          <h3 className="font-black">حركات هذه الفاتورة</h3>
+          <p className="text-xs text-base-content/45">طباعة وتعديلات الإدارة</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="table table-sm">
+            <thead>
+              <tr>
+                <th>الوقت</th>
+                <th>الموظف</th>
+                <th>العمل</th>
+                <th>النتيجة</th>
+                <th>التفاصيل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((row) => (
+                <tr key={row.id}>
+                  <td className="whitespace-nowrap">
+                    {formatDateTime(row.createdAt)}
+                  </td>
+                  <td>
+                    <span className="font-bold">{row.userName}</span>
+                    <span className="ms-1 text-[11px] text-base-content/45">
+                      {roleLabel(row.role)}
+                    </span>
+                  </td>
+                  <td className="font-bold">
+                    {isAuditKind(row.kind)
+                      ? AUDIT_KIND_LABELS[row.kind]
+                      : row.kind}
+                  </td>
+                  <td>
+                    <span
+                      className={`badge badge-sm ${
+                        row.success
+                          ? "badge-success badge-soft"
+                          : "badge-error badge-soft"
+                      }`}
+                    >
+                      {row.success ? "تم" : "فشل"}
+                    </span>
+                  </td>
+                  <td className="text-xs">{row.detail}</td>
+                </tr>
+              ))}
+              {history.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-base-content/45">
+                    لا حركات مسجّلة لهذه الفاتورة
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }
