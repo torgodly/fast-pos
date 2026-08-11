@@ -6,6 +6,7 @@ import {
   LEGACY_CATEGORY_TO_GROUP,
   reportGroupsForVenue,
 } from "@/lib/reports/groups";
+import { findSharedCategory } from "./dedupe-shared-categories";
 
 function pickPrinter(
   sqlite: Database.Database,
@@ -75,6 +76,12 @@ export function migrateReportGroups(sqlite: Database.Database) {
       const printerId = DISPLAY_PRINTER_GROUPS.has(name)
         ? displayPrinter
         : kitchenPrinter;
+
+      const shared = findSharedCategory(sqlite, name);
+      if (shared) {
+        groupIds.set(name, shared.id);
+        return;
+      }
 
       const found = existing.find((c) => c.name === name);
       if (found) {

@@ -10,6 +10,7 @@ import { migrateCafeMenu } from "./migrate-cafe-menu";
 import { migrateRestaurantMenu } from "./migrate-restaurant-menu";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
 import { migrateTables } from "./migrate-tables";
+import { dedupeSharedCategories } from "./dedupe-shared-categories";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -86,6 +87,7 @@ function createDb() {
     migrateRestaurantMenu(sqlite);
     migrateCafeMenu(sqlite);
     migrateTables(sqlite);
+    dedupeSharedCategories(sqlite);
   } catch {
     // best-effort remap for existing installs
   }

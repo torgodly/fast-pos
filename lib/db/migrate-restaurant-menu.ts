@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { findSharedCategory } from "./dedupe-shared-categories";
 
 type MenuLine = { name: string; price: number };
 
@@ -90,6 +91,10 @@ export function migrateRestaurantMenu(sqlite: Database.Database) {
   const foodNames = RESTAURANT_MENU.map((g) => g.category);
 
   for (const group of RESTAURANT_MENU) {
+    if (findSharedCategory(sqlite, group.category)) {
+      continue;
+    }
+
     let cat = sqlite
       .prepare(
         `SELECT id FROM categories WHERE venue_id = 'restaurant' AND name = ?`,

@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { DISPLAY_PRINTER_GROUPS } from "@/lib/reports/groups";
+import { findSharedCategory } from "./dedupe-shared-categories";
 
 type MenuLine = { name: string; price: number };
 
@@ -294,6 +295,10 @@ export function migrateCafeMenu(sqlite: Database.Database) {
     const printerId = DISPLAY_PRINTER_GROUPS.has(group.category)
       ? displayId
       : kitchenId;
+
+    if (findSharedCategory(sqlite, group.category)) {
+      continue;
+    }
 
     let cat = sqlite
       .prepare(

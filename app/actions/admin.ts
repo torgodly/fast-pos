@@ -126,6 +126,46 @@ function syncCheckoutStation(
     .run();
 }
 
+function mergeSameNamedCategoriesInto(keepId: number, name: string) {
+  const keepItems = db
+    .select()
+    .from(items)
+    .where(eq(items.categoryId, keepId))
+    .all();
+  const byName = new Map(keepItems.map((item) => [item.name, item.id]));
+
+  const dups = db
+    .select()
+    .from(categories)
+    .where(and(eq(categories.name, name), ne(categories.id, keepId)))
+    .all();
+
+  for (const dup of dups) {
+    const moving = db
+      .select()
+      .from(items)
+      .where(eq(items.categoryId, dup.id))
+      .all();
+    for (const item of moving) {
+      const existingId = byName.get(item.name);
+      if (existingId) {
+        db.update(orderItems)
+          .set({ itemId: existingId })
+          .where(eq(orderItems.itemId, item.id))
+          .run();
+        db.delete(items).where(eq(items.id, item.id)).run();
+      } else {
+        db.update(items)
+          .set({ categoryId: keepId, venueId: null })
+          .where(eq(items.id, item.id))
+          .run();
+        byName.set(item.name, item.id);
+      }
+    }
+    db.delete(categories).where(eq(categories.id, dup.id)).run();
+  }
+}
+
 export async function upsertCategory(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
@@ -188,10 +228,19 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
       .set({ venueId })
       .where(eq(items.categoryId, id))
       .run();
+
+    if (venueId == null) {
+      mergeSameNamedCategoriesInto(id, name);
+    }
   } else {
-    db.insert(categories)
+    const created = db
+      .insert(categories)
       .values({ ...values, active: true })
-      .run();
+      .returning()
+      .get();
+    if (venueId == null && created) {
+      mergeSameNamedCategoriesInto(created.id, name);
+    }
   }
 
   revalidatePath("/admin/items");
