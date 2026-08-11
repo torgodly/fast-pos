@@ -271,16 +271,14 @@ export async function deleteCategory(id: number): Promise<ActionResult> {
 export async function upsertItem(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const scope = parseMenuVenueScope(String(formData.get("venueScope") ?? ""));
   const categoryId = Number(formData.get("categoryId"));
   const name = String(formData.get("name") ?? "").trim();
   const price = Number(formData.get("price"));
 
-  if (!scope || !name || !categoryId || Number.isNaN(price) || price < 0) {
+  if (!name || !categoryId || Number.isNaN(price) || price < 0) {
     return { error: "بيانات الصنف غير مكتملة" };
   }
 
-  const venueId = scopeToVenueId(scope);
   const category = db
     .select()
     .from(categories)
@@ -288,15 +286,8 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     .get();
   if (!category) return { error: "التصنيف غير موجود" };
 
-  if (category.venueId !== venueId) {
-    return {
-      error:
-        "نطاق الصنف يجب أن يطابق نطاق التصنيف (مشترك مع مشترك، مطعم مع مطعم…)",
-    };
-  }
-
   const values = {
-    venueId,
+    venueId: category.venueId,
     categoryId,
     name,
     price,

@@ -926,20 +926,13 @@ export function ItemsAdmin({
             <strong>
               {menuScopeLabel(
                 venueIdToScope(
-                  editingItem?.venueId ?? selected?.venueId ?? venueId,
+                  selected?.venueId ?? editingItem?.venueId ?? venueId,
                 ),
               )}
             </strong>
             <span className="ms-1 text-xs text-base-content/45">
               (يطابق التصنيف)
             </span>
-            <input
-              type="hidden"
-              name="venueScope"
-              value={venueIdToScope(
-                editingItem?.venueId ?? selected?.venueId ?? venueId,
-              )}
-            />
           </div>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الصنف</span>
@@ -964,7 +957,8 @@ export function ItemsAdmin({
                   .filter(
                     (c) =>
                       (c.active || c.id === editingItem.categoryId) &&
-                      c.venueId === editingItem.venueId,
+                      c.venueId ===
+                        (selected?.venueId ?? editingItem.venueId),
                   )
                   .sort((a, b) => a.sortOrder - b.sortOrder)
                   .map((c) => (

@@ -9,6 +9,23 @@ type Item = { id: number; name: string };
  * marked shared — this cleans that up and is safe to re-run.
  */
 export function dedupeSharedCategories(sqlite: Database.Database) {
+  sqlite.exec(`
+    UPDATE items
+    SET venue_id = (
+      SELECT venue_id FROM categories WHERE categories.id = items.category_id
+    )
+    WHERE venue_id IS NOT (
+      SELECT venue_id FROM categories WHERE categories.id = items.category_id
+    )
+    OR (
+      venue_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM categories
+        WHERE categories.id = items.category_id AND categories.venue_id IS NULL
+      )
+    )
+  `);
+
   const shared = sqlite
     .prepare(
       `SELECT id, name, venue_id FROM categories WHERE venue_id IS NULL`,
