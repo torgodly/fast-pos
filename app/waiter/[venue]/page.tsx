@@ -6,6 +6,7 @@ import { OpenTableButton } from "@/components/OpenTableButton";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
+import { compareTableNames } from "@/lib/db/floor-tables";
 import { formatMoney, isVenueId } from "@/lib/venues";
 
 export default async function WaiterFloorPage({
@@ -21,7 +22,8 @@ export default async function WaiterFloorPage({
     .select()
     .from(tables)
     .where(and(eq(tables.venueId, venue), eq(tables.active, true)))
-    .all();
+    .all()
+    .sort((a, b) => compareTableNames(a.name, b.name));
 
   const openOrders = db
     .select({

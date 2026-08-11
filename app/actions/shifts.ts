@@ -15,6 +15,7 @@ import {
 } from "@/lib/shifts/core";
 import { isWithinZWindow } from "@/lib/settings";
 import { isVenueId } from "@/lib/venues";
+import { recordSessionAudit } from "@/lib/audit";
 
 function revalidateCashier(venueId: string) {
   revalidatePath(`/cashier/${venueId}`);
@@ -81,6 +82,16 @@ async function printDayReport(
       port: stationCtx.printer.port,
       data: buildShiftReportEscPos(data),
     });
+    recordSessionAudit(session, {
+      venueId,
+      kind: kind === "Z" ? "z_report" : "x_report",
+      printerName: stationCtx.printer.name,
+      success: true,
+      detail:
+        kind === "Z"
+          ? `إقفال Z لـ ${data.venueName}`
+          : `طباعة X لـ ${data.venueName}`,
+    });
     revalidateCashier(venueId);
     return {
       ok: true,
@@ -90,6 +101,16 @@ async function printDayReport(
           : `تمت طباعة X لـ ${data.venueName} (من آخر Z لهذا الفرع حتى الآن)`,
     };
   } catch (error) {
+    recordSessionAudit(session, {
+      venueId,
+      kind: kind === "Z" ? "z_report" : "x_report",
+      printerName: stationCtx.printer.name,
+      success: false,
+      detail:
+        error instanceof Error
+          ? error.message
+          : `تعذر طباعة تقرير ${kind}`,
+    });
     revalidateCashier(venueId);
     return {
       error:

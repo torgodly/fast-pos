@@ -155,6 +155,22 @@ export const orderItems = sqliteTable("order_items", {
   kitchenSentQty: integer("kitchen_sent_qty").notNull().default(0),
 });
 
+export const auditEvents = sqliteTable("audit_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  userId: integer("user_id").references(() => users.id),
+  userName: text("user_name").notNull(),
+  role: text("role").notNull(),
+  venueId: text("venue_id").references(() => venues.id),
+  kind: text("kind").notNull(),
+  orderId: integer("order_id").references(() => orders.id),
+  printerName: text("printer_name"),
+  success: integer("success", { mode: "boolean" }).notNull().default(true),
+  detail: text("detail").notNull(),
+});
+
 export const venuesRelations = relations(venues, ({ many }) => ({
   users: many(users),
   categories: many(categories),

@@ -111,14 +111,15 @@ select {
   }
 }
 
-/* Reliable finger scrolling inside POS panels (esp. over dense buttons). */
+/* POS panels: take leftover flex space and scroll inside it. */
 .touch-scroll {
+  flex: 1 1 0;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
+  touch-action: none;
 }
 
 .touch-scroll-x {
@@ -132,15 +133,4 @@ select {
 .touch-scroll-x,
 .touch-scroll {
   scrollbar-gutter: stable;
-}
-
-/* Let a vertical drag starting on a tile scroll the parent instead of sticking. */
-.touch-scroll > * {
-  touch-action: pan-y;
-}
-
-.touch-scroll button,
-.touch-scroll a,
-.touch-scroll [role="button"] {
-  touch-action: pan-y;
 }

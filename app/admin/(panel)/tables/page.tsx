@@ -6,6 +6,7 @@ import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { tables } from "@/lib/db/schema";
+import { compareTableNames } from "@/lib/db/floor-tables";
 import { getVenueName } from "@/lib/venues";
 
 export default async function AdminTablesPage({
@@ -21,7 +22,8 @@ export default async function AdminTablesPage({
     .select()
     .from(tables)
     .where(eq(tables.venueId, venue))
-    .all();
+    .all()
+    .sort((a, b) => compareTableNames(a.name, b.name));
 
   return (
     <div className="space-y-7">

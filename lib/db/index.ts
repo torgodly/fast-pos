@@ -9,6 +9,7 @@ import { migrateReportGroups } from "./migrate-report-groups";
 import { migrateCafeMenu } from "./migrate-cafe-menu";
 import { migrateRestaurantMenu } from "./migrate-restaurant-menu";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
+import { migrateTables } from "./migrate-tables";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -84,6 +85,7 @@ function createDb() {
     migrateReportGroups(sqlite);
     migrateRestaurantMenu(sqlite);
     migrateCafeMenu(sqlite);
+    migrateTables(sqlite);
   } catch {
     // best-effort remap for existing installs
   }
@@ -207,6 +209,22 @@ function ensureSchema(sqlite: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      user_id INTEGER REFERENCES users(id),
+      user_name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      venue_id TEXT REFERENCES venues(id),
+      kind TEXT NOT NULL,
+      order_id INTEGER REFERENCES orders(id),
+      printer_name TEXT,
+      success INTEGER NOT NULL DEFAULT 1,
+      detail TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS audit_events_created_idx ON audit_events(created_at);
+    CREATE INDEX IF NOT EXISTS audit_events_venue_idx ON audit_events(venue_id);
   `);
 
   // Existing databases created before kitchen receipts

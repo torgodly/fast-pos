@@ -26,6 +26,7 @@ import {
   setZWindow,
 } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
+import { recordSessionAudit } from "@/lib/audit";
 import type {
   PrinterConnectionType,
   VenueId,
@@ -48,6 +49,32 @@ async function assertAdmin() {
     throw new Error("غير مصرح");
   }
   return session;
+}
+
+async function assertAdminOrMainCashier() {
+  const session = await getSession();
+  if (!session) throw new Error("غير مصرح");
+  if (session.role === "admin") return session;
+  if (session.role === "cashier") {
+    const me = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (me?.isMainCashier) return session;
+  }
+  throw new Error("غير مصرح");
+}
+
+function revalidateFloorMenu(venueId?: string | null) {
+  revalidatePath("/admin/items");
+  revalidatePath("/admin/tables");
+  const venues = venueId
+    ? [venueId]
+    : (["restaurant", "cafe"] as const);
+  for (const id of venues) {
+    revalidatePath(`/cashier/${id}`);
+    revalidatePath(`/cashier/${id}/items`);
+    revalidatePath(`/cashier/${id}/tables`);
+    revalidatePath(`/cashier/${id}/quick`);
+    revalidatePath(`/waiter/${id}`);
+  }
 }
 
 function revalidatePrinters() {
@@ -238,9 +265,18 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
 }
 
 export async function setItemActive(id: number, active: boolean) {
-  await assertAdmin();
+  const session = await assertAdminOrMainCashier();
+  const item = db.select().from(items).where(eq(items.id, id)).get();
+  if (!item) return;
+  if (
+    session.role === "cashier" &&
+    item.venueId != null &&
+    item.venueId !== session.venueId
+  ) {
+    throw new Error("غير مصرح");
+  }
   db.update(items).set({ active }).where(eq(items.id, id)).run();
-  revalidatePath("/admin/items");
+  revalidateFloorMenu(item.venueId ?? session.venueId);
 }
 
 export async function deleteItem(id: number): Promise<ActionResult> {
@@ -255,7 +291,7 @@ export async function deleteItem(id: number): Promise<ActionResult> {
 }
 
 export async function upsertTable(formData: FormData): Promise<ActionResult> {
-  await assertAdmin();
+  const session = await assertAdminOrMainCashier();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const venueId = String(formData.get("venueId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
@@ -263,25 +299,46 @@ export async function upsertTable(formData: FormData): Promise<ActionResult> {
   if (!isVenueId(venueId) || !name) {
     return { error: "اسم الطاولة مطلوب" };
   }
+  if (session.role === "cashier" && session.venueId !== venueId) {
+    return { error: "غير مصرح" };
+  }
 
   if (id) {
+    const existing = db.select().from(tables).where(eq(tables.id, id)).get();
+    if (
+      session.role === "cashier" &&
+      existing &&
+      existing.venueId !== session.venueId
+    ) {
+      return { error: "غير مصرح" };
+    }
     db.update(tables).set({ venueId, name }).where(eq(tables.id, id)).run();
   } else {
     db.insert(tables).values({ venueId, name, active: true }).run();
   }
 
-  revalidatePath("/admin/tables");
+  revalidateFloorMenu(venueId);
   return { ok: true };
 }
 
 export async function setTableActive(id: number, active: boolean) {
-  await assertAdmin();
+  const session = await assertAdminOrMainCashier();
+  const table = db.select().from(tables).where(eq(tables.id, id)).get();
+  if (!table) return;
+  if (session.role === "cashier" && table.venueId !== session.venueId) {
+    throw new Error("غير مصرح");
+  }
   db.update(tables).set({ active }).where(eq(tables.id, id)).run();
-  revalidatePath("/admin/tables");
+  revalidateFloorMenu(table.venueId);
 }
 
 export async function deleteTable(id: number): Promise<ActionResult> {
-  await assertAdmin();
+  const session = await assertAdminOrMainCashier();
+  const table = db.select().from(tables).where(eq(tables.id, id)).get();
+  if (!table) return { error: "الطاولة غير موجودة" };
+  if (session.role === "cashier" && table.venueId !== session.venueId) {
+    return { error: "غير مصرح" };
+  }
   const openOrder = db
     .select({ id: orders.id })
     .from(orders)
@@ -292,7 +349,7 @@ export async function deleteTable(id: number): Promise<ActionResult> {
   }
   db.update(orders).set({ tableId: null }).where(eq(orders.tableId, id)).run();
   db.delete(tables).where(eq(tables.id, id)).run();
-  revalidatePath("/admin/tables");
+  revalidateFloorMenu(table.venueId);
   return { ok: true };
 }
 
@@ -496,7 +553,7 @@ export async function deletePrinter(id: number): Promise<ActionResult> {
 export async function testPrinter(
   printerId: number,
 ): Promise<{ error: string } | { ok: true; message: string }> {
-  await assertAdmin();
+  const session = await assertAdmin();
   const printer = db
     .select()
     .from(printers)
@@ -520,17 +577,30 @@ export async function testPrinter(
       port: printer.port,
       data,
     });
+    recordSessionAudit(session, {
+      venueId: printer.venueId,
+      kind: "test",
+      printerName: printer.name,
+      success: true,
+      detail: `اختبار ${printer.name} (${printer.host})`,
+    });
     return {
       ok: true,
       message: `تم إرسال صفحة الاختبار إلى ${printer.name} (${printer.host})`,
     };
   } catch (error) {
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : `تعذر الاتصال بالطابعة ${printer.name}`,
-    };
+    const detail =
+      error instanceof Error
+        ? error.message
+        : `تعذر الاتصال بالطابعة ${printer.name}`;
+    recordSessionAudit(session, {
+      venueId: printer.venueId,
+      kind: "test",
+      printerName: printer.name,
+      success: false,
+      detail,
+    });
+    return { error: detail };
   }
 }
 
@@ -540,6 +610,8 @@ function revalidateAfterSystemReset() {
   revalidatePath("/admin/printers");
   revalidatePath("/admin/items");
   revalidatePath("/admin/reports");
+  revalidatePath("/admin/invoices");
+  revalidatePath("/admin/audit");
   revalidatePath("/admin/tables");
   revalidatePath("/cashier", "layout");
   revalidatePath("/waiter", "layout");

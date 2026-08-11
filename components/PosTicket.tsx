@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Minus, Plus, Trash2, X } from "lucide-react";
+import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
 export type PosTicketLine = {
@@ -120,8 +121,9 @@ export function PosTicketPanel({
   onChangeQty: (key: string | number, qty: number) => void;
   onRemove: (key: string | number) => void;
 }) {
+  const listRef = useDragScroll<HTMLDivElement>("y");
   return (
-    <aside className="flex h-full min-h-0 flex-col overflow-hidden border border-base-300 bg-base-100">
+    <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border border-base-300 bg-base-100">
       <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-2.5 py-1.5">
         <p className="text-sm font-black">
           {title ?? "فاتورة"}
@@ -133,7 +135,7 @@ export function PosTicketPanel({
           {formatMoney(total)}
         </p>
       </div>
-      <div className="touch-scroll min-h-0 flex-1 px-1.5">
+      <div ref={listRef} className="touch-scroll px-1.5">
         <PosTicketLines
           lines={lines}
           pending={pending}

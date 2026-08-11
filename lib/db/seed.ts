@@ -13,6 +13,7 @@ import {
   users,
   venues,
 } from "./schema";
+import { floorTableNames } from "./floor-tables";
 
 function pin(value: string) {
   return bcrypt.hashSync(value, 10);
@@ -432,15 +433,13 @@ function runSeed(
 
   for (const venueId of ["restaurant", "cafe"] as const) {
     db.insert(tables)
-      .values([
-        ...Array.from({ length: 10 }, (_, i) => ({
+      .values(
+        floorTableNames(venueId).map((name) => ({
           venueId,
-          name: `طاولة ${i + 1}`,
+          name,
           active: true,
         })),
-        { venueId, name: "طاولة VIP", active: true },
-        { venueId, name: "طاولة خارجية", active: false },
-      ])
+      )
       .run();
   }
 
@@ -580,7 +579,7 @@ function runSeed(
   addOrder({
     venueId: "cafe",
     lookup: cafeItem,
-    tableId: tableOf(cafeTables, "طاولة VIP").id,
+    tableId: tableOf(cafeTables, "طاولة 101").id,
     waiterId: waiterYousef.id,
     cashierId: cashierSara.id,
     status: "paid",
@@ -615,7 +614,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة 1").id,
+    tableId: tableOf(restTables, "طاولة 20").id,
     waiterId: waiterAhmed.id,
     cashierId: null,
     status: "open",
@@ -630,7 +629,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة 3").id,
+    tableId: tableOf(restTables, "طاولة 22").id,
     waiterId: waiterYousef.id,
     cashierId: null,
     status: "open",
@@ -644,7 +643,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة 2").id,
+    tableId: tableOf(restTables, "طاولة 21").id,
     waiterId: waiterAhmed.id,
     cashierId: cashierSara.id,
     status: "paid",
@@ -661,7 +660,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة VIP").id,
+    tableId: tableOf(restTables, "VIP").id,
     waiterId: waiterMaryam.id,
     cashierId: cashierKhaled.id,
     status: "paid",
@@ -694,7 +693,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة 4").id,
+    tableId: tableOf(restTables, "طاولة 23").id,
     waiterId: waiterYousef.id,
     cashierId: cashierSara.id,
     status: "paid",
@@ -711,7 +710,7 @@ function runSeed(
   addOrder({
     venueId: "restaurant",
     lookup: restItem,
-    tableId: tableOf(restTables, "طاولة 6").id,
+    tableId: tableOf(restTables, "طاولة 25").id,
     waiterId: waiterAhmed.id,
     cashierId: cashierKhaled.id,
     status: "cancelled",

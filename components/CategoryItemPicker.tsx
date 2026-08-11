@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
 export type MenuCategory = { id: number; name: string };
@@ -33,6 +34,7 @@ export function CategoryItemPicker({
     [categories, items],
   );
 
+  const listRef = useDragScroll<HTMLDivElement>("y");
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(
     () => categoriesWithItems[0]?.id ?? null,
   );
@@ -100,7 +102,7 @@ export function CategoryItemPicker({
         </div>
       </div>
 
-      <div className="touch-scroll min-h-0 flex-1">
+      <div ref={listRef} className="touch-scroll">
         {/* Fewer columns = readable tiles on 1024×768 POS monitors */}
         <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {activeItems.map((item) => {

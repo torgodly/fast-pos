@@ -30,6 +30,7 @@ import { printToPrinter } from "@/lib/print/network";
 import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-printer";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
+import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -450,13 +451,31 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     requirePending: true,
   });
 
-  if ("error" in result) return result;
+  if ("error" in result) {
+    recordSessionAudit(session, {
+      venueId: order.venueId,
+      kind: "kitchen",
+      orderId,
+      success: false,
+      detail: result.error,
+    });
+    return result;
+  }
 
   revalidateOrderPaths(order.venueId, orderId, session.role);
 
   if (result.skipped) {
     return { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" };
   }
+
+  recordSessionAudit(session, {
+    venueId: order.venueId,
+    kind: "kitchen",
+    orderId,
+    printerName: result.printedTo.map((p) => p.printerName).join("، ") || null,
+    success: result.failed.length === 0,
+    detail: result.message,
+  });
 
   return {
     ok: true,
@@ -655,6 +674,16 @@ export async function payOrder(
     stationCtx.printer,
   );
 
+  const printed = auditPrintOutcome(printResult, stationCtx.printer.name);
+  recordSessionAudit(session, {
+    venueId: order.venueId,
+    kind: "receipt",
+    orderId,
+    printerName: stationCtx.printer.name,
+    success: printed.success,
+    detail: printed.detail,
+  });
+
   revalidatePath(`/cashier/${order.venueId}`);
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
@@ -804,13 +833,36 @@ export async function payQuickSale(
     requirePending: true,
   });
   if ("error" in kitchenResult) {
+    recordSessionAudit(session, {
+      venueId,
+      kind: "kitchen",
+      orderId: order.id,
+      success: false,
+      detail: kitchenResult.error,
+    });
     abortQuickSale();
     return { error: `المطبخ: ${kitchenResult.error}` };
   }
   if (kitchenResult.skipped || kitchenResult.printedTo.length === 0) {
+    recordSessionAudit(session, {
+      venueId,
+      kind: "kitchen",
+      orderId: order.id,
+      success: false,
+      detail: "لم يتم طباعة تذكرة المطبخ",
+    });
     abortQuickSale();
     return { error: "المطبخ: لم يتم طباعة تذكرة المطبخ — تحقق من طابعات المطبخ" };
   }
+
+  recordSessionAudit(session, {
+    venueId,
+    kind: "kitchen",
+    orderId: order.id,
+    printerName: kitchenResult.printedTo.map((p) => p.printerName).join("، "),
+    success: kitchenResult.failed.length === 0,
+    detail: kitchenResult.message,
+  });
 
   const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
   db.update(orders)
@@ -843,6 +895,16 @@ export async function payQuickSale(
     receipt,
     stationCtx.printer,
   );
+
+  const printed = auditPrintOutcome(printResult, stationCtx.printer.name);
+  recordSessionAudit(session, {
+    venueId,
+    kind: "receipt",
+    orderId: order.id,
+    printerName: stationCtx.printer.name,
+    success: printed.success,
+    detail: printed.detail,
+  });
 
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
@@ -928,6 +990,16 @@ export async function reprintOrderReceipt(
     stationCtx.printer,
   );
 
+  const printed = auditPrintOutcome(printResult, stationCtx.printer.name);
+  recordSessionAudit(session, {
+    venueId,
+    kind: "reprint",
+    orderId,
+    printerName: stationCtx.printer.name,
+    success: printed.success,
+    detail: printed.detail,
+  });
+
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
@@ -971,13 +1043,30 @@ type PreviewPrintResult =
 async function finishPreviewPrint(
   receipt: CheckoutReceiptData,
   venueId: VenueId,
+  session: { userId: number; name: string; role: string },
 ): Promise<PreviewPrintResult> {
   const stationCtx = await getCashierStationContext(venueId);
   if ("error" in stationCtx) {
+    recordSessionAudit(session, {
+      venueId,
+      kind: "preview",
+      orderId: receipt.orderId || null,
+      success: false,
+      detail: stationCtx.error,
+    });
     return { error: stationCtx.error };
   }
 
   const printResult = await printCheckoutReceipt(receipt, stationCtx.printer);
+  const printed = auditPrintOutcome(printResult, stationCtx.printer.name);
+  recordSessionAudit(session, {
+    venueId,
+    kind: "preview",
+    orderId: receipt.orderId || null,
+    printerName: stationCtx.printer.name,
+    success: printed.success,
+    detail: printed.detail,
+  });
 
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
@@ -1013,7 +1102,10 @@ export async function printOpenOrderReceipt(
   orderId: number,
 ): Promise<PreviewPrintResult> {
   const session = await getSession();
-  if (!session || session.role !== "cashier") {
+  if (
+    !session ||
+    (session.role !== "cashier" && session.role !== "waiter")
+  ) {
     return { error: "غير مصرح" };
   }
 
@@ -1023,6 +1115,9 @@ export async function printOpenOrderReceipt(
   }
   if (!isVenueId(order.venueId)) {
     return { error: "فرع غير صالح" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
   }
 
   const lines = db
@@ -1047,8 +1142,8 @@ export async function printOpenOrderReceipt(
       venueName: getVenueName(order.venueId),
       orderId: order.id,
       tableName: table?.name ?? (order.tableId === null ? "بيع سريع" : "بدون طاولة"),
-      waiterName: waiter?.name ?? null,
-      cashierName: session.name,
+      waiterName: waiter?.name ?? (session.role === "waiter" ? session.name : null),
+      cashierName: session.role === "cashier" ? session.name : "—",
       paymentMethod: "preview",
       paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
       total,
@@ -1060,6 +1155,7 @@ export async function printOpenOrderReceipt(
       })),
     },
     order.venueId,
+    session,
   );
 }
 
@@ -1119,6 +1215,7 @@ export async function printQuickSalePreview(
       })),
     },
     venueId,
+    session,
   );
 }
 

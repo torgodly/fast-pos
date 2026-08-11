@@ -657,7 +657,14 @@ export default async function AdminReportsPage({
               <tbody>
                 {rows.map((row) => (
                   <tr key={row.id}>
-                    <td className="font-bold">#{row.id}</td>
+                    <td className="font-bold">
+                      <Link
+                        href={`/admin/invoices/${row.id}`}
+                        className="link link-hover"
+                      >
+                        #{row.id}
+                      </Link>
+                    </td>
                     <td>{row.tableName ?? "بيع سريع"}</td>
                     <td>{row.waiterName ?? "-"}</td>
                     <td>{row.cashierName ?? "-"}</td>

@@ -27,6 +27,11 @@ export function applyPartialReset(options: ResetOptions) {
   sqlite.exec("PRAGMA foreign_keys = OFF");
 
   if (options.sales || options.menu) {
+    try {
+      sqlite.exec("DELETE FROM audit_events");
+    } catch {
+      /* audit table may not exist on very old DBs */
+    }
     sqlite.exec("DELETE FROM order_items");
     sqlite.exec("DELETE FROM orders");
     try {
@@ -45,6 +50,11 @@ export function applyPartialReset(options: ResetOptions) {
 
   if (options.staff) {
     sqlite.exec("UPDATE orders SET waiter_id = NULL, cashier_id = NULL");
+    try {
+      sqlite.exec("UPDATE audit_events SET user_id = NULL");
+    } catch {
+      /* ignore */
+    }
     sqlite.exec("DELETE FROM users WHERE role != 'admin'");
   }
 

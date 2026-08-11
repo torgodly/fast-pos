@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { requireWaiter } from "@/app/actions/auth";
 import { cancelOpenOrder } from "@/app/actions/orders";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
+import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
@@ -74,7 +75,7 @@ export default async function WaiterOrderPage({
     .all();
 
   return (
-    <div className="flex h-dvh flex-1 flex-col overflow-hidden">
+    <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="سفرادجي" />
       <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
         <div className="flex h-10 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2.5">
@@ -115,14 +116,22 @@ export default async function WaiterOrderPage({
           lines={lines}
           total={order.total}
           footer={
-            <KitchenConfirmButton
-              orderId={orderId}
-              disabled={lines.length === 0}
-              allSent={
-                lines.length > 0 &&
-                lines.every((line) => (line.kitchenSentQty ?? 0) >= line.qty)
-              }
-            />
+            <div className="space-y-1">
+              <KitchenConfirmButton
+                key="kitchen"
+                orderId={orderId}
+                disabled={lines.length === 0}
+                allSent={
+                  lines.length > 0 &&
+                  lines.every((line) => (line.kitchenSentQty ?? 0) >= line.qty)
+                }
+              />
+              <PreviewReceiptButton
+                key="preview"
+                orderId={orderId}
+                disabled={lines.length === 0}
+              />
+            </div>
           }
         />
       </main>

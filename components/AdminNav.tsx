@@ -6,9 +6,11 @@ import { useState } from "react";
 import {
   BarChart3,
   Boxes,
+  ClipboardList,
   LayoutDashboard,
   LogOut,
   Printer,
+  ReceiptText,
   RotateCcw,
   Settings2,
   Sparkles,
@@ -25,6 +27,8 @@ const links = [
   { href: "/admin/staff", label: "الموظفون", icon: UsersRound },
   { href: "/admin/printers", label: "الطابعات", icon: Printer },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
+  { href: "/admin/invoices", label: "الفواتير", icon: ReceiptText },
+  { href: "/admin/audit", label: "التدقيق", icon: ClipboardList },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings2 },
 ];
 
@@ -55,12 +59,17 @@ export function AdminNav({ name }: { name: string }) {
 
       <div className="mobile-scroll-x mt-3 lg:mt-8 lg:overflow-visible">
         <nav className="flex min-w-max gap-1 lg:min-w-0 lg:flex-col lg:gap-1.5">
-        {links.map((link) => (
+        {links.map((link) => {
+          const active =
+            link.href === "/admin"
+              ? pathname === "/admin"
+              : pathname === link.href || pathname.startsWith(`${link.href}/`);
+          return (
           <Link
             key={link.href}
             href={link.href}
             className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-sm font-bold transition lg:px-4 lg:py-3 ${
-              pathname === link.href
+              active
                 ? "bg-primary text-primary-content shadow-md shadow-primary/15"
                 : "text-base-content/55 hover:bg-base-200 hover:text-base-content"
             }`}
@@ -68,7 +77,8 @@ export function AdminNav({ name }: { name: string }) {
             <link.icon className="size-4.5" strokeWidth={2} />
             {link.label}
           </Link>
-        ))}
+          );
+        })}
         </nav>
       </div>
 

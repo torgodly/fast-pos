@@ -10,6 +10,7 @@ import {
 } from "@/lib/reports/filters";
 import { getReportSummary } from "@/lib/reports/summary";
 import { formatDateTime } from "@/lib/venues";
+import { recordSessionAudit } from "@/lib/audit";
 
 async function assertAdmin() {
   const session = await getSession();
@@ -66,23 +67,38 @@ function summaryToPrintData(
 export async function printReportSummary(
   filters: ReportFiltersInput,
 ): Promise<{ error: string } | { ok: true; message: string }> {
+  let session;
   try {
+    session = await getSession();
     await assertAdmin();
   } catch {
     return { error: "غير مصرح" };
   }
+  if (!session) return { error: "غير مصرح" };
 
   const summary = getReportSummary(filters);
   const stationCtx = await getCashierStationContext(summary.venue);
   if ("error" in stationCtx) {
+    recordSessionAudit(session, {
+      venueId: summary.venue,
+      kind: "report",
+      success: false,
+      detail: stationCtx.error,
+    });
     return { error: stationCtx.error };
   }
 
   if (stationCtx.printer.connectionType === "local") {
-    return {
-      error:
-        "طابعة Chrome المحلية لا تدعم طباعة التقارير من الإدارة — استخدم طابعة شبكة",
-    };
+    const detail =
+      "طابعة Chrome المحلية لا تدعم طباعة التقارير من الإدارة — استخدم طابعة شبكة";
+    recordSessionAudit(session, {
+      venueId: summary.venue,
+      kind: "report",
+      printerName: stationCtx.printer.name,
+      success: false,
+      detail,
+    });
+    return { error: detail };
   }
 
   try {
@@ -92,16 +108,29 @@ export async function printReportSummary(
       port: stationCtx.printer.port,
       data: payload,
     });
+    recordSessionAudit(session, {
+      venueId: summary.venue,
+      kind: "report",
+      printerName: stationCtx.printer.name,
+      success: true,
+      detail: `تقرير ${summary.fromSql} — ${summary.toSql}`,
+    });
     return {
       ok: true,
       message: `تمت طباعة التقرير على ${stationCtx.printer.name}`,
     };
   } catch (error) {
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : `تعذر الطباعة على ${stationCtx.printer.name}`,
-    };
+    const detail =
+      error instanceof Error
+        ? error.message
+        : `تعذر الطباعة على ${stationCtx.printer.name}`;
+    recordSessionAudit(session, {
+      venueId: summary.venue,
+      kind: "report",
+      printerName: stationCtx.printer.name,
+      success: false,
+      detail,
+    });
+    return { error: detail };
   }
 }

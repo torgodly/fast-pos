@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { and, eq } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { Clock3, History, Plus } from "lucide-react";
+import { Boxes, Clock3, History, Plus, TableProperties } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
@@ -76,13 +76,29 @@ export default async function CashierHomePage({
               مبيعاتي
             </Link>
             {isMainCashier ? (
-              <Link
-                href={`/cashier/${venue}/shift`}
-                className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
-              >
-                <Clock3 className="size-4" />
-                تقارير X/Z
-              </Link>
+              <>
+                <Link
+                  href={`/cashier/${venue}/items`}
+                  className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+                >
+                  <Boxes className="size-4" />
+                  الأصناف
+                </Link>
+                <Link
+                  href={`/cashier/${venue}/tables`}
+                  className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+                >
+                  <TableProperties className="size-4" />
+                  الطاولات
+                </Link>
+                <Link
+                  href={`/cashier/${venue}/shift`}
+                  className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
+                >
+                  <Clock3 className="size-4" />
+                  تقارير X/Z
+                </Link>
+              </>
             ) : null}
           </div>
         </div>
