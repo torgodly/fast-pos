@@ -7,6 +7,7 @@ import { cancelOpenOrder } from "@/app/actions/orders";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PayButtons } from "@/components/PayButtons";
+import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import {
@@ -123,6 +124,7 @@ export default async function CashierOrderPage({
           footer={
             <div className="space-y-1">
               <KitchenConfirmButton
+                key="kitchen"
                 orderId={orderId}
                 disabled={lines.length === 0}
                 allSent={
@@ -130,7 +132,13 @@ export default async function CashierOrderPage({
                   lines.every((line) => (line.kitchenSentQty ?? 0) >= line.qty)
                 }
               />
+              <PreviewReceiptButton
+                key="preview"
+                orderId={orderId}
+                disabled={lines.length === 0}
+              />
               <PayButtons
+                key="pay"
                 orderId={orderId}
                 totalLabel={formatMoney(order.total)}
               />

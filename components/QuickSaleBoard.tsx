@@ -18,6 +18,7 @@ import {
   PosTicketPanel,
   type PosTicketLine,
 } from "@/components/PosTicket";
+import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { formatMoney } from "@/lib/venues";
 
 export function QuickSaleBoard({
@@ -153,25 +154,32 @@ export function QuickSaleBoard({
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
   const payFooter = (
-    <div className="grid grid-cols-2 gap-1.5">
-      <button
-        type="button"
-        className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
+    <div className="space-y-1.5">
+      <PreviewReceiptButton
+        venueId={venueId}
+        cart={cart}
         disabled={pending || cart.length === 0}
-        onClick={() => askConfirm("cash")}
-      >
-        <Banknote className="size-4" />
-        نقدي
-      </button>
-      <button
-        type="button"
-        className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
-        disabled={pending || cart.length === 0}
-        onClick={() => askConfirm("card")}
-      >
-        <CreditCard className="size-4" />
-        بطاقة
-      </button>
+      />
+      <div className="grid grid-cols-2 gap-1.5">
+        <button
+          type="button"
+          className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
+          disabled={pending || cart.length === 0}
+          onClick={() => askConfirm("cash")}
+        >
+          <Banknote className="size-4" />
+          نقدي
+        </button>
+        <button
+          type="button"
+          className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
+          disabled={pending || cart.length === 0}
+          onClick={() => askConfirm("card")}
+        >
+          <CreditCard className="size-4" />
+          بطاقة
+        </button>
+      </div>
     </div>
   );
 

@@ -957,6 +957,171 @@ export async function reprintOrderReceipt(
   };
 }
 
+type PreviewPrintResult =
+  | { error: string }
+  | {
+      ok: true;
+      printOk: boolean;
+      printError?: string;
+      browserPrint?: boolean;
+      receiptHtml?: string;
+      message: string;
+    };
+
+async function finishPreviewPrint(
+  receipt: CheckoutReceiptData,
+  venueId: VenueId,
+): Promise<PreviewPrintResult> {
+  const stationCtx = await getCashierStationContext(venueId);
+  if ("error" in stationCtx) {
+    return { error: stationCtx.error };
+  }
+
+  const printResult = await printCheckoutReceipt(receipt, stationCtx.printer);
+
+  if ("browserPrint" in printResult && printResult.browserPrint) {
+    return {
+      ok: true,
+      printOk: false,
+      browserPrint: true,
+      receiptHtml: printResult.receiptHtml,
+      message: "اختر الطابعة في نافذة Chrome",
+    };
+  }
+
+  if (printResult.printOk) {
+    return {
+      ok: true,
+      printOk: true,
+      message: `تمت طباعة الفاتورة على ${stationCtx.printer.name}`,
+    };
+  }
+
+  const printError =
+    "printError" in printResult ? printResult.printError : "تعذر الطباعة";
+
+  return {
+    ok: true,
+    printOk: false,
+    printError,
+    message: `فشلت طباعة الفاتورة: ${printError}`,
+  };
+}
+
+/** Print the same checkout receipt before payment, for the customer to review. */
+export async function printOpenOrderReceipt(
+  orderId: number,
+): Promise<PreviewPrintResult> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier") {
+    return { error: "غير مصرح" };
+  }
+
+  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order || order.status !== "open") {
+    return { error: "الفاتورة غير مفتوحة" };
+  }
+  if (!isVenueId(order.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
+  const lines = db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.orderId, orderId))
+    .all();
+  if (lines.length === 0) {
+    return { error: "أضف أصنافاً قبل طباعة الفاتورة" };
+  }
+
+  const total = recalcOrderTotal(orderId);
+  const table = order.tableId
+    ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
+    : null;
+  const waiter = order.waiterId
+    ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
+    : null;
+
+  return finishPreviewPrint(
+    {
+      venueName: getVenueName(order.venueId),
+      orderId: order.id,
+      tableName: table?.name ?? (order.tableId === null ? "بيع سريع" : "بدون طاولة"),
+      waiterName: waiter?.name ?? null,
+      cashierName: session.name,
+      paymentMethod: "preview",
+      paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
+      total,
+      lines: lines.map((line) => ({
+        name: line.itemName,
+        qty: line.qty,
+        unitPrice: line.unitPrice,
+        lineTotal: line.lineTotal,
+      })),
+    },
+    order.venueId,
+  );
+}
+
+export async function printQuickSalePreview(
+  venueId: string,
+  cart: QuickSaleLine[],
+): Promise<PreviewPrintResult> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
+    return { error: "غير مصرح" };
+  }
+  if (cart.length === 0) {
+    return { error: "أضف أصنافاً قبل طباعة الفاتورة" };
+  }
+
+  const priced = cart.map((line) => {
+    const qty = Math.max(1, Math.trunc(line.qty));
+    const item = db
+      .select()
+      .from(items)
+      .where(
+        and(
+          eq(items.id, line.itemId),
+          availableAtVenue(items.venueId, venueId),
+          eq(items.active, true),
+        ),
+      )
+      .get();
+    return item ? { item, qty } : null;
+  });
+
+  if (priced.some((line) => line === null)) {
+    return { error: "أحد الأصناف غير متاح" };
+  }
+
+  const validLines = priced as { item: typeof items.$inferSelect; qty: number }[];
+  const total = validLines.reduce(
+    (sum, line) => sum + line.item.price * line.qty,
+    0,
+  );
+
+  return finishPreviewPrint(
+    {
+      venueName: getVenueName(venueId),
+      orderId: 0,
+      tableName: "بيع سريع",
+      waiterName: null,
+      cashierName: session.name,
+      paymentMethod: "preview",
+      paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
+      total,
+      lines: validLines.map((line) => ({
+        name: line.item.name,
+        qty: line.qty,
+        unitPrice: line.item.price,
+        lineTotal: line.item.price * line.qty,
+      })),
+    },
+    venueId,
+  );
+}
+
 export async function cancelOpenOrder(orderId: number) {
   const session = await getSession();
   if (!session || (session.role !== "waiter" && session.role !== "cashier")) {

@@ -350,13 +350,18 @@ export function buildCheckoutEscPos(
   data: CheckoutReceiptData,
   logo: Uint8Array | null = null,
 ): Uint8Array {
-  const method = data.paymentMethod === "cash" ? "نقدي" : "بطاقة";
+  const method =
+    data.paymentMethod === "preview"
+      ? "غير مدفوعة"
+      : data.paymentMethod === "cash"
+        ? "نقدي"
+        : "بطاقة";
   const footer = data.footerMessage?.trim() || "شكراً لزيارتكم";
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
   headerBlock(parts, data.venueName, "إيصال الدفع");
   parts.push(separator());
-  fieldLine(parts, "فاتورة", `#${data.orderId}`);
+  fieldLine(parts, "فاتورة", data.orderId > 0 ? `#${data.orderId}` : "—");
   fieldLine(parts, "الطاولة", data.tableName);
 
   if (data.waiterName) {

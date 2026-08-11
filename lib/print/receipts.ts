@@ -66,7 +66,7 @@ export type CheckoutReceiptData = {
   tableName: string;
   waiterName: string | null;
   cashierName: string;
-  paymentMethod: "cash" | "card";
+  paymentMethod: "cash" | "card" | "preview";
   paidAt: string;
   total: number;
   footerMessage?: string;
@@ -333,7 +333,12 @@ export function buildCheckoutReceiptHtml(
   data: CheckoutReceiptData,
   logoDataUrl?: string | null,
 ) {
-  const method = data.paymentMethod === "cash" ? "نقداً" : "بطاقة";
+  const method =
+    data.paymentMethod === "preview"
+      ? "غير مدفوعة"
+      : data.paymentMethod === "cash"
+        ? "نقداً"
+        : "بطاقة";
   const logoHtml = logoDataUrl
     ? `<img class="logo" src="${logoDataUrl}" alt="الشعار" />`
     : "";
@@ -352,7 +357,7 @@ export function buildCheckoutReceiptHtml(
     .join("");
 
   return shell(
-    `إيصال رقم ${data.orderId}`,
+    `إيصال ${data.orderId > 0 ? `رقم ${data.orderId}` : "للعرض"}`,
     `
     <div class="center">
       ${logoHtml}
@@ -362,7 +367,7 @@ export function buildCheckoutReceiptHtml(
     </div>
     <hr class="divider" />
     <table class="meta">
-      ${metaRow("رقم الفاتورة", `#${data.orderId}`)}
+      ${metaRow("رقم الفاتورة", data.orderId > 0 ? `#${data.orderId}` : "—")}
       ${metaRow("الطاولة", data.tableName)}
       ${data.waiterName ? metaRow("السفرادجي", data.waiterName) : ""}
       ${metaRow("طريقة الدفع", method)}
