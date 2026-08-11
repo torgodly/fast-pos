@@ -64,7 +64,7 @@ export default async function WaiterOrderPage({
   const menuItems = db
     .select()
     .from(items)
-    .where(availableAtVenue(items.venueId, venue))
+    .where(and(availableAtVenue(items.venueId, venue), eq(items.active, true)))
     .all();
 
   const lines = db

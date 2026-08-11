@@ -9,27 +9,8 @@ const CAFE_MENU: Array<{
   items: MenuLine[];
 }> = [
   {
-    category: "الإفطار",
-    sortOrder: 2,
-    items: [
-      { name: "فطور شرقي", price: 120 },
-      { name: "فطور تركي", price: 110 },
-      { name: "فطور فرنسي", price: 99 },
-      { name: "فطور كلاسيك مع البيض", price: 40 },
-      { name: "فطور كلاسيكي", price: 20 },
-      { name: "فطور باريسي", price: 30 },
-      { name: "أومليت عادي", price: 16 },
-      { name: "أومليت جبنة", price: 18 },
-      { name: "أومليت بالخضار", price: 20 },
-      { name: "أومليت بالفطر", price: 22 },
-      { name: "شكشوكة", price: 18 },
-      { name: "شكشوكة تركية", price: 24 },
-      { name: "بيض عيون", price: 12 },
-    ],
-  },
-  {
     category: "مشروبات ساخنة",
-    sortOrder: 4,
+    sortOrder: 1,
     items: [
       { name: "كابتشينو", price: 12 },
       { name: "إسبريسو", price: 7 },
@@ -40,12 +21,9 @@ const CAFE_MENU: Array<{
       { name: "كافي لاتيه بندق", price: 20 },
       { name: "هوت شوكلت", price: 20 },
       { name: "ميكياتو كراميل", price: 20 },
-      { name: "كراميل موكا مثلج", price: 20 },
-      { name: "وايت موكا مثلج", price: 20 },
       { name: "كافي لاتيه فانيلا", price: 20 },
       { name: "قهوة عربية", price: 12 },
       { name: "قهوة عربية دبل", price: 13 },
-      { name: "آيس سبانش لاتيه", price: 20 },
       { name: "نسكافيه حبوب دبل", price: 11 },
       { name: "نسكافيه حبوب عادية", price: 7 },
       { name: "نسكافيه عادية", price: 8 },
@@ -57,14 +35,17 @@ const CAFE_MENU: Array<{
       { name: "نص نص دبل", price: 10 },
       { name: "معدلة ميكياتو دبل", price: 10 },
       { name: "كريمة دبل", price: 10 },
-      { name: "آيس كراميل ميكياتو", price: 20 },
       { name: "شاي", price: 8 },
     ],
   },
   {
     category: "مشروبات باردة",
-    sortOrder: 3,
+    sortOrder: 2,
     items: [
+      { name: "كراميل موكا مثلج", price: 20 },
+      { name: "وايت موكا مثلج", price: 20 },
+      { name: "آيس سبانش لاتيه", price: 20 },
+      { name: "آيس كراميل ميكياتو", price: 20 },
       { name: "شاي مثلج خوخ", price: 15 },
       { name: "شاي مثلج فراولة", price: 15 },
       { name: "شاي مثلج مانجو", price: 15 },
@@ -86,6 +67,8 @@ const CAFE_MENU: Array<{
       { name: "ميلك شيك شوكولاتة", price: 20 },
       { name: "ميلك شيك لوتس", price: 25 },
       { name: "ميلك شيك أوريو", price: 25 },
+      { name: "ماء", price: 5 },
+      { name: "مشروبات", price: 5 },
       { name: "مياه", price: 5 },
       { name: "مياه غازية", price: 5 },
       { name: "سفن أب", price: 5 },
@@ -95,52 +78,168 @@ const CAFE_MENU: Array<{
     ],
   },
   {
-    category: "معجنات",
-    sortOrder: 5,
+    category: "خبز",
+    sortOrder: 3,
     items: [
-      { name: "إكلير كوفي", price: 12 },
-      { name: "إكلير شوكولاتة", price: 12 },
-      { name: "ميني إكلير كوفي", price: 5 },
-      { name: "ميني إكلير شوكولاتة", price: 5 },
-      { name: "تارت ليمون", price: 14 },
-      { name: "تارت بيكان", price: 20 },
-      { name: "تارت توت", price: 20 },
-      { name: "تارت مانجو", price: 18 },
-      { name: "تارت بندق وموز", price: 20 },
-      { name: "فوندو", price: 25 },
-      { name: "شوكا ديفا", price: 25 },
-      { name: "تيراميسو", price: 18 },
-      { name: "براونيز", price: 14 },
-      { name: "تروا شوكولات", price: 25 },
-      { name: "كيك رويال", price: 23 },
-      { name: "موس شوكولاتة", price: 24 },
-      { name: "تشيز كيك أوريو", price: 25 },
-      { name: "تشيز كيك لوتس", price: 25 },
-      { name: "تشيز كيك سان سيباستيان", price: 25 },
-      { name: "ميلفاي بيكان", price: 23 },
-      { name: "ميلفاي عادي", price: 14 },
-      { name: "ميلفاي مانجو", price: 14 },
-      { name: "إنجلش كيك فانيلا", price: 12 },
-      { name: "إنجلش كيك شوكولاتة", price: 12 },
-      { name: "إنجلش كيك بندق وفانيلا", price: 12 },
-      { name: "إنجلش كيك ليمون", price: 12 },
-      { name: "شارلوت مانجو", price: 24 },
-      { name: "رد فلفت كيك", price: 20 },
-      { name: "شارلوت فراولة", price: 24 },
-      { name: "ماكرون فراولة", price: 20 },
+      { name: "خبز السريال", price: 6 },
+      { name: "خبز ساندويتش السريال", price: 2 },
+      { name: "خبز مني السريال", price: 1 },
+      { name: "خبز سوردو السريال", price: 10 },
+      { name: "خبز ساندويتش بقيت", price: 2 },
+      { name: "خبز مني باقيت", price: 0.5 },
+      { name: "خبز باقيت", price: 3 },
+      { name: "خبز سوردو باقيت", price: 10 },
+      { name: "قمح ساندويتش", price: 2 },
+      { name: "قمح باقيت", price: 6 },
+      { name: "قمح سوردو", price: 10 },
+      { name: "خبز الشباتا", price: 2 },
+      { name: "خبز الشباتا خاص", price: 1.5 },
     ],
   },
   {
-    category: "فيينوازري",
+    category: "كرواسونات",
+    sortOrder: 4,
+    items: [
+      { name: "كرواسون مانقا", price: 18 },
+      { name: "كرواسون سادة", price: 7 },
+      { name: "كرواسون شكولاطة", price: 9 },
+      { name: "كرواسون زبيب", price: 8 },
+      { name: "كرواسون لوز", price: 14 },
+      { name: "كرواسون لوز وشكلاطة", price: 18 },
+      { name: "كرواسون بستاشيو", price: 18 },
+      { name: "كرواسون زعتر", price: 9 },
+      { name: "كرواسون جبنة", price: 10 },
+      { name: "كرواسون ميني جبنة", price: 3 },
+      { name: "كرواسون ميني زعتر", price: 3 },
+      { name: "كرواسون ميني سادة", price: 2 },
+      { name: "كرواسون بيليه", price: 10 },
+    ],
+  },
+  {
+    category: "فينيسي",
+    sortOrder: 5,
+    items: [{ name: "فينيسي 5 قطع", price: 9 }],
+  },
+  {
+    category: "كوكيز",
+    sortOrder: 6,
+    items: [
+      { name: "كوكيز صغير 5 قطع", price: 9 },
+      { name: "كوكيز حليب", price: 14 },
+      { name: "كوكيز شكلاطة", price: 14 },
+    ],
+  },
+  {
+    category: "تارت",
     sortOrder: 7,
     items: [
-      { name: "كوكيز شوكولاتة بالحليب", price: 14 },
-      { name: "كوكيز شوكولاتة سوداء", price: 14 },
-      { name: "كوكيز صغير", price: 9 },
-      { name: "فينانسييه", price: 9 },
-      { name: "فينانسييه بيستاشيو", price: 12 },
-      { name: "مادلين 12 قطعة", price: 4 },
-      { name: "مادلين 20 قطعة", price: 9 },
+      { name: "تارت بندق", price: 20 },
+      { name: "تارت بيكان", price: 20 },
+      { name: "تارت منقا", price: 18 },
+      { name: "تارت فول سوداني", price: 20 },
+      { name: "تارت مشمش", price: 18 },
+      { name: "تارت ليمون", price: 14 },
+      { name: "تارت شكلاطة", price: 20 },
+      { name: "تارت توت", price: 18 },
+      { name: "تارت ميني", price: 8 },
+      { name: "تارت موز", price: 18 },
+    ],
+  },
+  {
+    category: "فلان",
+    sortOrder: 8,
+    items: [
+      { name: "فلان فانيليا", price: 14 },
+      { name: "فلان شكولاطة", price: 15 },
+    ],
+  },
+  {
+    category: "كلير",
+    sortOrder: 9,
+    items: [
+      { name: "كلير ميني شكلاطة / كوفي", price: 8 },
+      { name: "كلير شكلاطة / كوفي", price: 12 },
+    ],
+  },
+  {
+    category: "ملفاي",
+    sortOrder: 10,
+    items: [
+      { name: "ملفاي مانقا", price: 14 },
+      { name: "ملفاي كلاسيك", price: 14 },
+      { name: "ملفاي بيكان", price: 23 },
+      { name: "ملفاي بندق", price: 23 },
+    ],
+  },
+  {
+    category: "حلويات",
+    sortOrder: 11,
+    items: [
+      { name: "براونيز", price: 14 },
+      { name: "إضافة شكلاطة / عسل", price: 5 },
+      { name: "إضافة آيس كريم", price: 10 },
+      { name: "سوكسيل", price: 20 },
+      { name: "اوبيرا", price: 20 },
+      { name: "رويال", price: 25 },
+      { name: "تري شوكلت كراميل", price: 25 },
+      { name: "شوكو ديفا", price: 20 },
+      { name: "فوندوم", price: 25 },
+      { name: "سانسبسيال", price: 25 },
+    ],
+  },
+  {
+    category: "تشيز كيك",
+    sortOrder: 12,
+    items: [
+      { name: "تشيز كيك لوتس", price: 25 },
+      { name: "تشيز كيك اوريو", price: 25 },
+      { name: "تشيز كيك توت", price: 25 },
+    ],
+  },
+  {
+    category: "انقلش كيك",
+    sortOrder: 13,
+    items: [
+      { name: "انقلش كيك شوكلت", price: 12 },
+      { name: "انقلش كيك ليمون", price: 12 },
+      { name: "انقلش كيك فانيليا", price: 12 },
+      { name: "انقلش كيك شوكلت وبندق", price: 20 },
+    ],
+  },
+  {
+    category: "قطع كيك",
+    sortOrder: 14,
+    items: [
+      { name: "قطعة شارلوت مانقا", price: 24 },
+      { name: "قطعة رد فلفت", price: 20 },
+      { name: "قطعة كيكة جزر", price: 18 },
+      { name: "قطعة كيكة بندق", price: 24 },
+      { name: "قطعة كيكة موس شوكلت", price: 24 },
+    ],
+  },
+  {
+    category: "كيكة كاملة",
+    sortOrder: 15,
+    items: [
+      { name: "كيكة رد فلفت", price: 210 },
+      { name: "كيكة جزر", price: 95 },
+      { name: "كيكة بندق", price: 150 },
+      { name: "كيكة موس شوكلت", price: 150 },
+    ],
+  },
+  {
+    category: "سندوتشات",
+    sortOrder: 16,
+    items: [
+      { name: "إضافة جبنة", price: 5 },
+      { name: "سندوتش تن", price: 18 },
+      { name: "سندوتش دجاج", price: 21 },
+      { name: "سندوتش اوميلت", price: 18 },
+      { name: "سندوتش ميني كايزر تن", price: 10 },
+      { name: "ميني كايزر مايونيز وتن", price: 10 },
+      { name: "توست 3 أجبان", price: 18 },
+      { name: "توست 3 أجبان سلامي", price: 20 },
+      { name: "سندوتش بيستو", price: 18 },
     ],
   },
 ];
@@ -179,16 +278,17 @@ function pickCafePrinter(
 }
 
 /**
- * Replace cafe menu into report groups: إفطار / مشروبات / معجنات / فيينوازري.
- * Safe to re-run; keeps خبز + ساندويتش categories.
+ * Replace the cafe menu completely. Restaurant + users/tables are untouched.
+ * Safe to re-run on every boot.
  */
 export function migrateCafeMenu(sqlite: Database.Database) {
   const kitchenId = pickCafePrinter(sqlite, "kitchen");
   const displayId = pickCafePrinter(sqlite, "display") ?? kitchenId;
-  if (!kitchenId && !displayId) return;
 
-  const keepExtra = ["خبز", "ساندويتش"];
   const foodNames = CAFE_MENU.map((g) => g.category);
+  const keepItemNames = new Set(
+    CAFE_MENU.flatMap((g) => g.items.map((item) => item.name)),
+  );
 
   for (const group of CAFE_MENU) {
     const printerId = DISPLAY_PRINTER_GROUPS.has(group.category)
@@ -229,7 +329,7 @@ export function migrateCafeMenu(sqlite: Database.Database) {
     );
     const updateItem = sqlite.prepare(
       `UPDATE items
-       SET price = ?, kitchen_printer_id = NULL, active = 1, category_id = ?
+       SET price = ?, kitchen_printer_id = NULL, active = 1, category_id = ?, venue_id = 'cafe'
        WHERE id = ?`,
     );
     const insertItem = sqlite.prepare(
@@ -249,23 +349,20 @@ export function migrateCafeMenu(sqlite: Database.Database) {
     }
   }
 
-  // Keep only cafe report groups active
-  const activeNames = [...foodNames, ...keepExtra];
   sqlite
     .prepare(
       `UPDATE categories SET active = 0
        WHERE venue_id = 'cafe'
-         AND name NOT IN (${activeNames.map(() => "?").join(",")})`,
+         AND name NOT IN (${foodNames.map(() => "?").join(",")})`,
     )
-    .run(...activeNames);
+    .run(...foodNames);
 
+  const keepNames = [...keepItemNames];
   sqlite
     .prepare(
       `UPDATE items SET active = 0
        WHERE venue_id = 'cafe'
-         AND category_id IN (
-           SELECT id FROM categories WHERE venue_id = 'cafe' AND active = 0
-         )`,
+         AND name NOT IN (${keepNames.map(() => "?").join(",")})`,
     )
-    .run();
+    .run(...keepNames);
 }
