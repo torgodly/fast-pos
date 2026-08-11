@@ -41,13 +41,14 @@ export function CancelKitchenItemDialog({
   }, [target]);
 
   if (!target) return null;
+  const item = target;
 
-  const qty = Math.min(Math.max(1, removeQty), target.qty);
+  const qty = Math.min(Math.max(1, removeQty), item.qty);
 
   function submit(event: FormEvent) {
     event.preventDefault();
     startTransition(async () => {
-      const result = await cancelPrintedOrderItem(target.id, qty, reason);
+      const result = await cancelPrintedOrderItem(item.id, qty, reason);
       if ("error" in result) {
         setError(result.error);
         return;
