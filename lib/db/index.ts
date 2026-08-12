@@ -75,6 +75,7 @@ function createDb() {
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
   migratePrinterVenueNullable(sqlite);
+  migrateDeduplicateKitchenPrinters(sqlite);
   migrateNullableMenuVenue(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
@@ -82,9 +83,8 @@ function createDb() {
 }
 
 /**
- * Kitchen printers are shared (no department).
- * Checkout / both keep venue_id for the cashier side only.
- * Rebuilds printers.venue_id to allow NULL — does not change IPs or names.
+ * Allow printers.venue_id to be NULL (kitchen-only / shared).
+ * Does NOT clear or rewrite existing venue assignments.
  */
 function migratePrinterVenueNullable(sqlite: Database.Database) {
   const cols = sqlite.prepare(`PRAGMA table_info(printers)`).all() as Array<{
@@ -92,44 +92,87 @@ function migratePrinterVenueNullable(sqlite: Database.Database) {
     notnull: number;
   }>;
   const venueCol = cols.find((col) => col.name === "venue_id");
-  if (!venueCol) return;
+  if (!venueCol || venueCol.notnull !== 1) return;
 
-  if (venueCol.notnull === 1) {
-    sqlite.pragma("foreign_keys = OFF");
-    sqlite.exec(`
-      BEGIN;
-      CREATE TABLE printers__venue_null (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        venue_id TEXT REFERENCES venues(id),
-        name TEXT NOT NULL,
-        role TEXT NOT NULL,
-        host TEXT NOT NULL,
-        port INTEGER NOT NULL DEFAULT 9100,
-        connection_type TEXT NOT NULL DEFAULT 'network',
-        active INTEGER NOT NULL DEFAULT 1
-      );
-      INSERT INTO printers__venue_null (
-        id, venue_id, name, role, host, port, connection_type, active
-      )
-      SELECT
-        id,
-        CASE WHEN role = 'kitchen' THEN NULL ELSE venue_id END,
-        name,
-        role,
-        host,
-        port,
-        COALESCE(connection_type, 'network'),
-        active
-      FROM printers;
-      DROP TABLE printers;
-      ALTER TABLE printers__venue_null RENAME TO printers;
-      COMMIT;
-    `);
-    sqlite.pragma("foreign_keys = ON");
-  } else {
-    sqlite
-      .prepare(`UPDATE printers SET venue_id = NULL WHERE role = 'kitchen'`)
-      .run();
+  sqlite.pragma("foreign_keys = OFF");
+  sqlite.exec(`
+    BEGIN;
+    CREATE TABLE printers__venue_null (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id TEXT REFERENCES venues(id),
+      name TEXT NOT NULL,
+      role TEXT NOT NULL,
+      host TEXT NOT NULL,
+      port INTEGER NOT NULL DEFAULT 9100,
+      connection_type TEXT NOT NULL DEFAULT 'network',
+      active INTEGER NOT NULL DEFAULT 1
+    );
+    INSERT INTO printers__venue_null (
+      id, venue_id, name, role, host, port, connection_type, active
+    )
+    SELECT
+      id,
+      venue_id,
+      name,
+      role,
+      host,
+      port,
+      COALESCE(connection_type, 'network'),
+      active
+    FROM printers;
+    DROP TABLE printers;
+    ALTER TABLE printers__venue_null RENAME TO printers;
+    COMMIT;
+  `);
+  sqlite.pragma("foreign_keys = ON");
+}
+
+/**
+ * Old setup stored the same kitchen IP once per venue.
+ * Keep one kitchen row per host:port and retarget category/item links.
+ */
+function migrateDeduplicateKitchenPrinters(sqlite: Database.Database) {
+  const dupes = sqlite
+    .prepare(
+      `SELECT host, port, MIN(id) AS keep_id, GROUP_CONCAT(id) AS ids
+       FROM printers
+       WHERE role = 'kitchen'
+       GROUP BY host, port
+       HAVING COUNT(*) > 1`,
+    )
+    .all() as Array<{ host: string; port: number; keep_id: number; ids: string }>;
+
+  for (const row of dupes) {
+    const ids = row.ids
+      .split(",")
+      .map((value) => Number(value))
+      .filter((id) => id !== row.keep_id);
+    for (const dropId of ids) {
+      sqlite
+        .prepare(
+          `UPDATE categories SET kitchen_printer_id = ? WHERE kitchen_printer_id = ?`,
+        )
+        .run(row.keep_id, dropId);
+      sqlite
+        .prepare(
+          `UPDATE categories SET restaurant_kitchen_printer_id = ? WHERE restaurant_kitchen_printer_id = ?`,
+        )
+        .run(row.keep_id, dropId);
+      sqlite
+        .prepare(
+          `UPDATE categories SET cafe_kitchen_printer_id = ? WHERE cafe_kitchen_printer_id = ?`,
+        )
+        .run(row.keep_id, dropId);
+      sqlite
+        .prepare(
+          `UPDATE items SET kitchen_printer_id = ? WHERE kitchen_printer_id = ?`,
+        )
+        .run(row.keep_id, dropId);
+      sqlite
+        .prepare(`DELETE FROM cashier_stations WHERE printer_id = ?`)
+        .run(dropId);
+      sqlite.prepare(`DELETE FROM printers WHERE id = ?`).run(dropId);
+    }
   }
 }
 

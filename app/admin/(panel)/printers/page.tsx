@@ -9,6 +9,22 @@ import { printers } from "@/lib/db/schema";
 import { isVenueId, getVenueName } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
+function dedupeKitchenPrinters<T extends { id: number; role: string; host: string; port: number }>(
+  rows: T[],
+): T[] {
+  const seenKitchen = new Set<string>();
+  const result: T[] = [];
+  for (const row of rows) {
+    if (row.role === "kitchen") {
+      const key = `${row.host}:${row.port}`;
+      if (seenKitchen.has(key)) continue;
+      seenKitchen.add(key);
+    }
+    result.push(row);
+  }
+  return result;
+}
+
 export default async function AdminPrintersPage({
   searchParams,
 }: {
@@ -18,19 +34,21 @@ export default async function AdminPrintersPage({
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
 
-  // Kitchen = shared (all tabs). Checkout/both = this venue's cashier department.
-  const allPrinters = db
-    .select()
-    .from(printers)
-    .where(
-      or(
-        eq(printers.role, "kitchen"),
-        and(eq(printers.venueId, venue), eq(printers.role, "checkout")),
-        and(eq(printers.venueId, venue), eq(printers.role, "both")),
-      ),
-    )
-    .orderBy(asc(printers.name))
-    .all();
+  // Kitchen = shared (shown once). Checkout/both = this venue's cashier department.
+  const allPrinters = dedupeKitchenPrinters(
+    db
+      .select()
+      .from(printers)
+      .where(
+        or(
+          eq(printers.role, "kitchen"),
+          and(eq(printers.venueId, venue), eq(printers.role, "checkout")),
+          and(eq(printers.venueId, venue), eq(printers.role, "both")),
+        ),
+      )
+      .orderBy(asc(printers.name), asc(printers.id))
+      .all(),
+  );
 
   return (
     <div className="space-y-7">
