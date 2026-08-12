@@ -56,7 +56,10 @@ export function PrintersAdmin({
 
   const kitchenPrinters = allPrinters.filter((p) => supportsKitchen(p.role));
   const checkoutPrinters = allPrinters.filter(
-    (p) => supportsCheckout(p.role) && p.active && p.venueId === venueId,
+    (p) => supportsCheckout(p.role) && p.active,
+  );
+  const venueCheckoutPrinters = checkoutPrinters.filter(
+    (p) => p.venueId === venueId,
   );
 
   useEffect(() => {
@@ -237,10 +240,10 @@ export function PrintersAdmin({
             </p>
           )}
 
-          {checkoutPrinters.length === 0 && (
+          {venueCheckoutPrinters.length === 0 && (
             <p className="text-sm text-warning">
-              أضف طابعة «فاتورة كاشير» أو «مطبخ + فاتورة» بقسم{" "}
-              {getVenueName(venueId)} — بدونها لا يعمل التحصيل.
+              لا توجد طابعة فاتورة كاشير لقسم {getVenueName(venueId)} — أضف
+              «فاتورة كاشير» أو «مطبخ + فاتورة» واختر القسم {getVenueName(venueId)}.
             </p>
           )}
         </div>
@@ -288,6 +291,7 @@ export function PrintersAdmin({
                 قسم فاتورة الكاشير
               </span>
               <select
+                key={`venue-${editingPrinter?.id ?? "new"}-${roleDraft}`}
                 name="venueId"
                 className="select select-bordered w-full"
                 defaultValue={editingPrinter?.venueId ?? venueId}

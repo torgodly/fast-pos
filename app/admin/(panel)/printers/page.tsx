@@ -1,4 +1,4 @@
-import { and, asc, eq, or } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { Printer } from "lucide-react";
 import { PrintersAdmin } from "@/components/admin/PrintersAdmin";
 import { requireAdmin } from "@/app/actions/auth";
@@ -9,9 +9,9 @@ import { printers } from "@/lib/db/schema";
 import { isVenueId, getVenueName } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
-function dedupeKitchenPrinters<T extends { id: number; role: string; host: string; port: number }>(
-  rows: T[],
-): T[] {
+function dedupeKitchenPrinters<
+  T extends { id: number; role: string; host: string; port: number },
+>(rows: T[]): T[] {
   const seenKitchen = new Set<string>();
   const result: T[] = [];
   for (const row of rows) {
@@ -34,20 +34,10 @@ export default async function AdminPrintersPage({
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
 
-  // Kitchen = shared (shown once). Checkout/both = this venue's cashier department.
+  // Show every printer. Tabs only set the default cashier department in the form.
+  // (Filtering by tab hid cafe cashiers when the restaurant tab was open.)
   const allPrinters = dedupeKitchenPrinters(
-    db
-      .select()
-      .from(printers)
-      .where(
-        or(
-          eq(printers.role, "kitchen"),
-          and(eq(printers.venueId, venue), eq(printers.role, "checkout")),
-          and(eq(printers.venueId, venue), eq(printers.role, "both")),
-        ),
-      )
-      .orderBy(asc(printers.name), asc(printers.id))
-      .all(),
+    db.select().from(printers).orderBy(asc(printers.name), asc(printers.id)).all(),
   );
 
   return (
@@ -60,14 +50,15 @@ export default async function AdminPrintersPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الطابعات</h2>
             <p className="text-sm text-base-content/45">
-              مطبخ مشترك + فواتير كاشير {getVenueName(venue)}
+              كل الطابعات — تبويب {getVenueName(venue)} يحدد القسم الافتراضي عند
+              الإضافة
             </p>
           </div>
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
         <p className="mt-3 text-sm text-base-content/55">
-          طابعات المطبخ مشتركة. قسم <strong>مطعم / كافيه</strong> يُختار فقط
-          لطابعة فاتورة الكاشير (أو جزء الفاتورة من «مطبخ + فاتورة»).
+          المطبخ مشترك. لطابعة الكاشير اختر قسم <strong>مطعم</strong> أو{" "}
+          <strong>كافيه</strong> في النموذج.
         </p>
       </div>
 

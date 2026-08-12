@@ -567,90 +567,119 @@ export async function deleteStaff(id: number): Promise<ActionResult> {
 }
 
 export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
-  await assertAdmin();
-  const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const venueRaw = String(formData.get("venueId") ?? "").trim();
-  const name = String(formData.get("name") ?? "").trim();
-  const role = String(formData.get("role") ?? "");
-  const connectionType = String(
-    formData.get("connectionType") ?? "network",
-  ) as PrinterConnectionType;
-  const host = String(formData.get("host") ?? "").trim();
-  const port = Number(formData.get("port") ?? 9100);
+  try {
+    await assertAdmin();
+    const id = formData.get("id") ? Number(formData.get("id")) : null;
+    const venueRaw = String(formData.get("venueId") ?? "").trim();
+    const name = String(formData.get("name") ?? "").trim();
+    const role = String(formData.get("role") ?? "");
+    const connectionType = String(
+      formData.get("connectionType") ?? "network",
+    ) as PrinterConnectionType;
+    const host = String(formData.get("host") ?? "").trim();
+    const port = Number(formData.get("port") ?? 9100);
 
-  if (!isPrinterRole(role)) {
-    return { error: "نوع الطابعة غير صالح" };
-  }
-
-  if (role === "both" && connectionType === "local") {
-    return {
-      error: "الطابعة المشتركة (مطبخ + فاتورة) تتطلب اتصال شبكة",
-    };
-  }
-
-  const resolvedConnection: PrinterConnectionType = supportsKitchen(role)
-    ? "network"
-    : connectionType;
-
-  if (!name) {
-    return { error: "بيانات الطابعة غير مكتملة" };
-  }
-
-  // Kitchen-only: no cashier department. Checkout / both: department is for cashier.
-  let venueId: VenueId | null = null;
-  if (role === "kitchen") {
-    venueId = null;
-  } else if (isVenueId(venueRaw)) {
-    venueId = venueRaw;
-  } else {
-    return { error: "اختر قسم فاتورة الكاشير (مطعم أو كافيه)" };
-  }
-
-  if (resolvedConnection === "network" && !host) {
-    return { error: "عنوان IP مطلوب لطابعة الشبكة" };
-  }
-
-  const resolvedHost =
-    resolvedConnection === "local" ? host.trim() || "default" : host;
-
-  if (resolvedConnection === "network") {
-    if (!Number.isFinite(port) || port < 1) {
-      return { error: "منفذ الطابعة غير صالح" };
+    if (!isPrinterRole(role)) {
+      return { error: "نوع الطابعة غير صالح" };
     }
+
+    if (role === "both" && connectionType === "local") {
+      return {
+        error: "الطابعة المشتركة (مطبخ + فاتورة) تتطلب اتصال شبكة",
+      };
+    }
+
+    const resolvedConnection: PrinterConnectionType = supportsKitchen(role)
+      ? "network"
+      : connectionType;
+
+    if (!name) {
+      return { error: "بيانات الطابعة غير مكتملة" };
+    }
+
+    // Kitchen-only: no cashier department. Checkout / both: department is for cashier.
+    let venueId: VenueId | null = null;
+    if (role === "kitchen") {
+      venueId = null;
+    } else if (isVenueId(venueRaw)) {
+      venueId = venueRaw;
+    } else {
+      return { error: "اختر قسم فاتورة الكاشير (مطعم أو كافيه)" };
+    }
+
+    if (resolvedConnection === "network" && !host) {
+      return { error: "عنوان IP مطلوب لطابعة الشبكة" };
+    }
+
+    const resolvedHost =
+      resolvedConnection === "local" ? host.trim() || "default" : host;
+
+    if (resolvedConnection === "network") {
+      if (!Number.isFinite(port) || port < 1) {
+        return { error: "منفذ الطابعة غير صالح" };
+      }
+    }
+
+    const values = {
+      venueId,
+      name,
+      role,
+      host: resolvedHost,
+      port: resolvedConnection === "local" ? 0 : port,
+      connectionType: resolvedConnection,
+    };
+
+    let printerId = id && Number.isFinite(id) ? id : null;
+
+    if (printerId) {
+      db.update(printers).set(values).where(eq(printers.id, printerId)).run();
+    } else {
+      // Same IP already exists → update that row (avoids "it won't add" ghosts).
+      const existingByHost =
+        resolvedConnection === "network"
+          ? db
+              .select()
+              .from(printers)
+              .where(
+                and(eq(printers.host, resolvedHost), eq(printers.port, values.port)),
+              )
+              .get()
+          : null;
+
+      if (existingByHost) {
+        printerId = existingByHost.id;
+        db.update(printers)
+          .set({ ...values, active: true })
+          .where(eq(printers.id, printerId))
+          .run();
+      } else {
+        const inserted = db
+          .insert(printers)
+          .values({ ...values, active: true })
+          .returning({ id: printers.id })
+          .get();
+        printerId = inserted?.id ?? null;
+        if (!printerId) {
+          return { error: "فشل حفظ الطابعة" };
+        }
+      }
+    }
+
+    if (supportsCheckout(role) && printerId && venueId) {
+      syncCheckoutStation(venueId, printerId, name);
+    } else if (printerId) {
+      db.delete(cashierStations)
+        .where(eq(cashierStations.printerId, printerId))
+        .run();
+    }
+
+    revalidatePrinters();
+    return { ok: true };
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "فشل حفظ الطابعة";
+    return { error: detail };
   }
-
-  const values = {
-    venueId,
-    name,
-    role,
-    host: resolvedHost,
-    port: resolvedConnection === "local" ? 0 : port,
-    connectionType: resolvedConnection,
-  };
-
-  let printerId = id;
-
-  if (id) {
-    db.update(printers).set(values).where(eq(printers.id, id)).run();
-  } else {
-    const inserted = db
-      .insert(printers)
-      .values({ ...values, active: true })
-      .returning()
-      .get();
-    printerId = inserted.id;
-  }
-
-  if (supportsCheckout(role) && printerId && venueId) {
-    syncCheckoutStation(venueId, printerId, name);
-  } else if (printerId) {
-    db.delete(cashierStations)
-      .where(eq(cashierStations.printerId, printerId))
-      .run();
-  }
-
-  revalidatePrinters();
-  return { ok: true };
 }
 
 export async function setPrinterActive(id: number, active: boolean) {
