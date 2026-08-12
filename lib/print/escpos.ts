@@ -401,21 +401,6 @@ export function buildCheckoutEscPos(
     );
   }
 
-  if (data.cancelledLines && data.cancelledLines.length > 0) {
-    parts.push(separator());
-    printLine(parts, "ملغى من الكاشير الرئيسي", { bold: true });
-    for (const item of data.cancelledLines) {
-      printWrappedName(parts, item.name, true);
-      printLine(parts, `−${item.qty} x ${money(item.unitPrice)}`);
-      if (item.removedByName) {
-        printLine(parts, item.removedByName);
-      }
-      if (item.reason) {
-        printLine(parts, item.reason);
-      }
-    }
-  }
-
   parts.push(separator());
   printLine(parts, `الإجمالي: ${money(data.total)}`, {
     bold: true,

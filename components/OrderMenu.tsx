@@ -16,13 +16,9 @@ import {
   type MenuItem,
 } from "@/components/CategoryItemPicker";
 import {
-  PosMobileBar,
-  PosMobileSheet,
-  PosTicketLines,
   PosTicketPanel,
   type PosTicketLine,
 } from "@/components/PosTicket";
-import { formatMoney } from "@/lib/venues";
 
 type Line = {
   id: number;
@@ -51,7 +47,6 @@ export function OrderMenu({
   footer,
   isMainCashier = false,
   cancelledLines = [],
-  ticketAlwaysVisible = false,
 }: {
   orderId: number;
   categories: MenuCategory[];
@@ -61,10 +56,8 @@ export function OrderMenu({
   footer?: ReactNode;
   isMainCashier?: boolean;
   cancelledLines?: CancelledTicketLine[];
-  ticketAlwaysVisible?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
-  const [cartOpen, setCartOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<CancelKitchenTarget | null>(
     null,
   );
@@ -164,20 +157,6 @@ export function OrderMenu({
       </div>
     ) : null;
 
-  const footerBlock = (
-    <>
-      <div className="flex items-center justify-between lg:hidden">
-        <span className="text-sm font-bold text-base-content/50">
-          الإجمالي
-        </span>
-        <span className="text-lg font-black tabular-nums text-primary">
-          {formatMoney(total)}
-        </span>
-      </div>
-      {footer}
-    </>
-  );
-
   const ticketFooter = (
     <>
       {cancelledBlock}
@@ -187,29 +166,19 @@ export function OrderMenu({
 
   return (
     <>
-      <div
-        className={`grid min-h-0 min-w-0 flex-1 overflow-hidden ${
-          ticketAlwaysVisible
-            ? "grid-cols-[minmax(0,1fr)_minmax(10.75rem,36%)] sm:grid-cols-[minmax(0,1fr)_minmax(16rem,34%)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,32%)]"
-            : "grid-rows-[minmax(0,1fr)] pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:grid-rows-1 lg:pb-0"
-        }`}
-      >
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(10.75rem,36%)] overflow-hidden sm:grid-cols-[minmax(0,1fr)_minmax(16rem,34%)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,32%)]">
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-base-300 bg-base-100 p-1.5">
           <CategoryItemPicker
             categories={categories}
             items={items}
             categoryCounts={categoryCounts}
             pending={pending}
-            dense={ticketAlwaysVisible}
+            dense
             onAddItem={(item) => add(item.id)}
           />
         </div>
 
-        <div
-          className={`min-h-0 ${
-            ticketAlwaysVisible ? "flex flex-col" : "hidden lg:flex lg:flex-col"
-          }`}
-        >
+        <div className="flex min-h-0 flex-col">
           <PosTicketPanel
             title="الطلب"
             itemCount={itemCount}
@@ -217,45 +186,13 @@ export function OrderMenu({
             lines={ticketLines}
             pending={pending}
             emptyLabel="لا أصناف"
-            compact={ticketAlwaysVisible}
+            compact
             onChangeQty={changeQty}
             onRemove={remove}
             footer={ticketFooter}
           />
         </div>
       </div>
-
-      {ticketAlwaysVisible ? null : (
-        <>
-          <PosMobileBar
-            itemCount={itemCount}
-            total={total}
-            actionLabel="فاتورة"
-            onOpen={() => setCartOpen(true)}
-          />
-
-          <PosMobileSheet
-            open={cartOpen}
-            title="فاتورة"
-            itemCount={itemCount}
-            onClose={() => setCartOpen(false)}
-            footer={
-              <>
-                {cancelledBlock}
-                {footerBlock}
-              </>
-            }
-          >
-            <PosTicketLines
-              lines={ticketLines}
-              pending={pending}
-              emptyLabel="لا أصناف"
-              onChangeQty={changeQty}
-              onRemove={remove}
-            />
-          </PosMobileSheet>
-        </>
-      )}
 
       <CancelKitchenItemDialog
         target={cancelTarget}

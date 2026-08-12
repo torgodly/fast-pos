@@ -7,7 +7,6 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
 import { db, getSqlite } from "@/lib/db";
 import {
-  auditEvents,
   cancelledItems,
   categories,
   items,
@@ -33,7 +32,7 @@ import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-print
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
-import { cancelledReceiptLines } from "@/lib/orders/cancelled";
+import { quickSalePrinterFailureMessage } from "@/lib/orders/rules";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -673,11 +672,20 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   }
 
   const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
-  if (!order || order.status !== "open") {
-    return { error: "الفاتورة غير مفتوحة" };
+  if (!order || (order.status !== "open" && order.status !== "paid")) {
+    return { error: "الفاتورة غير موجودة" };
   }
-  if (!waiterOwnsOrder(session, order)) {
+  if (order.status === "paid" && session.role !== "cashier") {
+    return { error: "فقط الكاشير يعيد طباعة مطبخ فاتورة مدفوعة" };
+  }
+  if (order.status === "open" && !waiterOwnsOrder(session, order)) {
     return { error: "هذه الطاولة مع سفرادجي آخر" };
+  }
+  if (order.status === "paid" && order.cashierId !== session.userId) {
+    const me = db.select().from(users).where(eq(users.id, session.userId)).get();
+    if (!me?.isMainCashier) {
+      return { error: "يمكنك طباعة مطبخ مبيعاتك فقط" };
+    }
   }
   if (!isVenueId(order.venueId)) {
     return { error: "فرع غير صالح" };
@@ -690,7 +698,7 @@ export async function confirmKitchenOrder(orderId: number): Promise<
   const result = await sendPendingKitchenTickets({
     orderId,
     venueId: order.venueId,
-    tableName: table?.name ?? "بدون طاولة",
+    tableName: table?.name ?? (order.tableId === null ? "بيع سريع" : "بدون طاولة"),
     staffName: session.name,
     requirePending: true,
   });
@@ -703,10 +711,13 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       success: false,
       detail: result.error,
     });
-    return result;
+    return {
+      error: `${result.error} — الفاتورة محفوظة، أعد المحاولة لاحقاً`,
+    };
   }
 
   revalidateOrderPaths(order.venueId, orderId, session.role);
+  revalidatePath(`/cashier/${order.venueId}/sales`);
 
   if (result.skipped) {
     return { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" };
@@ -725,7 +736,10 @@ export async function confirmKitchenOrder(orderId: number): Promise<
     ok: true,
     printedTo: result.printedTo,
     failed: result.failed,
-    message: result.message,
+    message:
+      result.failed.length > 0
+        ? `${result.message} — الفاتورة محفوظة، أعد طباعة ما تبقّى لاحقاً`
+        : result.message,
   };
 }
 
@@ -780,7 +794,6 @@ async function buildCheckoutReceiptForOrder(
         unitPrice: line.unitPrice,
         lineTotal: line.lineTotal,
       })),
-      cancelledLines: cancelledReceiptLines(order.id),
     },
   };
 }
@@ -912,7 +925,6 @@ export async function payOrder(
       unitPrice: line.unitPrice,
       lineTotal: line.lineTotal,
     })),
-    cancelledLines: cancelledReceiptLines(order.id),
   };
 
   const printResult = await printCheckoutReceipt(
@@ -962,7 +974,7 @@ export async function payOrder(
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
     printError,
-    message: `تم الدفع بنجاح، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+    message: `تم الدفع — فاتورة #${orderId} محفوظة. فشلت طباعة العميل: ${printError}. أعد الطباعة لاحقاً من مبيعاتي`,
   };
 }
 
@@ -1072,19 +1084,7 @@ export async function payQuickSale(
     return { error: "فشل حفظ أصناف البيع السريع" };
   }
 
-  function abortQuickSale() {
-    // Clear FK refs first — audit rows used to block order delete and leave
-    // empty "بيع سريع" invoices with a total and no items.
-    db.update(auditEvents)
-      .set({ orderId: null })
-      .where(eq(auditEvents.orderId, order.id))
-      .run();
-    db.delete(cancelledItems).where(eq(cancelledItems.orderId, order.id)).run();
-    db.delete(orderItems).where(eq(orderItems.orderId, order.id)).run();
-    db.delete(orders).where(eq(orders.id, order.id)).run();
-  }
-
-  // Fast sell must always print kitchen before checkout receipt
+  // Never delete the sale if a printer fails — pay first, print later.
   const kitchenResult = await sendPendingKitchenTickets({
     orderId: order.id,
     venueId,
@@ -1092,7 +1092,14 @@ export async function payQuickSale(
     staffName: session.name,
     requirePending: true,
   });
+
+  let kitchenFailed = false;
+  let kitchenError = "";
+  let kitchenNote = "";
+
   if ("error" in kitchenResult) {
+    kitchenFailed = true;
+    kitchenError = kitchenResult.error;
     recordSessionAudit(session, {
       venueId,
       kind: "kitchen",
@@ -1100,29 +1107,35 @@ export async function payQuickSale(
       success: false,
       detail: kitchenResult.error,
     });
-    abortQuickSale();
-    return { error: `المطبخ: ${kitchenResult.error}` };
-  }
-  if (kitchenResult.skipped || kitchenResult.printedTo.length === 0) {
+  } else if (kitchenResult.skipped || kitchenResult.printedTo.length === 0) {
+    kitchenFailed = true;
+    kitchenError = "لم يتم طباعة تذكرة المطبخ";
     recordSessionAudit(session, {
       venueId,
       kind: "kitchen",
       orderId: order.id,
       success: false,
-      detail: "لم يتم طباعة تذكرة المطبخ",
+      detail: kitchenError,
     });
-    abortQuickSale();
-    return { error: "المطبخ: لم يتم طباعة تذكرة المطبخ — تحقق من طابعات المطبخ" };
+  } else {
+    kitchenNote = ` + مطبخ (${kitchenResult.printedTo
+      .map((p) => p.printerName)
+      .join("، ")})`;
+    recordSessionAudit(session, {
+      venueId,
+      kind: "kitchen",
+      orderId: order.id,
+      printerName: kitchenResult.printedTo.map((p) => p.printerName).join("، "),
+      success: kitchenResult.failed.length === 0,
+      detail: kitchenResult.message,
+    });
+    if (kitchenResult.failed.length > 0) {
+      kitchenFailed = true;
+      kitchenError = kitchenResult.failed
+        .map((f) => `${f.printerName}: ${f.reason}`)
+        .join(" — ");
+    }
   }
-
-  recordSessionAudit(session, {
-    venueId,
-    kind: "kitchen",
-    orderId: order.id,
-    printerName: kitchenResult.printedTo.map((p) => p.printerName).join("، "),
-    success: kitchenResult.failed.length === 0,
-    detail: kitchenResult.message,
-  });
 
   const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
   db.update(orders)
@@ -1149,7 +1162,6 @@ export async function payQuickSale(
       unitPrice: line.item.price,
       lineTotal: line.item.price * line.qty,
     })),
-    cancelledLines: cancelledReceiptLines(order.id),
   };
 
   const printResult = await printCheckoutReceipt(
@@ -1169,22 +1181,35 @@ export async function payQuickSale(
 
   revalidatePath(`/cashier/${venueId}`);
   revalidatePath(`/cashier/${venueId}/quick`);
+  revalidatePath(`/cashier/${venueId}/sales`);
 
-  const kitchenNote = ` + مطبخ (${kitchenResult.printedTo
-    .map((p) => p.printerName)
-    .join("، ")})`;
+  const receiptFailed =
+    !("browserPrint" in printResult && printResult.browserPrint) &&
+    !printResult.printOk;
+  const receiptError =
+    "printError" in printResult ? printResult.printError : undefined;
+
+  const message = quickSalePrinterFailureMessage({
+    orderId: order.id,
+    kitchenFailed,
+    receiptFailed,
+    kitchenError: kitchenError || undefined,
+    receiptError,
+  });
 
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
       ok: true,
-      printOk: false,
+      printOk: !kitchenFailed,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
+      message: kitchenFailed
+        ? `${message} — اختر طابعة الفاتورة في نافذة Chrome`
+        : `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
     };
   }
 
-  if (printResult.printOk) {
+  if (printResult.printOk && !kitchenFailed) {
     return {
       ok: true,
       printOk: true,
@@ -1192,14 +1217,11 @@ export async function payQuickSale(
     };
   }
 
-  const printError =
-    "printError" in printResult ? printResult.printError : "تعذر الطباعة";
-
   return {
     ok: true,
     printOk: false,
-    printError,
-    message: `تم الدفع${kitchenNote}، لكن فشلت طباعة الفاتورة على ${stationCtx.printer.name}: ${printError}`,
+    printError: kitchenError || receiptError || "تعذر الطباعة",
+    message,
   };
 }
 
@@ -1414,7 +1436,6 @@ export async function printOpenOrderReceipt(
         unitPrice: line.unitPrice,
         lineTotal: line.lineTotal,
       })),
-      cancelledLines: cancelledReceiptLines(order.id),
     },
     order.venueId,
     session,

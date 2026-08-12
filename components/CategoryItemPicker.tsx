@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Search, X } from "lucide-react";
 import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
@@ -12,6 +13,10 @@ export type MenuItem = {
   categoryId: number;
   active?: boolean;
 };
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
 
 export function CategoryItemPicker({
   categories,
@@ -36,7 +41,14 @@ export function CategoryItemPicker({
     [categories, items],
   );
 
+  const categoryNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const cat of categories) map.set(cat.id, cat.name);
+    return map;
+  }, [categories]);
+
   const listRef = useDragScroll<HTMLDivElement>("y");
+  const [query, setQuery] = useState("");
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(
     () => categoriesWithItems[0]?.id ?? null,
   );
@@ -54,13 +66,18 @@ export function CategoryItemPicker({
     }
   }, [categoriesWithItems, activeCategoryId]);
 
-  const activeItems = useMemo(
-    () =>
-      activeCategoryId == null
-        ? []
-        : items.filter((item) => item.categoryId === activeCategoryId),
-    [items, activeCategoryId],
-  );
+  const search = normalizeSearch(query);
+  const isSearching = search.length > 0;
+
+  const visibleItems = useMemo(() => {
+    if (isSearching) {
+      return items.filter((item) =>
+        normalizeSearch(item.name).includes(search),
+      );
+    }
+    if (activeCategoryId == null) return [];
+    return items.filter((item) => item.categoryId === activeCategoryId);
+  }, [items, activeCategoryId, isSearching, search]);
 
   if (items.length === 0) {
     return (
@@ -72,16 +89,46 @@ export function CategoryItemPicker({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden">
-      <div className="touch-scroll-x shrink-0">
+      <label
+        className={`flex shrink-0 items-center gap-2 rounded-lg border border-base-300 bg-base-100 px-2.5 ${
+          dense ? "h-9" : "h-10"
+        }`}
+      >
+        <Search className="size-4 shrink-0 text-base-content/40" />
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="بحث في كل الأصناف…"
+          className="min-w-0 grow bg-transparent text-sm outline-none placeholder:text-base-content/35"
+        />
+        {query ? (
+          <button
+            type="button"
+            className="grid size-6 shrink-0 place-items-center rounded-md text-base-content/45 hover:bg-base-200 hover:text-base-content"
+            onClick={() => setQuery("")}
+            aria-label="مسح البحث"
+          >
+            <X className="size-3.5" />
+          </button>
+        ) : null}
+      </label>
+
+      <div
+        className={`touch-scroll-x shrink-0 ${
+          isSearching ? "pointer-events-none opacity-45" : ""
+        }`}
+      >
         <div className="flex w-max min-w-full gap-1.5 pb-0.5">
           {categoriesWithItems.map((cat) => {
             const picked = categoryCounts[cat.id] ?? 0;
-            const active = cat.id === activeCategoryId;
+            const active = !isSearching && cat.id === activeCategoryId;
             return (
               <button
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategoryId(cat.id)}
+                disabled={isSearching}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-bold ${
                   dense ? "h-9" : "h-11"
                 } ${
@@ -107,50 +154,63 @@ export function CategoryItemPicker({
       </div>
 
       <div ref={listRef} className="touch-scroll">
-        {/* Fewer columns = readable tiles on 1024×768 POS monitors */}
-        <div
-          className={`grid gap-1.5 ${
-            dense
-              ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
-              : "grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
-          }`}
-        >
-          {activeItems.map((item) => {
-            const available = item.active !== false;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                disabled={pending || !available}
-                onClick={() => {
-                  if (!available) return;
-                  onAddItem(item);
-                }}
-                title={available ? item.name : "غير متوفر"}
-                className={`flex min-h-16 flex-col justify-between rounded-lg border px-2 py-1.5 text-right active:bg-primary/10 disabled:opacity-50 ${
-                  available
-                    ? "border-base-300 bg-base-100 hover:border-primary/50"
-                    : "border-base-300 bg-base-200"
-                }`}
-              >
-                <span
-                  className={`line-clamp-2 text-sm font-bold leading-snug ${
-                    available ? "" : "text-base-content/45"
+        {visibleItems.length === 0 ? (
+          <p className="py-8 text-center text-sm text-base-content/45">
+            {isSearching ? "لا نتائج لهذا البحث" : "لا أصناف في هذا التصنيف"}
+          </p>
+        ) : (
+          <div
+            className={`grid gap-1.5 ${
+              dense
+                ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+                : "grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+            }`}
+          >
+            {visibleItems.map((item) => {
+              const available = item.active !== false;
+              const categoryName = isSearching
+                ? categoryNameById.get(item.categoryId)
+                : null;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={pending || !available}
+                  onClick={() => {
+                    if (!available) return;
+                    onAddItem(item);
+                  }}
+                  title={available ? item.name : "غير متوفر"}
+                  className={`flex min-h-16 flex-col justify-between rounded-lg border px-2 py-1.5 text-right active:bg-primary/10 disabled:opacity-50 ${
+                    available
+                      ? "border-base-300 bg-base-100 hover:border-primary/50"
+                      : "border-base-300 bg-base-200"
                   }`}
                 >
-                  {item.name}
-                </span>
-                <span
-                  className={`mt-1 text-xs font-black tabular-nums ${
-                    available ? "text-primary" : "text-error"
-                  }`}
-                >
-                  {available ? formatMoney(item.price) : "—"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                  <span
+                    className={`line-clamp-2 text-sm font-bold leading-snug ${
+                      available ? "" : "text-base-content/45"
+                    }`}
+                  >
+                    {item.name}
+                  </span>
+                  {categoryName ? (
+                    <span className="mt-0.5 line-clamp-1 text-[10px] font-bold text-base-content/45">
+                      {categoryName}
+                    </span>
+                  ) : null}
+                  <span
+                    className={`mt-1 text-xs font-black tabular-nums ${
+                      available ? "text-primary" : "text-error"
+                    }`}
+                  >
+                    {available ? formatMoney(item.price) : "—"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -12,9 +12,11 @@ import {
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { PosHeader } from "@/components/PosHeader";
+import { ReprintKitchenButton } from "@/components/ReprintKitchenButton";
 import { ReprintReceiptButton } from "@/components/ReprintReceiptButton";
 import { db } from "@/lib/db";
-import { orders, tables, users } from "@/lib/db/schema";
+import { orderItems, orders, tables, users } from "@/lib/db/schema";
+import { orderHasKitchenPending } from "@/lib/orders/rules";
 import { formatDateTime, formatMoney, isVenueId } from "@/lib/venues";
 
 function localYmd(date: Date) {
@@ -98,6 +100,21 @@ export default async function CashierSalesPage({
     )
     .orderBy(desc(orders.paidAt))
     .all();
+
+  const salesWithKitchen = sales.map((sale) => {
+    const lines = db
+      .select({
+        qty: orderItems.qty,
+        kitchenSentQty: orderItems.kitchenSentQty,
+      })
+      .from(orderItems)
+      .where(eq(orderItems.orderId, sale.id))
+      .all();
+    return {
+      ...sale,
+      kitchenPending: orderHasKitchenPending(lines),
+    };
+  });
 
   const totalAmount = sales.reduce((sum, row) => sum + row.total, 0);
   const cashTotal = sales
@@ -191,7 +208,7 @@ export default async function CashierSalesPage({
         </div>
 
         <div className="space-y-3">
-          {sales.map((sale) => (
+          {salesWithKitchen.map((sale) => (
             <article
               key={sale.id}
               className="premium-card flex flex-col gap-4 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
@@ -211,29 +228,41 @@ export default async function CashierSalesPage({
                     {formatDateTime(sale.paidAt ?? sale.createdAt)}
                     {sale.waiterName ? ` · ${sale.waiterName}` : ""}
                   </p>
-                  <span
-                    className={`badge badge-sm mt-2 ${
-                      sale.paymentMethod === "cash"
-                        ? "badge-success badge-soft"
-                        : "badge-info badge-soft"
-                    }`}
-                  >
-                    {sale.paymentMethod === "cash" ? "نقدي" : "بطاقة"}
-                  </span>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span
+                      className={`badge badge-sm ${
+                        sale.paymentMethod === "cash"
+                          ? "badge-success badge-soft"
+                          : "badge-info badge-soft"
+                      }`}
+                    >
+                      {sale.paymentMethod === "cash" ? "نقدي" : "بطاقة"}
+                    </span>
+                    {sale.kitchenPending ? (
+                      <span className="badge badge-warning badge-sm badge-soft">
+                        مطبخ لم يُطبع
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+              <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-col sm:items-end">
                 <p className="text-xl font-black text-primary">
                   {formatMoney(sale.total)}
                 </p>
-                <ReprintReceiptButton orderId={sale.id} venueId={venue} />
+                <div className="flex flex-wrap gap-1.5">
+                  {sale.kitchenPending ? (
+                    <ReprintKitchenButton orderId={sale.id} />
+                  ) : null}
+                  <ReprintReceiptButton orderId={sale.id} venueId={venue} />
+                </div>
               </div>
             </article>
           ))}
         </div>
 
-        {sales.length === 0 && (
+        {salesWithKitchen.length === 0 && (
           <div className="premium-card rounded-3xl p-12 text-center">
             <span className="mx-auto mb-4 grid size-16 place-items-center rounded-3xl bg-base-200 text-base-content/25">
               <WalletCards className="size-8" />

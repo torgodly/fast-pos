@@ -137,11 +137,14 @@ export function QuickSaleBoard({
           browserPrint: true,
           receiptHtml: result.receiptHtml,
         });
-        printOk = printed.printOk;
-        message = printed.message;
+        if (!printed.printOk) {
+          printOk = false;
+          message = `${result.message} — ${printed.message}`;
+        }
       }
 
       showToast(printOk ? "success" : "warning", message);
+      router.push(`/cashier/${venueId}/sales`);
       router.refresh();
     });
   }

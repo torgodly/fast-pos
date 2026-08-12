@@ -24,7 +24,7 @@ export function KitchenConfirmButton({
     startTransition(async () => {
       const result = await confirmKitchenOrder(orderId);
       if ("error" in result) {
-        showToast("error", result.error);
+        showToast("warning", result.error);
         return;
       }
       showToast(

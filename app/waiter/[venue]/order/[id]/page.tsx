@@ -115,7 +115,6 @@ export default async function WaiterOrderPage({
           items={menuItems}
           lines={lines}
           total={order.total}
-          ticketAlwaysVisible
           cancelledLines={cancelled.map((row) => ({
             id: row.id,
             name: row.itemName,

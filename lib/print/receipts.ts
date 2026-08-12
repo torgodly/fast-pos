@@ -61,15 +61,6 @@ export type KitchenReceiptData = {
   kind?: "order" | "void";
 };
 
-export type CancelledReceiptLine = {
-  name: string;
-  qty: number;
-  unitPrice: number;
-  lineTotal: number;
-  reason?: string;
-  removedByName?: string;
-};
-
 export type CheckoutReceiptData = {
   venueName: string;
   orderId: number;
@@ -81,7 +72,6 @@ export type CheckoutReceiptData = {
   total: number;
   footerMessage?: string;
   lines: Array<ReceiptLine & { unitPrice: number; lineTotal: number }>;
-  cancelledLines?: CancelledReceiptLine[];
 };
 
 function escapeHtml(value: string) {
@@ -263,12 +253,6 @@ function shell(title: string, body: string) {
       color: #000;
     }
 
-    .void-title {
-      margin: 0 0 1.5mm;
-      font-size: 13px;
-      font-weight: 900;
-    }
-
     .total-row td {
       padding-top: 2mm;
       font-size: 17px;
@@ -409,32 +393,6 @@ export function buildCheckoutReceiptHtml(
       </tr>`,
     )
     .join("");
-  const cancelled = data.cancelledLines ?? [];
-  const cancelledHtml =
-    cancelled.length === 0
-      ? ""
-      : `
-    <hr class="divider" />
-    <p class="void-title">أصناف ألغاها الكاشير الرئيسي</p>
-    <table class="items">
-      <tbody>
-        ${cancelled
-          .map(
-            (line) => `
-          <tr>
-            <td class="name">
-              ${escapeHtml(line.name)}
-              <span class="sub">−${line.qty}× · ${money(line.lineTotal)}${
-                line.removedByName
-                  ? ` · ${escapeHtml(line.removedByName)}`
-                  : ""
-              }${line.reason ? ` · ${escapeHtml(line.reason)}` : ""}</span>
-            </td>
-          </tr>`,
-          )
-          .join("")}
-      </tbody>
-    </table>`;
 
   return shell(
     `إيصال ${data.orderId > 0 ? `رقم ${data.orderId}` : "للعرض"}`,
@@ -464,7 +422,6 @@ export function buildCheckoutReceiptHtml(
       </thead>
       <tbody>${lines}</tbody>
     </table>
-    ${cancelledHtml}
     <hr class="divider" />
     <table class="total-row">
       <tr>

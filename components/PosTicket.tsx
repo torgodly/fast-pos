@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Minus, Plus, Trash2, X } from "lucide-react";
+import { Minus, Plus, Trash2 } from "lucide-react";
 import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
@@ -224,80 +224,5 @@ export function PosTicketPanel({
         {footer}
       </div>
     </aside>
-  );
-}
-
-export function PosMobileBar({
-  itemCount,
-  total,
-  actionLabel,
-  onOpen,
-}: {
-  itemCount: number;
-  total: number;
-  actionLabel: string;
-  onOpen: () => void;
-}) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-base-300 bg-base-100 px-2 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1.5 lg:hidden">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex h-12 w-full items-center justify-between rounded-lg bg-primary px-3 text-primary-content"
-      >
-        <span className="text-sm font-bold">
-          {itemCount} · {formatMoney(total)}
-        </span>
-        <span className="text-sm font-black">{actionLabel}</span>
-      </button>
-    </div>
-  );
-}
-
-export function PosMobileSheet({
-  open,
-  title,
-  itemCount,
-  onClose,
-  children,
-  footer,
-}: {
-  open: boolean;
-  title: string;
-  itemCount: number;
-  onClose: () => void;
-  children: ReactNode;
-  footer: ReactNode;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 lg:hidden">
-      <button
-        type="button"
-        className="absolute inset-0 bg-neutral/40"
-        aria-label="إغلاق"
-        onClick={onClose}
-      />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] flex-col overflow-hidden border-t border-base-300 bg-base-100">
-        <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-2 py-1.5">
-          <p className="text-xs font-black">
-            {title}{" "}
-            <span className="text-base-content/40">({itemCount})</span>
-          </p>
-          <button
-            type="button"
-            className="grid size-7 place-items-center"
-            onClick={onClose}
-            aria-label="إغلاق"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="touch-scroll min-h-0 flex-1 px-1.5">{children}</div>
-        <div className="shrink-0 space-y-1.5 border-t border-base-300 px-2 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-          {footer}
-        </div>
-      </div>
-    </div>
   );
 }
