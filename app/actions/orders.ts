@@ -32,7 +32,6 @@ import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-print
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
-import { quickSalePrinterFailureMessage } from "@/lib/orders/rules";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -997,7 +996,9 @@ export async function payQuickSale(
       printError?: string;
       browserPrint?: boolean;
       receiptHtml?: string;
-      message: string;
+      orderId: number;
+      kitchenFailed: boolean;
+      receiptFailed: boolean;
     }
 > {
   const session = await getSession();
@@ -1095,7 +1096,6 @@ export async function payQuickSale(
 
   let kitchenFailed = false;
   let kitchenError = "";
-  let kitchenNote = "";
 
   if ("error" in kitchenResult) {
     kitchenFailed = true;
@@ -1118,9 +1118,6 @@ export async function payQuickSale(
       detail: kitchenError,
     });
   } else {
-    kitchenNote = ` + مطبخ (${kitchenResult.printedTo
-      .map((p) => p.printerName)
-      .join("، ")})`;
     recordSessionAudit(session, {
       venueId,
       kind: "kitchen",
@@ -1189,39 +1186,33 @@ export async function payQuickSale(
   const receiptError =
     "printError" in printResult ? printResult.printError : undefined;
 
-  const message = quickSalePrinterFailureMessage({
+  const base = {
+    ok: true as const,
     orderId: order.id,
     kitchenFailed,
     receiptFailed,
-    kitchenError: kitchenError || undefined,
-    receiptError,
-  });
+  };
 
   if ("browserPrint" in printResult && printResult.browserPrint) {
     return {
-      ok: true,
+      ...base,
       printOk: !kitchenFailed,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: kitchenFailed
-        ? `${message} — اختر طابعة الفاتورة في نافذة Chrome`
-        : `تم الدفع${kitchenNote} — اختر طابعة الفاتورة في نافذة Chrome`,
     };
   }
 
   if (printResult.printOk && !kitchenFailed) {
     return {
-      ok: true,
+      ...base,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}${kitchenNote}`,
     };
   }
 
   return {
-    ok: true,
+    ...base,
     printOk: false,
     printError: kitchenError || receiptError || "تعذر الطباعة",
-    message,
   };
 }
 

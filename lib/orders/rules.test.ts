@@ -7,7 +7,7 @@ import {
   nextKitchenSentAfterCancel,
   orderHasKitchenPending,
   pendingKitchenQty,
-  quickSalePrinterFailureMessage,
+  quickSalePayNotice,
   shouldAbortOrderOnPrinterFailure,
 } from "./rules";
 
@@ -105,38 +105,41 @@ describe("printer failure policy", () => {
     expect(shouldAbortOrderOnPrinterFailure()).toBe(false);
   });
 
-  it("builds a clear keep-order message for quick sale", () => {
-    const message = quickSalePrinterFailureMessage({
+  it("keeps the sale and names only what failed", () => {
+    const notice = quickSalePayNotice({
       orderId: 42,
       kitchenFailed: true,
       receiptFailed: false,
-      kitchenError: "تعذر الاتصال",
     });
-    expect(message).toContain("فاتورة #42 محفوظة");
-    expect(message).toContain("فشلت طباعة المطبخ");
-    expect(message).toContain("لاحقاً من مبيعاتي");
+    expect(notice.title).toBe("تم الدفع");
+    expect(notice.lines.map((line) => line.text)).toEqual([
+      "فاتورة #42 محفوظة",
+      "المطبخ لم يُطبع",
+      "أعد الطباعة من مبيعاتي",
+    ]);
   });
 
-  it("mentions both kitchen and receipt failures", () => {
-    const message = quickSalePrinterFailureMessage({
+  it("lists kitchen and customer print failures without error dumps", () => {
+    const notice = quickSalePayNotice({
       orderId: 7,
       kitchenFailed: true,
       receiptFailed: true,
-      kitchenError: "مطبخ",
-      receiptError: "شبكة",
     });
-    expect(message).toContain("المطبخ");
-    expect(message).toContain("العميل");
-    expect(message).toContain("#7");
+    expect(notice.lines.map((line) => line.text)).toEqual([
+      "فاتورة #7 محفوظة",
+      "المطبخ لم يُطبع",
+      "فاتورة العميل لم تُطبع",
+      "أعد الطباعة من مبيعاتي",
+    ]);
   });
 
   it("success path when nothing failed", () => {
-    expect(
-      quickSalePrinterFailureMessage({
-        orderId: 1,
-        kitchenFailed: false,
-        receiptFailed: false,
-      }),
-    ).toContain("تم الدفع وطباعة الفاتورة");
+    const notice = quickSalePayNotice({
+      orderId: 1,
+      kitchenFailed: false,
+      receiptFailed: false,
+    });
+    expect(notice.title).toBe("تم الدفع");
+    expect(notice.lines.map((line) => line.text)).toEqual(["فاتورة #1"]);
   });
 });

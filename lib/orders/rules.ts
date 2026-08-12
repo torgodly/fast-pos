@@ -45,32 +45,40 @@ export function shouldAbortOrderOnPrinterFailure() {
   return false;
 }
 
-export function quickSalePrinterFailureMessage(options: {
+export type PayNoticeLine = {
+  text: string;
+  tone?: "error" | "muted";
+};
+
+export type PayNotice = {
+  title: string;
+  lines: PayNoticeLine[];
+};
+
+export function quickSalePayNotice(options: {
   orderId: number;
   kitchenFailed: boolean;
   receiptFailed: boolean;
-  kitchenError?: string;
-  receiptError?: string;
-}) {
-  const parts = [`تم الدفع — فاتورة #${options.orderId} محفوظة`];
+}): PayNotice {
+  if (!options.kitchenFailed && !options.receiptFailed) {
+    return {
+      title: "تم الدفع",
+      lines: [{ text: `فاتورة #${options.orderId}` }],
+    };
+  }
+
+  const lines: PayNoticeLine[] = [
+    { text: `فاتورة #${options.orderId} محفوظة` },
+  ];
   if (options.kitchenFailed) {
-    parts.push(
-      `فشلت طباعة المطبخ${
-        options.kitchenError ? `: ${options.kitchenError}` : ""
-      }. يمكنك طباعة المطبخ لاحقاً من مبيعاتي`,
-    );
+    lines.push({ text: "المطبخ لم يُطبع", tone: "error" });
   }
   if (options.receiptFailed) {
-    parts.push(
-      `فشلت طباعة فاتورة العميل${
-        options.receiptError ? `: ${options.receiptError}` : ""
-      }. يمكنك إعادة الطباعة لاحقاً من مبيعاتي`,
-    );
+    lines.push({ text: "فاتورة العميل لم تُطبع", tone: "error" });
   }
-  if (!options.kitchenFailed && !options.receiptFailed) {
-    return `تم الدفع وطباعة الفاتورة — #${options.orderId}`;
-  }
-  return parts.join(" — ");
+  lines.push({ text: "أعد الطباعة من مبيعاتي", tone: "muted" });
+
+  return { title: "تم الدفع", lines };
 }
 
 export function clampCancelQty(removeQty: number, lineQty: number) {
