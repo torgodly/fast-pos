@@ -10,7 +10,7 @@ import { categories, items, printers } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import type { VenueId } from "@/lib/types";
-import { getVenueName } from "@/lib/venues";
+import { getVenueName, isVenueId } from "@/lib/venues";
 
 export default async function AdminItemsPage({
   searchParams,
@@ -37,13 +37,7 @@ export default async function AdminItemsPage({
   const kitchenPrinters = db
     .select()
     .from(printers)
-    .where(
-      and(
-        eq(printers.venueId, venue),
-        kitchenPrinterRolesFilter,
-        eq(printers.active, true),
-      ),
-    )
+    .where(and(kitchenPrinterRolesFilter, eq(printers.active, true)))
     .orderBy(asc(printers.name))
     .all();
 
@@ -51,6 +45,7 @@ export default async function AdminItemsPage({
     .select()
     .from(printers)
     .where(kitchenPrinterRolesFilter)
+    .orderBy(asc(printers.name))
     .all();
 
   return (
@@ -96,13 +91,17 @@ export default async function AdminItemsPage({
           id: p.id,
           name: p.name,
           active: p.active,
-          venueId: p.venueId as VenueId,
+          venueId: (p.venueId && isVenueId(p.venueId)
+            ? p.venueId
+            : null) as VenueId | null,
         }))}
         allKitchenPrinters={allKitchenPrinters.map((p) => ({
           id: p.id,
           name: p.name,
           active: p.active,
-          venueId: p.venueId as VenueId,
+          venueId: (p.venueId && isVenueId(p.venueId)
+            ? p.venueId
+            : null) as VenueId | null,
         }))}
       />
     </div>

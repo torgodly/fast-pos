@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { Printer } from "lucide-react";
 import { PrintersAdmin } from "@/components/admin/PrintersAdmin";
 import { requireAdmin } from "@/app/actions/auth";
@@ -6,7 +6,8 @@ import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { printers } from "@/lib/db/schema";
-import { getVenueName } from "@/lib/venues";
+import { isVenueId, getVenueName } from "@/lib/venues";
+import type { VenueId } from "@/lib/types";
 
 export default async function AdminPrintersPage({
   searchParams,
@@ -17,10 +18,17 @@ export default async function AdminPrintersPage({
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
 
+  // Kitchen = shared (all tabs). Checkout/both = this venue's cashier department.
   const allPrinters = db
     .select()
     .from(printers)
-    .where(eq(printers.venueId, venue))
+    .where(
+      or(
+        eq(printers.role, "kitchen"),
+        and(eq(printers.venueId, venue), eq(printers.role, "checkout")),
+        and(eq(printers.venueId, venue), eq(printers.role, "both")),
+      ),
+    )
     .orderBy(asc(printers.name))
     .all();
 
@@ -34,15 +42,14 @@ export default async function AdminPrintersPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الطابعات</h2>
             <p className="text-sm text-base-content/45">
-              إدارة طابعات {getVenueName(venue)}
+              مطبخ مشترك + فواتير كاشير {getVenueName(venue)}
             </p>
           </div>
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
         <p className="mt-3 text-sm text-base-content/55">
-          عند إضافة أو تعديل طابعة اختر <strong>القسم</strong> (مطعم أو كافيه)
-          و<strong>النوع</strong> (مطبخ / فاتورة كاشير). فواتير المطعم لا تذهب
-          لطابعة الكافيه والعكس.
+          طابعات المطبخ مشتركة. قسم <strong>مطعم / كافيه</strong> يُختار فقط
+          لطابعة فاتورة الكاشير (أو جزء الفاتورة من «مطبخ + فاتورة»).
         </p>
       </div>
 
@@ -50,7 +57,8 @@ export default async function AdminPrintersPage({
         venueId={venue}
         printers={allPrinters.map((p) => ({
           id: p.id,
-          venueId: p.venueId as typeof venue,
+          venueId:
+            p.venueId && isVenueId(p.venueId) ? (p.venueId as VenueId) : null,
           name: p.name,
           role: p.role,
           host: p.host,

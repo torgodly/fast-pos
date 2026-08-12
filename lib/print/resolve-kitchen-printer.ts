@@ -29,7 +29,7 @@ function pickByKind(
   return kitchen ?? rows[0]!;
 }
 
-/** Resolve kitchen/display printer for a menu category at a selling venue. */
+/** Kitchen printers are shared — venue on the printer is only for cashier/both. */
 export function resolveKitchenPrinterForVenue(options: {
   venueId: VenueId;
   categoryName: string | null | undefined;
@@ -61,7 +61,6 @@ export function resolveKitchenPrinterForVenue(options: {
       .where(
         and(
           eq(printers.id, candidateId),
-          eq(printers.venueId, venueId),
           eq(printers.active, true),
           kitchenPrinterRolesFilter,
         ),
@@ -73,12 +72,11 @@ export function resolveKitchenPrinterForVenue(options: {
   // Once a shared category has per-venue printers, do not auto-pick the other branch.
   if (managed) return null;
 
-  const venuePrinters = db
+  const sharedKitchenPrinters = db
     .select()
     .from(printers)
     .where(
       and(
-        eq(printers.venueId, venueId),
         eq(printers.active, true),
         kitchenPrinterRolesFilter,
       ),
@@ -90,5 +88,5 @@ export function resolveKitchenPrinterForVenue(options: {
       ? "display"
       : "kitchen";
 
-  return pickByKind(venuePrinters, kind);
+  return pickByKind(sharedKitchenPrinters, kind);
 }

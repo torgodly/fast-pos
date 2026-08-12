@@ -146,7 +146,7 @@ function runSeed(
     .insert(printers)
     .values([
       {
-        venueId: "restaurant",
+        venueId: null,
         name: "مطبخ المطعم",
         role: "kitchen",
         host: "192.168.1.40",
@@ -154,7 +154,7 @@ function runSeed(
         active: true,
       },
       {
-        venueId: "restaurant",
+        venueId: null,
         name: "مشروبات المطعم",
         role: "kitchen",
         host: "192.168.1.41",
@@ -170,7 +170,7 @@ function runSeed(
         active: true,
       },
       {
-        venueId: "cafe",
+        venueId: null,
         name: "مطبخ الكافيه",
         role: "kitchen",
         host: "192.168.1.60",
@@ -178,7 +178,7 @@ function runSeed(
         active: true,
       },
       {
-        venueId: "cafe",
+        venueId: null,
         name: "مشروبات الكافيه",
         role: "kitchen",
         host: "192.168.1.61",

@@ -184,18 +184,13 @@ function parseOptionalPrinterId(raw: FormDataEntryValue | null) {
   return Number.isFinite(id) ? id : null;
 }
 
-function kitchenPrinterForVenue(
-  printerId: number,
-  venueId: VenueId,
-  allowInactive: boolean,
-) {
+function kitchenPrinterById(printerId: number, allowInactive: boolean) {
   const printer = db
     .select()
     .from(printers)
     .where(
       and(
         eq(printers.id, printerId),
-        eq(printers.venueId, venueId),
         kitchenPrinterRolesFilter,
       ),
     )
@@ -232,24 +227,19 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
   if (scope === "shared") {
     if (
       restaurantKitchenPrinterId &&
-      !kitchenPrinterForVenue(
-        restaurantKitchenPrinterId,
-        "restaurant",
-        allowInactive,
-      )
+      !kitchenPrinterById(restaurantKitchenPrinterId, allowInactive)
     ) {
       return { error: "طابعة مطبخ المطعم غير صالحة" };
     }
     if (
       cafeKitchenPrinterId &&
-      !kitchenPrinterForVenue(cafeKitchenPrinterId, "cafe", allowInactive)
+      !kitchenPrinterById(cafeKitchenPrinterId, allowInactive)
     ) {
       return { error: "طابعة مطبخ الكافيه غير صالحة" };
     }
   } else if (
     kitchenPrinterId &&
-    venueId &&
-    !kitchenPrinterForVenue(kitchenPrinterId, venueId, allowInactive)
+    !kitchenPrinterById(kitchenPrinterId, allowInactive)
   ) {
     return { error: "طابعة المطبخ غير صالحة" };
   }
@@ -579,7 +569,7 @@ export async function deleteStaff(id: number): Promise<ActionResult> {
 export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
-  const venueId = String(formData.get("venueId") ?? "");
+  const venueRaw = String(formData.get("venueId") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "");
   const connectionType = String(
@@ -602,8 +592,18 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     ? "network"
     : connectionType;
 
-  if (!isVenueId(venueId) || !name) {
+  if (!name) {
     return { error: "بيانات الطابعة غير مكتملة" };
+  }
+
+  // Kitchen-only: no cashier department. Checkout / both: department is for cashier.
+  let venueId: VenueId | null = null;
+  if (role === "kitchen") {
+    venueId = null;
+  } else if (isVenueId(venueRaw)) {
+    venueId = venueRaw;
+  } else {
+    return { error: "اختر قسم فاتورة الكاشير (مطعم أو كافيه)" };
   }
 
   if (resolvedConnection === "network" && !host) {
@@ -641,8 +641,8 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     printerId = inserted.id;
   }
 
-  if (supportsCheckout(role) && printerId) {
-    syncCheckoutStation(venueId as VenueId, printerId, name);
+  if (supportsCheckout(role) && printerId && venueId) {
+    syncCheckoutStation(venueId, printerId, name);
   } else if (printerId) {
     db.delete(cashierStations)
       .where(eq(cashierStations.printerId, printerId))

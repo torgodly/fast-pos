@@ -62,7 +62,7 @@ type PrinterOption = {
   id: number;
   name: string;
   active: boolean;
-  venueId: VenueId;
+  venueId: VenueId | null;
 };
 
 type ItemModalState =
@@ -154,10 +154,10 @@ export function ItemsAdmin({
     return allKitchenPrinters.find((p) => p.id === id)?.name ?? null;
   }
 
-  function printersForVenue(target: VenueId, activeOnly = false) {
+  function printersForVenue(_target: VenueId, activeOnly = false) {
+    // Kitchen printers are shared across venues.
     return allKitchenPrinters.filter(
-      (printer) =>
-        printer.venueId === target && (!activeOnly || printer.active),
+      (printer) => !activeOnly || printer.active,
     );
   }
 

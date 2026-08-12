@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Pencil, Plus, Printer } from "lucide-react";
 import {
   deletePrinter,
@@ -23,7 +23,7 @@ import type { VenueId } from "@/lib/types";
 
 type PrinterRow = {
   id: number;
-  venueId: VenueId;
+  venueId: VenueId | null;
   name: string;
   role: string;
   host: string;
@@ -31,6 +31,10 @@ type PrinterRow = {
   connectionType: string;
   active: boolean;
 };
+
+function needsCashierVenue(role: string) {
+  return role === "checkout" || role === "both";
+}
 
 export function PrintersAdmin({
   venueId,
@@ -42,6 +46,7 @@ export function PrintersAdmin({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [roleDraft, setRoleDraft] = useState("checkout");
 
   const [printerModal, setPrinterModal] = useState<
     | { mode: "create" }
@@ -51,8 +56,15 @@ export function PrintersAdmin({
 
   const kitchenPrinters = allPrinters.filter((p) => supportsKitchen(p.role));
   const checkoutPrinters = allPrinters.filter(
-    (p) => supportsCheckout(p.role) && p.active,
+    (p) => supportsCheckout(p.role) && p.active && p.venueId === venueId,
   );
+
+  useEffect(() => {
+    if (!printerModal) return;
+    setRoleDraft(
+      printerModal.mode === "edit" ? printerModal.printer.role : "checkout",
+    );
+  }, [printerModal]);
 
   function closeModals() {
     if (pending) return;
@@ -79,6 +91,7 @@ export function PrintersAdmin({
 
   const editingPrinter =
     printerModal?.mode === "edit" ? printerModal.printer : null;
+  const showVenue = needsCashierVenue(roleDraft);
 
   return (
     <>
@@ -92,7 +105,7 @@ export function PrintersAdmin({
               <div>
                 <h3 className="font-black">الطابعات</h3>
                 <p className="text-xs text-base-content/45">
-                  لكل طابعة قسم (مطعم أو كافيه) ونوع (مطبخ / فاتورة كاشير)
+                  المطبخ مشترك · قسم فاتورة الكاشير للمطعم أو الكافيه فقط
                 </p>
               </div>
             </div>
@@ -114,7 +127,7 @@ export function PrintersAdmin({
               <thead>
                 <tr>
                   <th>الاسم</th>
-                  <th>القسم</th>
+                  <th>قسم الكاشير</th>
                   <th>النوع</th>
                   <th>الاتصال</th>
                   <th>العنوان</th>
@@ -131,9 +144,19 @@ export function PrintersAdmin({
                   >
                     <td className="font-bold">{printer.name}</td>
                     <td>
-                      <span className="badge badge-ghost badge-sm">
-                        {getVenueName(printer.venueId)}
-                      </span>
+                      {printer.role === "kitchen" ? (
+                        <span className="badge badge-ghost badge-sm">
+                          مشترك (مطبخ)
+                        </span>
+                      ) : printer.venueId ? (
+                        <span className="badge badge-ghost badge-sm">
+                          {getVenueName(printer.venueId)}
+                        </span>
+                      ) : (
+                        <span className="badge badge-warning badge-soft badge-sm">
+                          غير محدد
+                        </span>
+                      )}
                     </td>
                     <td>{printerRoleLabel(printer.role)}</td>
                     <td>
@@ -216,8 +239,8 @@ export function PrintersAdmin({
 
           {checkoutPrinters.length === 0 && (
             <p className="text-sm text-warning">
-              أضف طابعة «فاتورة كاشير» لهذا القسم — بدونها لا يعمل التحصيل ولا
-              البيع السريع.
+              أضف طابعة «فاتورة كاشير» أو «مطبخ + فاتورة» بقسم{" "}
+              {getVenueName(venueId)} — بدونها لا يعمل التحصيل.
             </p>
           )}
         </div>
@@ -234,24 +257,6 @@ export function PrintersAdmin({
             <input type="hidden" name="id" value={editingPrinter.id} />
           ) : null}
           <label className="form-control w-full">
-            <span className="label-text mb-2 font-bold">القسم</span>
-            <select
-              name="venueId"
-              className="select select-bordered w-full"
-              defaultValue={editingPrinter?.venueId ?? venueId}
-              required
-            >
-              {VENUES.map((venue) => (
-                <option key={venue.id} value={venue.id}>
-                  {venue.name}
-                </option>
-              ))}
-            </select>
-            <span className="label-text-alt mt-2 text-base-content/45">
-              فواتير ومطبخ هذا القسم فقط — مطعم وكافيه منفصلان
-            </span>
-          </label>
-          <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الطابعة</span>
             <input
               name="name"
@@ -265,7 +270,8 @@ export function PrintersAdmin({
             <select
               name="role"
               className="select select-bordered w-full"
-              defaultValue={editingPrinter?.role ?? "checkout"}
+              value={roleDraft}
+              onChange={(event) => setRoleDraft(event.target.value)}
               required
             >
               <option value="kitchen">مطبخ</option>
@@ -273,9 +279,37 @@ export function PrintersAdmin({
               <option value="both">مطبخ + فاتورة</option>
             </select>
             <span className="label-text-alt mt-2 text-base-content/45">
-              «مطبخ + فاتورة» = نفس الطابعة للمطبخ وإيصال الكاشير (شبكة فقط)
+              المطبخ مشترك بين الفرعين. القسم يخص فاتورة الكاشير فقط
             </span>
           </label>
+          {showVenue ? (
+            <label className="form-control w-full">
+              <span className="label-text mb-2 font-bold">
+                قسم فاتورة الكاشير
+              </span>
+              <select
+                name="venueId"
+                className="select select-bordered w-full"
+                defaultValue={editingPrinter?.venueId ?? venueId}
+                required
+              >
+                {VENUES.map((venue) => (
+                  <option key={venue.id} value={venue.id}>
+                    {venue.name}
+                  </option>
+                ))}
+              </select>
+              <span className="label-text-alt mt-2 text-base-content/45">
+                {roleDraft === "both"
+                  ? "يحدد أي قسم تطبع له فاتورة الكاشير — المطبخ يبقى مشتركاً"
+                  : "فواتير هذا القسم فقط"}
+              </span>
+            </label>
+          ) : (
+            <p className="rounded-xl border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/65">
+              طابعة مطبخ مشتركة — بدون قسم مطعم/كافيه
+            </p>
+          )}
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">طريقة الاتصال</span>
             <select

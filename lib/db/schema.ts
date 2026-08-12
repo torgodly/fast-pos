@@ -52,9 +52,8 @@ export const categories = sqliteTable("categories", {
 
 export const printers = sqliteTable("printers", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  venueId: text("venue_id")
-    .notNull()
-    .references(() => venues.id),
+  /** Null for kitchen-only (shared). Set for checkout / both = cashier department. */
+  venueId: text("venue_id").references(() => venues.id),
   name: text("name").notNull(),
   role: text("role", { enum: ["kitchen", "checkout", "both"] }).notNull(),
   host: text("host").notNull(),

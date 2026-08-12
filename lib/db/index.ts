@@ -74,10 +74,63 @@ function createDb() {
 
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
+  migratePrinterVenueNullable(sqlite);
   migrateNullableMenuVenue(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
   return db;
+}
+
+/**
+ * Kitchen printers are shared (no department).
+ * Checkout / both keep venue_id for the cashier side only.
+ * Rebuilds printers.venue_id to allow NULL — does not change IPs or names.
+ */
+function migratePrinterVenueNullable(sqlite: Database.Database) {
+  const cols = sqlite.prepare(`PRAGMA table_info(printers)`).all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  const venueCol = cols.find((col) => col.name === "venue_id");
+  if (!venueCol) return;
+
+  if (venueCol.notnull === 1) {
+    sqlite.pragma("foreign_keys = OFF");
+    sqlite.exec(`
+      BEGIN;
+      CREATE TABLE printers__venue_null (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venue_id TEXT REFERENCES venues(id),
+        name TEXT NOT NULL,
+        role TEXT NOT NULL,
+        host TEXT NOT NULL,
+        port INTEGER NOT NULL DEFAULT 9100,
+        connection_type TEXT NOT NULL DEFAULT 'network',
+        active INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO printers__venue_null (
+        id, venue_id, name, role, host, port, connection_type, active
+      )
+      SELECT
+        id,
+        CASE WHEN role = 'kitchen' THEN NULL ELSE venue_id END,
+        name,
+        role,
+        host,
+        port,
+        COALESCE(connection_type, 'network'),
+        active
+      FROM printers;
+      DROP TABLE printers;
+      ALTER TABLE printers__venue_null RENAME TO printers;
+      COMMIT;
+    `);
+    sqlite.pragma("foreign_keys = ON");
+  } else {
+    sqlite
+      .prepare(`UPDATE printers SET venue_id = NULL WHERE role = 'kitchen'`)
+      .run();
+  }
 }
 
 /** Staff work at any venue — clear venue_id on waiters/cashiers. */
@@ -120,7 +173,7 @@ function ensureSchema(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS printers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      venue_id TEXT NOT NULL REFERENCES venues(id),
+      venue_id TEXT REFERENCES venues(id),
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       host TEXT NOT NULL,
