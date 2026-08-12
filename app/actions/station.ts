@@ -3,7 +3,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { cashierStations, printers } from "@/lib/db/schema";
-import { checkoutPrinterRolesFilter } from "@/lib/printers";
+import { checkoutPrinterRolesFilter, supportsCheckout } from "@/lib/printers";
 import { getVenueName, isVenueId } from "@/lib/venues";
 
 export async function getCashierStationContext(
@@ -17,6 +17,35 @@ export async function getCashierStationContext(
 > {
   if (!isVenueId(venueId)) {
     return { error: "قسم غير صالح" };
+  }
+
+  const activeStation = db
+    .select()
+    .from(cashierStations)
+    .where(
+      and(
+        eq(cashierStations.venueId, venueId),
+        eq(cashierStations.active, true),
+      ),
+    )
+    .get();
+
+  if (activeStation) {
+    const linked = db
+      .select()
+      .from(printers)
+      .where(
+        and(
+          eq(printers.id, activeStation.printerId),
+          eq(printers.venueId, venueId),
+          checkoutPrinterRolesFilter,
+          eq(printers.active, true),
+        ),
+      )
+      .get();
+    if (linked && supportsCheckout(linked.role)) {
+      return { station: activeStation, printer: linked };
+    }
   }
 
   const printer = db
@@ -34,7 +63,7 @@ export async function getCashierStationContext(
 
   if (!printer) {
     return {
-      error: `لا توجد طابعة كاشير لـ ${getVenueName(venueId)} — أضفها من الإدارة ← الطابعات`,
+      error: `لا توجد طابعة كاشير لـ ${getVenueName(venueId)} — أضفها من الإدارة ← الطابعات واختر القسم`,
     };
   }
 
@@ -46,7 +75,6 @@ export async function getCashierStationContext(
         and(
           eq(cashierStations.venueId, venueId),
           eq(cashierStations.printerId, printer.id),
-          eq(cashierStations.active, true),
         ),
       )
       .get() ??

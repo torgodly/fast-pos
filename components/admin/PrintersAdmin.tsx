@@ -18,10 +18,12 @@ import {
   supportsCheckout,
   supportsKitchen,
 } from "@/lib/printers";
+import { getVenueName, VENUES } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
 type PrinterRow = {
   id: number;
+  venueId: VenueId;
   name: string;
   role: string;
   host: string;
@@ -62,7 +64,6 @@ export function PrintersAdmin({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
-    formData.set("venueId", venueId);
 
     startTransition(async () => {
       setError(null);
@@ -91,8 +92,7 @@ export function PrintersAdmin({
               <div>
                 <h3 className="font-black">الطابعات</h3>
                 <p className="text-xs text-base-content/45">
-                  طابعة «فاتورة كاشير» واحدة لكل قسم — تُستخدم تلقائياً عند
-                  الدخول من الصفحة الرئيسية
+                  لكل طابعة قسم (مطعم أو كافيه) ونوع (مطبخ / فاتورة كاشير)
                 </p>
               </div>
             </div>
@@ -114,6 +114,7 @@ export function PrintersAdmin({
               <thead>
                 <tr>
                   <th>الاسم</th>
+                  <th>القسم</th>
                   <th>النوع</th>
                   <th>الاتصال</th>
                   <th>العنوان</th>
@@ -129,6 +130,11 @@ export function PrintersAdmin({
                     className={!printer.active ? "opacity-50" : ""}
                   >
                     <td className="font-bold">{printer.name}</td>
+                    <td>
+                      <span className="badge badge-ghost badge-sm">
+                        {getVenueName(printer.venueId)}
+                      </span>
+                    </td>
                     <td>{printerRoleLabel(printer.role)}</td>
                     <td>
                       {printer.connectionType === "local" ? (
@@ -193,7 +199,7 @@ export function PrintersAdmin({
                 ))}
                 {allPrinters.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center opacity-60">
+                    <td colSpan={8} className="text-center opacity-60">
                       لا توجد طابعات بعد
                     </td>
                   </tr>
@@ -204,7 +210,7 @@ export function PrintersAdmin({
 
           {kitchenPrinters.length === 0 && (
             <p className="text-sm text-warning">
-              أضف طابعة مطبخ ثم اربط **التصنيفات** بها من صفحة الأصناف.
+              أضف طابعة مطبخ ثم اربط التصنيفات بها من صفحة الأصناف.
             </p>
           )}
 
@@ -227,6 +233,24 @@ export function PrintersAdmin({
           {editingPrinter ? (
             <input type="hidden" name="id" value={editingPrinter.id} />
           ) : null}
+          <label className="form-control w-full">
+            <span className="label-text mb-2 font-bold">القسم</span>
+            <select
+              name="venueId"
+              className="select select-bordered w-full"
+              defaultValue={editingPrinter?.venueId ?? venueId}
+              required
+            >
+              {VENUES.map((venue) => (
+                <option key={venue.id} value={venue.id}>
+                  {venue.name}
+                </option>
+              ))}
+            </select>
+            <span className="label-text-alt mt-2 text-base-content/45">
+              فواتير ومطبخ هذا القسم فقط — مطعم وكافيه منفصلان
+            </span>
+          </label>
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الطابعة</span>
             <input

@@ -93,6 +93,16 @@ function syncCheckoutStation(
   printerId: number,
   name: string,
 ) {
+  // Printer moved venues: drop old station links.
+  db.delete(cashierStations)
+    .where(
+      and(
+        eq(cashierStations.printerId, printerId),
+        ne(cashierStations.venueId, venueId),
+      ),
+    )
+    .run();
+
   const linked = db
     .select()
     .from(cashierStations)
@@ -115,6 +125,7 @@ function syncCheckoutStation(
       .run();
   }
 
+  // One active cashier printer per venue.
   db.update(cashierStations)
     .set({ active: false })
     .where(

@@ -40,9 +40,9 @@ export default async function AdminPrintersPage({
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
         <p className="mt-3 text-sm text-base-content/55">
-          كل قسم له طابعة كاشير خاصة. الموظف يختار <strong>مطعم</strong> أو{" "}
-          <strong>كافيه</strong> من الصفحة الرئيسية — لا حاجة لاختيار محطة
-          إضافية.
+          عند إضافة أو تعديل طابعة اختر <strong>القسم</strong> (مطعم أو كافيه)
+          و<strong>النوع</strong> (مطبخ / فاتورة كاشير). فواتير المطعم لا تذهب
+          لطابعة الكافيه والعكس.
         </p>
       </div>
 
@@ -50,6 +50,7 @@ export default async function AdminPrintersPage({
         venueId={venue}
         printers={allPrinters.map((p) => ({
           id: p.id,
+          venueId: p.venueId as typeof venue,
           name: p.name,
           role: p.role,
           host: p.host,
