@@ -7,6 +7,7 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { getSession } from "@/lib/auth/session";
 import { db, getSqlite } from "@/lib/db";
 import {
+  auditEvents,
   cancelledItems,
   categories,
   items,
@@ -1026,45 +1027,59 @@ export async function payQuickSale(
     0,
   );
 
-  const order = db
-    .insert(orders)
-    .values({
-      venueId,
-      tableId: null,
-      waiterId: null,
-      cashierId: session.userId,
-      shiftId: null,
-      status: "open",
-      total,
-    })
-    .returning()
-    .get();
+  let order: typeof orders.$inferSelect;
+  try {
+    order = getSqlite().transaction(() => {
+      const created = db
+        .insert(orders)
+        .values({
+          venueId,
+          tableId: null,
+          waiterId: null,
+          cashierId: session.userId,
+          shiftId: null,
+          status: "open",
+          total,
+        })
+        .returning()
+        .get();
 
-  for (const line of validLines) {
-    db.insert(orderItems)
-      .values({
-        orderId: order.id,
-        itemId: line.item.id,
-        itemName: line.item.name,
-        unitPrice: line.item.price,
-        qty: line.qty,
-        lineTotal: line.item.price * line.qty,
-        kitchenSentQty: 0,
-      })
-      .run();
-  }
+      for (const line of validLines) {
+        db.insert(orderItems)
+          .values({
+            orderId: created.id,
+            itemId: line.item.id,
+            itemName: line.item.name,
+            unitPrice: line.item.price,
+            qty: line.qty,
+            lineTotal: line.item.price * line.qty,
+            kitchenSentQty: 0,
+          })
+          .run();
+      }
 
-  const savedLines = db
-    .select()
-    .from(orderItems)
-    .where(eq(orderItems.orderId, order.id))
-    .all();
-  if (savedLines.length === 0) {
-    db.delete(orders).where(eq(orders.id, order.id)).run();
+      const savedLines = db
+        .select()
+        .from(orderItems)
+        .where(eq(orderItems.orderId, created.id))
+        .all();
+      if (savedLines.length === 0) {
+        throw new Error("empty");
+      }
+      return created;
+    })();
+  } catch {
     return { error: "فشل حفظ أصناف البيع السريع" };
   }
 
   function abortQuickSale() {
+    // Clear FK refs first — audit rows used to block order delete and leave
+    // empty "بيع سريع" invoices with a total and no items.
+    db.update(auditEvents)
+      .set({ orderId: null })
+      .where(eq(auditEvents.orderId, order.id))
+      .run();
+    db.delete(cancelledItems).where(eq(cancelledItems.orderId, order.id)).run();
     db.delete(orderItems).where(eq(orderItems.orderId, order.id)).run();
     db.delete(orders).where(eq(orders.id, order.id)).run();
   }

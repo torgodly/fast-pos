@@ -304,6 +304,24 @@ function ensureSchema(sqlite: Database.Database) {
     // column already exists
   }
 
+  // Ghost quick-sale invoices: kitchen abort deleted lines but order stayed
+  // because audit_events still referenced the order id.
+  try {
+    sqlite
+      .prepare(
+        `UPDATE orders
+         SET status = 'cancelled', total = 0
+         WHERE status = 'open'
+           AND table_id IS NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM order_items WHERE order_items.order_id = orders.id
+           )`,
+      )
+      .run();
+  } catch {
+    // best-effort cleanup
+  }
+
   try {
     const mainCount = sqlite
       .prepare(
