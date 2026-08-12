@@ -32,6 +32,10 @@ export function QuickSaleBoard({
   const [cart, setCart] = useState<QuickSaleLine[]>([]);
   const [method, setMethod] = useState<"cash" | "card" | null>(null);
   const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<{
+    printOk: boolean;
+    message: string;
+  } | null>(null);
 
   const total = useMemo(
     () => cart.reduce((sum, line) => sum + line.unitPrice * line.qty, 0),
@@ -117,34 +121,49 @@ export function QuickSaleBoard({
     setMethod(null);
   }
 
+  function showResult(printOk: boolean, message: string) {
+    setResult({ printOk, message });
+    const dialog = document.getElementById(
+      "quick-sale-result",
+    ) as HTMLDialogElement | null;
+    dialog?.showModal();
+  }
+
+  function closeResult() {
+    const dialog = document.getElementById(
+      "quick-sale-result",
+    ) as HTMLDialogElement | null;
+    dialog?.close();
+    setResult(null);
+  }
+
   function confirmPay() {
     if (!method) return;
     startTransition(async () => {
-      const result = await payQuickSale(venueId, cart, method);
-      if ("error" in result) {
-        showToast("error", result.error);
+      const payResult = await payQuickSale(venueId, cart, method);
+      if ("error" in payResult) {
+        showToast("error", payResult.error);
         return;
       }
 
       closeModal();
       setCart([]);
 
-      let printOk = result.printOk;
-      let message = result.message;
+      let printOk = payResult.printOk;
+      let message = payResult.message;
 
-      if (result.browserPrint && result.receiptHtml) {
+      if (payResult.browserPrint && payResult.receiptHtml) {
         const printed = await finishCheckoutPrint({
           browserPrint: true,
-          receiptHtml: result.receiptHtml,
+          receiptHtml: payResult.receiptHtml,
         });
         if (!printed.printOk) {
           printOk = false;
-          message = `${result.message} — ${printed.message}`;
+          message = `${payResult.message} — ${printed.message}`;
         }
       }
 
-      showToast(printOk ? "success" : "warning", message);
-      router.push(`/cashier/${venueId}/sales`);
+      showResult(printOk, message);
       router.refresh();
     });
   }
@@ -245,6 +264,31 @@ export function QuickSaleBoard({
         </div>
         <form method="dialog" className="modal-backdrop">
           <button type="submit" disabled={pending} onClick={() => setMethod(null)}>
+            إغلاق
+          </button>
+        </form>
+      </dialog>
+
+      <dialog id="quick-sale-result" className="modal modal-bottom sm:modal-middle">
+        <div className="modal-box max-w-sm rounded-t-2xl p-4 sm:rounded-2xl">
+          <h3 className="text-base font-black">
+            {result?.printOk ? "تم الدفع" : "تم الدفع — تعذر الطباعة"}
+          </h3>
+          <p className="mt-2 text-sm leading-7 text-base-content/70">
+            {result?.message}
+          </p>
+          <div className="modal-action mt-4">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm w-full"
+              onClick={closeResult}
+            >
+              حسناً — بيع جديد
+            </button>
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="submit" onClick={() => setResult(null)}>
             إغلاق
           </button>
         </form>
