@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-/** Finger/pen/mouse drag scrolls a panel even when the gesture starts on a button. */
+/** Finger/pen/mouse drag scrolls a panel; taps on buttons still click. */
 export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
   const ref = useRef<T>(null);
 
@@ -12,40 +12,62 @@ export function useDragScroll<T extends HTMLElement>(axis: "y" | "x" = "y") {
     const scroller: HTMLElement = node;
 
     let active = false;
-    let moved = false;
+    let dragging = false;
+    let pointerId: number | null = null;
     let start = 0;
     let origin = 0;
-    const threshold = 7;
+    const threshold = 10;
 
     function onDown(event: PointerEvent) {
       if (event.button !== 0) return;
       active = true;
-      moved = false;
+      dragging = false;
+      pointerId = event.pointerId;
       start = axis === "y" ? event.clientY : event.clientX;
       origin = axis === "y" ? scroller.scrollTop : scroller.scrollLeft;
-      scroller.setPointerCapture(event.pointerId);
     }
 
     function onMove(event: PointerEvent) {
-      if (!active) return;
+      if (!active || pointerId !== event.pointerId) return;
       const current = axis === "y" ? event.clientY : event.clientX;
       const delta = current - start;
-      if (!moved && Math.abs(delta) < threshold) return;
-      moved = true;
+      if (!dragging) {
+        if (Math.abs(delta) < threshold) return;
+        dragging = true;
+        try {
+          scroller.setPointerCapture(event.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
       event.preventDefault();
       if (axis === "y") scroller.scrollTop = origin - delta;
       else scroller.scrollLeft = origin - delta;
     }
 
-    function onUp() {
+    function onUp(event: PointerEvent) {
+      if (pointerId !== event.pointerId) return;
+      if (dragging) {
+        try {
+          scroller.releasePointerCapture(event.pointerId);
+        } catch {
+          /* ignore */
+        }
+      }
       active = false;
+      pointerId = null;
+      // Keep dragging true through the following click event, then clear.
+      if (dragging) {
+        queueMicrotask(() => {
+          dragging = false;
+        });
+      }
     }
 
     function onClick(event: Event) {
-      if (!moved) return;
+      if (!dragging) return;
       event.preventDefault();
       event.stopPropagation();
-      moved = false;
     }
 
     scroller.addEventListener("pointerdown", onDown);

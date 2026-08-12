@@ -12,9 +12,6 @@ import {
   type MenuItem,
 } from "@/components/CategoryItemPicker";
 import {
-  PosMobileBar,
-  PosMobileSheet,
-  PosTicketLines,
   PosTicketPanel,
   type PosTicketLine,
 } from "@/components/PosTicket";
@@ -33,7 +30,6 @@ export function QuickSaleBoard({
   const router = useRouter();
   const { showToast } = useToast();
   const [cart, setCart] = useState<QuickSaleLine[]>([]);
-  const [cartOpen, setCartOpen] = useState(false);
   const [method, setMethod] = useState<"cash" | "card" | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -132,7 +128,6 @@ export function QuickSaleBoard({
 
       closeModal();
       setCart([]);
-      setCartOpen(false);
 
       let printOk = result.printOk;
       let message = result.message;
@@ -154,98 +149,65 @@ export function QuickSaleBoard({
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
   const payFooter = (
-    <div className="space-y-1.5">
-      <PreviewReceiptButton
-        venueId={venueId}
-        cart={cart}
-        disabled={pending || cart.length === 0}
-      />
-      <div className="grid grid-cols-2 gap-1.5">
+    <div className="grid grid-cols-[1fr_auto] gap-1">
+      <div className="grid grid-cols-2 gap-1">
         <button
           type="button"
-          className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
+          className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("cash")}
         >
-          <Banknote className="size-4" />
+          <Banknote className="size-3.5" />
           نقدي
         </button>
         <button
           type="button"
-          className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
+          className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
           disabled={pending || cart.length === 0}
           onClick={() => askConfirm("card")}
         >
-          <CreditCard className="size-4" />
+          <CreditCard className="size-3.5" />
           بطاقة
         </button>
       </div>
+      <PreviewReceiptButton
+        venueId={venueId}
+        cart={cart}
+        compact
+        disabled={pending || cart.length === 0}
+      />
     </div>
-  );
-
-  const mobileFooter = (
-    <>
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-base-content/50">
-          الإجمالي
-        </span>
-        <span className="text-lg font-black tabular-nums text-primary">
-          {formatMoney(total)}
-        </span>
-      </div>
-      {payFooter}
-    </>
   );
 
   return (
     <>
-      <div className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)] overflow-hidden pb-14 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,34%)] lg:pb-0">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(10.75rem,36%)] overflow-hidden sm:grid-cols-[minmax(0,1fr)_minmax(16rem,34%)] lg:grid-cols-[minmax(0,1fr)_minmax(18rem,32%)]">
         <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border border-base-300 bg-base-100 p-1.5">
           <CategoryItemPicker
             categories={categories}
             items={items}
             categoryCounts={categoryCounts}
             pending={pending}
+            dense
             onAddItem={add}
           />
         </div>
 
-        <div className="hidden min-h-0 lg:flex lg:flex-col">
+        <div className="flex min-h-0 flex-col">
           <PosTicketPanel
+            title="الطلب"
             itemCount={itemCount}
             total={total}
             lines={ticketLines}
             pending={pending}
             emptyLabel="لا أصناف"
+            compact
             onChangeQty={changeQty}
             onRemove={remove}
             footer={payFooter}
           />
         </div>
       </div>
-
-      <PosMobileBar
-        itemCount={itemCount}
-        total={total}
-        actionLabel="دفع"
-        onOpen={() => setCartOpen(true)}
-      />
-
-      <PosMobileSheet
-        open={cartOpen}
-        title="فاتورة"
-        itemCount={itemCount}
-        onClose={() => setCartOpen(false)}
-        footer={mobileFooter}
-      >
-        <PosTicketLines
-          lines={ticketLines}
-          pending={pending}
-          emptyLabel="لا أصناف"
-          onChangeQty={changeQty}
-          onRemove={remove}
-        />
-      </PosMobileSheet>
 
       <dialog id="quick-sale-confirm" className="modal modal-bottom sm:modal-middle">
         <div className="modal-box max-w-sm rounded-t-2xl p-4 sm:rounded-2xl">
