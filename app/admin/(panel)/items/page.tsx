@@ -94,6 +94,9 @@ export default async function AdminItemsPage({
           venueId: (p.venueId && isVenueId(p.venueId)
             ? p.venueId
             : null) as VenueId | null,
+          host: p.host,
+          port: p.port,
+          role: p.role,
         }))}
         allKitchenPrinters={allKitchenPrinters.map((p) => ({
           id: p.id,
@@ -102,6 +105,9 @@ export default async function AdminItemsPage({
           venueId: (p.venueId && isVenueId(p.venueId)
             ? p.venueId
             : null) as VenueId | null,
+          host: p.host,
+          port: p.port,
+          role: p.role,
         }))}
       />
     </div>

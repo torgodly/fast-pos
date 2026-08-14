@@ -63,7 +63,31 @@ type PrinterOption = {
   name: string;
   active: boolean;
   venueId: VenueId | null;
+  host: string;
+  port: number;
+  role?: string;
 };
+
+/** Same kitchen IP listed twice (cashier dept rows) → one choice for kitchen link. */
+function dedupeKitchenOptions(rows: PrinterOption[]): PrinterOption[] {
+  const byHost = new Map<string, PrinterOption>();
+  for (const row of rows) {
+    const key = `${row.host}:${row.port}`;
+    const existing = byHost.get(key);
+    if (!existing) {
+      byHost.set(key, row);
+      continue;
+    }
+    // Prefer pure kitchen over checkout+kitchen duplicate rows.
+    if (existing.role === "both" && row.role === "kitchen") {
+      byHost.set(key, row);
+    } else if (existing.role === row.role && row.id < existing.id) {
+      byHost.set(key, row);
+    }
+  }
+  return [...byHost.values()].sort((a, b) => a.name.localeCompare(b.name, "ar"));
+}
+
 
 type ItemModalState =
   | { mode: "create" }
@@ -155,11 +179,13 @@ export function ItemsAdmin({
   }
 
   function printersForVenue(_target: VenueId, activeOnly = false) {
-    // Kitchen printers are shared across venues.
-    return allKitchenPrinters.filter(
-      (printer) => !activeOnly || printer.active,
+    // Kitchen printers are shared; hide duplicate DB rows for the same IP.
+    return dedupeKitchenOptions(
+      allKitchenPrinters.filter((printer) => !activeOnly || printer.active),
     );
   }
+
+  const kitchenPrinterChoices = dedupeKitchenOptions(kitchenPrinters);
 
   function sharedPrinterSummary(cat: CategoryRow) {
     const restaurant = printerName(cat.restaurantKitchenPrinterId);
@@ -383,7 +409,7 @@ export function ItemsAdmin({
         ))}
       </div>
 
-      {kitchenPrinters.length === 0 ? (
+      {kitchenPrinterChoices.length === 0 ? (
         <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-4">
           <AlertCircle className="size-5 shrink-0 text-warning" />
           <p className="text-sm">
@@ -809,15 +835,15 @@ export function ItemsAdmin({
                 >
                   <option value="">— بدون —</option>
                   {(categoryScopeDraft === venueId
-                    ? kitchenPrinters
+                    ? kitchenPrinterChoices
                     : printersForVenue(categoryScopeDraft, !editingCategory)
                   ).map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
+                      {p.role === "both" ? " · مطبخ+فاتورة" : ""}
                       {!p.active ? " (معطّلة)" : ""}
                     </option>
-                  ))}
-                </select>
+                  ))}                </select>
               </label>
             )}
           </div>
@@ -845,11 +871,11 @@ export function ItemsAdmin({
                       (p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
+                          {p.role === "both" ? " · مطبخ+فاتورة" : ""}
                           {!p.active ? " (معطّلة)" : ""}
                         </option>
                       ),
-                    )}
-                  </select>
+                    )}                  </select>
                 </label>
                 <label className="form-control w-full">
                   <span className="label-text mb-2 font-bold">
@@ -865,10 +891,10 @@ export function ItemsAdmin({
                     {printersForVenue("cafe", !editingCategory).map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name}
+                        {p.role === "both" ? " · مطبخ+فاتورة" : ""}
                         {!p.active ? " (معطّلة)" : ""}
                       </option>
-                    ))}
-                  </select>
+                    ))}                  </select>
                 </label>
               </div>
             </div>
