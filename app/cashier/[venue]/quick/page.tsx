@@ -40,7 +40,7 @@ export default async function CashierQuickPage({
   const menuItems = db
     .select()
     .from(items)
-    .where(and(availableAtVenue(items.venueId, venue), eq(items.active, true)))
+    .where(availableAtVenue(items.venueId, venue))
     .all();
 
   return (

@@ -180,16 +180,16 @@ export function CategoryItemPicker({
                     if (!available) return;
                     onAddItem(item);
                   }}
-                  title={available ? item.name : "غير متوفر"}
-                  className={`flex min-h-16 flex-col justify-between rounded-lg border px-2 py-1.5 text-right active:bg-primary/10 disabled:opacity-50 ${
+                  title={available ? item.name : "غير متاح"}
+                  className={`flex min-h-16 flex-col justify-between rounded-lg border px-2 py-1.5 text-right ${
                     available
-                      ? "border-base-300 bg-base-100 hover:border-primary/50"
-                      : "border-base-300 bg-base-200"
+                      ? "border-base-300 bg-base-100 hover:border-primary/50 active:bg-primary/10"
+                      : "cursor-not-allowed border-error/25 bg-error/5 opacity-100"
                   }`}
                 >
                   <span
                     className={`line-clamp-2 text-sm font-bold leading-snug ${
-                      available ? "" : "text-base-content/45"
+                      available ? "" : "text-error/70"
                     }`}
                   >
                     {item.name}
@@ -199,13 +199,15 @@ export function CategoryItemPicker({
                       {categoryName}
                     </span>
                   ) : null}
-                  <span
-                    className={`mt-1 text-xs font-black tabular-nums ${
-                      available ? "text-primary" : "text-error"
-                    }`}
-                  >
-                    {available ? formatMoney(item.price) : "—"}
-                  </span>
+                  {available ? (
+                    <span className="mt-1 text-xs font-black tabular-nums text-primary">
+                      {formatMoney(item.price)}
+                    </span>
+                  ) : (
+                    <span className="mt-1 text-[11px] font-bold text-error/65">
+                      غير متاح
+                    </span>
+                  )}
                 </button>
               );
             })}

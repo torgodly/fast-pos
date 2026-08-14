@@ -70,7 +70,7 @@ export default async function CashierOrderPage({
   const menuItems = db
     .select()
     .from(items)
-    .where(and(availableAtVenue(items.venueId, venue), eq(items.active, true)))
+    .where(availableAtVenue(items.venueId, venue))
     .all();
 
   const lines = db
