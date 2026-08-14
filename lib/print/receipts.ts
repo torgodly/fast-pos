@@ -47,6 +47,7 @@ export type ShiftReportPrintData = {
   tableSales: number;
   quickSales: number;
   groups: Array<{ name: string; qty: number; revenue: number }>;
+  isReprint?: boolean;
 };
 
 export type KitchenReceiptData = {

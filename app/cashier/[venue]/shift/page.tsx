@@ -60,6 +60,7 @@ export default async function CashierShiftPage({
           zWindowStart={status.zWindowStart}
           zWindowEnd={status.zWindowEnd}
           canPrintZ={status.canPrintZ}
+          canReprintZ={status.canReprintZ}
           preview={{
             invoiceCount: preview.invoiceCount,
             totalSales: preview.totalSales,

@@ -6,10 +6,12 @@ import {
   LoaderCircle,
   Lock,
   Printer,
+  RotateCcw,
 } from "lucide-react";
 import {
   closeShiftWithZReport,
   printShiftXReport,
+  reprintLastZReport,
 } from "@/app/actions/shifts";
 import { useToast } from "@/components/ToastProvider";
 import { formatMoney } from "@/lib/venues";
@@ -21,6 +23,7 @@ export function CashierShiftPanel({
   zWindowStart,
   zWindowEnd,
   canPrintZ,
+  canReprintZ,
   preview,
 }: {
   venueId: string;
@@ -29,6 +32,7 @@ export function CashierShiftPanel({
   zWindowStart: string;
   zWindowEnd: string;
   canPrintZ: boolean;
+  canReprintZ: boolean;
   preview: {
     invoiceCount: number;
     totalSales: number;
@@ -67,7 +71,7 @@ export function CashierShiftPanel({
               المبيعات المعروضة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
             </p>
             <p className="text-xs text-base-content/45">
-              زر Z يعمل فقط بين {zWindowStart} و {zWindowEnd}
+              زر Z يعمل فقط بين {zWindowStart} و {zWindowEnd} (توقيت طرابلس)
               {canPrintZ
                 ? " — متاح الآن"
                 : " — مقفول الآن (لا يمكن إقفال اليوم مبكراً)"}
@@ -117,17 +121,39 @@ export function CashierShiftPanel({
               title={
                 canPrintZ
                   ? undefined
-                  : `متاح فقط من ${zWindowStart} إلى ${zWindowEnd}`
+                  : `متاح فقط من ${zWindowStart} إلى ${zWindowEnd} (طرابلس)`
               }
             >
               <Lock className="size-4" />
               طباعة تقرير Z
             </button>
           </div>
+
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm h-10 w-full gap-2 rounded-xl border border-base-300"
+            disabled={pending || !canReprintZ}
+            onClick={() => run(() => reprintLastZReport(venueId))}
+            title={
+              canReprintZ
+                ? lastZLabel
+                  ? `آخر Z: ${lastZLabel}`
+                  : undefined
+                : "لا يوجد Z سابق"
+            }
+          >
+            {pending ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <RotateCcw className="size-4" />
+            )}
+            إعادة طباعة آخر Z
+          </button>
+
           {!canPrintZ ? (
             <p className="text-xs font-bold text-warning">
               لا يمكن طباعة Z الآن — انتظروا وقت الإقفال ({zWindowStart}–
-              {zWindowEnd})
+              {zWindowEnd} بتوقيت طرابلس)
             </p>
           ) : null}
         </div>

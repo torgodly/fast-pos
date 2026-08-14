@@ -1,4 +1,5 @@
 import type { VenueId } from "@/lib/types";
+import { tripoliMinutesOfDay } from "@/lib/time/tripoli";
 import { getSqlite } from "./db/index";
 
 const DEFAULT_FOOTER = "شكراً لزيارتكم — نراكم قريباً";
@@ -134,7 +135,7 @@ export function isWithinZWindow(
     finish = getZWindowEnd();
   }
 
-  const now = date.getHours() * 60 + date.getMinutes();
+  const now = tripoliMinutesOfDay(date);
   const from = minutesOfDay(start);
   const to = minutesOfDay(finish);
   if (from === to) return true;

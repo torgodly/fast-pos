@@ -54,8 +54,8 @@ export function ZWindowSettingsForm({
       <p className="font-black">{venueLabel}</p>
       <p className="text-xs leading-5 text-base-content/55">
         يُسمح بطباعة <span className="font-black">Z</span> فقط بين هاتين
-        الساعتين (وقت الإقفال). لا يوجد ضبط لبداية الدوام — المبيعات تُحسب من
-        آخر Z تلقائياً.
+        الساعتين (وقت الإقفال بتوقيت طرابلس). لا يوجد ضبط لبداية الدوام —
+        المبيعات تُحسب من آخر Z تلقائياً.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="form-control">

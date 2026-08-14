@@ -329,6 +329,9 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   fieldLine(parts, "من", data.periodFrom);
   fieldLine(parts, "إلى", data.periodTo);
   fieldLine(parts, "بواسطة", data.printedByName);
+  if (data.isReprint) {
+    fieldLine(parts, "النوع", "إعادة طباعة Z");
+  }
   reportSep(parts);
 
   fieldLine(parts, "الفواتير", String(data.invoiceCount));
