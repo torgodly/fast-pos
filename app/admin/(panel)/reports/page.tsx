@@ -16,7 +16,6 @@ import {
   TrendingUp,
   UserCheck,
   UsersRound,
-  WalletCards,
 } from "lucide-react";
 import Link from "next/link";
 import { requireAdmin } from "@/app/actions/auth";
@@ -155,8 +154,26 @@ export default async function AdminReportsPage({
     q,
   ].filter(Boolean).length;
 
-  const presetHref = (presetFrom: string, presetTo: string) => {
-    const params = new URLSearchParams({ venue, from: presetFrom, to: presetTo });
+  const keptFilters = {
+    from,
+    to,
+    q: q || undefined,
+    waiter: sp.waiter,
+    cashier: sp.cashier,
+    payment: payment !== "all" ? payment : undefined,
+    saleType: saleType !== "all" ? saleType : undefined,
+  };
+
+  const reportsHref = (overrides: Record<string, string | undefined> = {}) => {
+    const params = new URLSearchParams();
+    params.set("venue", overrides.venue ?? venue);
+    const merged = { ...keptFilters, ...overrides };
+    for (const [key, value] of Object.entries(merged)) {
+      if (key === "venue") continue;
+      if (value != null && String(value).trim() !== "") {
+        params.set(key, String(value));
+      }
+    }
     return `/admin/reports?${params.toString()}`;
   };
 
@@ -165,72 +182,94 @@ export default async function AdminReportsPage({
     from === todayRange.from && to === todayRange.to;
   const isYesterdayPreset =
     from === `${yesterday}T00:00` && to === `${yesterday}T23:59`;
+  const isLast7Preset =
+    from === `${last7}T00:00` && to === `${today}T23:59`;
 
   return (
     <div className="space-y-6 pb-10">
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-l from-neutral via-slate-800 to-primary p-5 text-neutral-content shadow-xl sm:p-7">
-        <div className="absolute -bottom-24 -left-12 size-56 rounded-full bg-white/5" />
-        <div className="relative flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <div className="mb-2 flex items-center gap-2 text-sm font-bold text-white/60">
-              <WalletCards className="size-4" />
-              إقفال ومراجعة المبيعات
+      <section className="premium-card card overflow-hidden">
+        <div className="card-body gap-5 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 space-y-3">
+              <div>
+                <h2 className="text-2xl font-black sm:text-3xl">
+                  تقرير المبيعات
+                </h2>
+                <p className="mt-1 text-sm text-base-content/50">
+                  {getVenueName(venue)} · {rows.length} فاتورة ·{" "}
+                  {formatMoney(totalSales)}
+                </p>
+              </div>
+              <VenueTabs
+                basePath="/admin/reports"
+                venue={venue}
+                keepParams={keptFilters}
+              />
+              <p className="text-xs font-bold text-base-content/40">
+                {formatDateTime(fromSql)} → {formatDateTime(toSql)}
+              </p>
             </div>
-            <h2 className="text-2xl font-black sm:text-3xl">
-              تقرير {getVenueName(venue)}
-            </h2>
-            <p className="mt-1 text-sm text-white/60">
-              من {formatDateTime(fromSql)} إلى {formatDateTime(toSql)} —{" "}
-              {rows.length} فاتورة مدفوعة
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-            <PrintReportButton
-              filters={printFilters}
-              printers={preferredPrinters.map((printer) => ({
-                id: printer.id,
-                name: printer.name,
-                connectionType: printer.connectionType,
-              }))}
-            />
-            <Link
-              href={presetHref(`${today}T00:00`, `${today}T23:59`)}
-              className={`btn btn-sm rounded-xl ${
-                isTodayPreset
-                  ? "border-white bg-white text-neutral"
-                  : "border-white/15 bg-white/10 text-white hover:bg-white/20"
-              }`}
-            >
-              اليوم
-            </Link>
-            <Link
-              href={presetHref(`${yesterday}T00:00`, `${yesterday}T23:59`)}
-              className={`btn btn-sm rounded-xl ${
-                isYesterdayPreset
-                  ? "border-white bg-white text-neutral"
-                  : "border-white/15 bg-white/10 text-white hover:bg-white/20"
-              }`}
-            >
-              أمس
-            </Link>
-            <Link
-              href={presetHref(`${last7}T00:00`, `${today}T23:59`)}
-              className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
-            >
-              آخر 7 أيام
-            </Link>
-            <Link
-              href={`/admin/reports?venue=${venue}`}
-              className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
-            >
-              <RotateCcw className="size-3.5" />
-              مسح الفلاتر
-            </Link>
+
+            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
+              <PrintReportButton
+                filters={printFilters}
+                printers={preferredPrinters.map((printer) => ({
+                  id: printer.id,
+                  name: printer.name,
+                  connectionType: printer.connectionType,
+                }))}
+              />
+              <div className="flex flex-wrap gap-1.5 sm:justify-end">
+                <Link
+                  href={reportsHref({
+                    from: `${today}T00:00`,
+                    to: `${today}T23:59`,
+                  })}
+                  className={`btn btn-sm rounded-xl ${
+                    isTodayPreset ? "btn-primary" : "btn-ghost border border-base-300"
+                  }`}
+                >
+                  اليوم
+                </Link>
+                <Link
+                  href={reportsHref({
+                    from: `${yesterday}T00:00`,
+                    to: `${yesterday}T23:59`,
+                  })}
+                  className={`btn btn-sm rounded-xl ${
+                    isYesterdayPreset
+                      ? "btn-primary"
+                      : "btn-ghost border border-base-300"
+                  }`}
+                >
+                  أمس
+                </Link>
+                <Link
+                  href={reportsHref({
+                    from: `${last7}T00:00`,
+                    to: `${today}T23:59`,
+                  })}
+                  className={`btn btn-sm rounded-xl ${
+                    isLast7Preset
+                      ? "btn-primary"
+                      : "btn-ghost border border-base-300"
+                  }`}
+                >
+                  آخر 7 أيام
+                </Link>
+                <Link
+                  href={`/admin/reports?venue=${venue}`}
+                  className="btn btn-sm btn-ghost rounded-xl"
+                  title="مسح الفلاتر"
+                >
+                  <RotateCcw className="size-3.5" />
+                  مسح
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </section>
-
-      <VenueTabs basePath="/admin/reports" venue={venue} />
 
       <details className="premium-card group card" open={activeFilterCount > 0}>
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 sm:p-5">
@@ -253,7 +292,11 @@ export default async function AdminReportsPage({
             <span className="badge badge-ghost">عرض الفلاتر</span>
           )}
         </summary>
-        <form className="grid gap-3 border-t border-base-300/60 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4">
+        <form
+          method="get"
+          action="/admin/reports"
+          className="grid gap-3 border-t border-base-300/60 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4"
+        >
           <input type="hidden" name="venue" value={venue} />
           <label className="form-control">
             <span className="label-text mb-1.5 font-bold">من تاريخ ووقت</span>
@@ -360,7 +403,14 @@ export default async function AdminReportsPage({
               تطبيق الفلاتر
             </button>
             <Link
-              href={`/admin/reports?venue=${venue}&from=${from}&to=${to}`}
+              href={reportsHref({
+                q: undefined,
+                waiter: undefined,
+                cashier: undefined,
+                payment: undefined,
+                saleType: undefined,
+                category: undefined,
+              })}
               className="btn btn-ghost"
             >
               إعادة ضبط
