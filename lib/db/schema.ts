@@ -154,6 +154,8 @@ export const orderItems = sqliteTable("order_items", {
     .references(() => orders.id),
   itemId: integer("item_id").references(() => items.id),
   itemName: text("item_name").notNull(),
+  /** Snapshot at sale time — reports keep this after item/category delete. */
+  categoryName: text("category_name"),
   unitPrice: real("unit_price").notNull(),
   qty: integer("qty").notNull().default(1),
   lineTotal: real("line_total").notNull(),

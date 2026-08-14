@@ -501,11 +501,17 @@ function runSeed(
       .get();
 
     for (const line of priced) {
+      const category = db
+        .select({ name: categories.name })
+        .from(categories)
+        .where(eq(categories.id, line.item.categoryId))
+        .get();
       db.insert(orderItems)
         .values({
           orderId: order.id,
           itemId: line.item.id,
           itemName: line.item.name,
+          categoryName: category?.name ?? null,
           unitPrice: line.item.price,
           qty: line.qty,
           lineTotal: line.lineTotal,

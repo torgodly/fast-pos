@@ -32,6 +32,7 @@ import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-print
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
+import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -157,6 +158,8 @@ export async function addItemToOrder(orderId: number, itemId: number) {
       .set({
         qty,
         lineTotal: qty * existingLine.unitPrice,
+        categoryName:
+          existingLine.categoryName ?? categoryNameForItem(item.id),
       })
       .where(eq(orderItems.id, existingLine.id))
       .run();
@@ -166,6 +169,7 @@ export async function addItemToOrder(orderId: number, itemId: number) {
         orderId,
         itemId: item.id,
         itemName: item.name,
+        categoryName: categoryNameForItem(item.id),
         unitPrice: item.price,
         qty: 1,
         lineTotal: item.price,
@@ -1063,6 +1067,7 @@ export async function payQuickSale(
             orderId: created.id,
             itemId: line.item.id,
             itemName: line.item.name,
+            categoryName: categoryNameForItem(line.item.id),
             unitPrice: line.item.price,
             qty: line.qty,
             lineTotal: line.item.price * line.qty,

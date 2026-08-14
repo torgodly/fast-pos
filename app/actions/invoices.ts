@@ -7,6 +7,7 @@ import { recordSessionAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { items, orderItems, orders } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
+import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import type { VenueId } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
 
@@ -74,7 +75,11 @@ export async function adminAddInvoiceItem(
   if (existing) {
     const qty = existing.qty + 1;
     db.update(orderItems)
-      .set({ qty, lineTotal: qty * existing.unitPrice })
+      .set({
+        qty,
+        lineTotal: qty * existing.unitPrice,
+        categoryName: existing.categoryName ?? categoryNameForItem(item.id),
+      })
       .where(eq(orderItems.id, existing.id))
       .run();
   } else {
@@ -83,6 +88,7 @@ export async function adminAddInvoiceItem(
         orderId,
         itemId: item.id,
         itemName: item.name,
+        categoryName: categoryNameForItem(item.id),
         unitPrice: item.price,
         qty: 1,
         lineTotal: item.price,

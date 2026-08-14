@@ -206,7 +206,11 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
   const categorySales = db
     .select({
       categoryId: categories.id,
-      categoryName: sql<string>`coalesce(${categories.name}, 'غير مصنف')`,
+      categoryName: sql<string>`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
       qty: sql<number>`sum(${orderItems.qty})`.mapWith(Number),
       revenue: sql<number>`sum(${orderItems.lineTotal})`.mapWith(Number),
     })
@@ -215,7 +219,14 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
     .leftJoin(items, eq(orderItems.itemId, items.id))
     .leftJoin(categories, eq(items.categoryId, categories.id))
     .where(and(...itemConditions))
-    .groupBy(categories.id, categories.name)
+    .groupBy(
+      sql`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
+      categories.id,
+    )
     .orderBy(desc(sql`sum(${orderItems.qty})`))
     .all();
 

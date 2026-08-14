@@ -283,6 +283,7 @@ function ensureSchema(sqlite: Database.Database) {
       order_id INTEGER NOT NULL REFERENCES orders(id),
       item_id INTEGER REFERENCES items(id),
       item_name TEXT NOT NULL,
+      category_name TEXT,
       unit_price REAL NOT NULL,
       qty INTEGER NOT NULL DEFAULT 1,
       line_total REAL NOT NULL,
@@ -342,6 +343,32 @@ function ensureSchema(sqlite: Database.Database) {
     );
   } catch {
     // column already exists
+  }
+
+  try {
+    sqlite.exec(`ALTER TABLE order_items ADD COLUMN category_name TEXT`);
+  } catch {
+    // column already exists
+  }
+
+  // Backfill snapshots from live menu when still linked (best-effort, no wipe).
+  try {
+    sqlite
+      .prepare(
+        `UPDATE order_items
+         SET category_name = (
+           SELECT categories.name
+           FROM items
+           LEFT JOIN categories ON categories.id = items.category_id
+           WHERE items.id = order_items.item_id
+         )
+         WHERE (category_name IS NULL OR category_name = '')
+           AND item_id IS NOT NULL
+           AND EXISTS (SELECT 1 FROM items WHERE items.id = order_items.item_id)`,
+      )
+      .run();
+  } catch {
+    // best-effort
   }
 
   try {

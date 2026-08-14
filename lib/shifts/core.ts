@@ -94,7 +94,11 @@ export function buildDayReportData(
 
   const groupRows = db
     .select({
-      categoryName: categories.name,
+      categoryName: sql<string>`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
       qty: sql<number>`coalesce(sum(${orderItems.qty}), 0)`.mapWith(Number),
       revenue: sql<number>`coalesce(sum(${orderItems.lineTotal}), 0)`.mapWith(
         Number,
@@ -113,12 +117,18 @@ export function buildDayReportData(
           )
         : and(eq(orders.venueId, venueId), eq(orders.status, "paid")),
     )
-    .groupBy(categories.name)
+    .groupBy(
+      sql`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
+    )
     .all();
 
   const byName = new Map(
     groupRows.map((row) => [
-      row.categoryName ?? "غير مصنف",
+      row.categoryName,
       { qty: row.qty, revenue: row.revenue },
     ]),
   );
