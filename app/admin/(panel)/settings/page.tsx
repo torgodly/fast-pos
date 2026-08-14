@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Clock3, KeyRound, Receipt, Settings2 } from "lucide-react";
 import { ChangeAdminPasswordForm } from "@/components/admin/ChangeAdminPasswordForm";
 import { ReceiptSettingsForm } from "@/components/admin/ReceiptSettingsForm";
+import { SettingsDangerZone } from "@/components/admin/SettingsDangerZone";
 import { ZWindowSettingsForm } from "@/components/admin/ZWindowSettingsForm";
 import { requireAdmin } from "@/app/actions/auth";
 import {
@@ -25,7 +26,7 @@ export default async function AdminSettingsPage() {
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الإعدادات</h2>
             <p className="text-sm text-base-content/45">
-              كلمة المرور، الفاتورة، ونافذة Z لكل فرع
+              كلمة المرور، الفاتورة، نافذة Z، وإعادة الضبط
             </p>
           </div>
         </div>
@@ -110,6 +111,8 @@ export default async function AdminSettingsPage() {
           <ReceiptSettingsForm initialMessage={footerMessage} />
         </div>
       </section>
+
+      <SettingsDangerZone />
     </div>
   );
 }
