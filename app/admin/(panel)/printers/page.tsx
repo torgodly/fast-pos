@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { Printer } from "lucide-react";
 import { PrintersAdmin } from "@/components/admin/PrintersAdmin";
 import { requireAdmin } from "@/app/actions/auth";
@@ -34,10 +34,21 @@ export default async function AdminPrintersPage({
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
 
-  // Show every printer. Tabs only set the default cashier department in the form.
-  // (Filtering by tab hid cafe cashiers when the restaurant tab was open.)
+  // Kitchen = shared (all tabs, deduped).
+  // Checkout / both = only this tab's cashier department.
   const allPrinters = dedupeKitchenPrinters(
-    db.select().from(printers).orderBy(asc(printers.name), asc(printers.id)).all(),
+    db
+      .select()
+      .from(printers)
+      .where(
+        or(
+          eq(printers.role, "kitchen"),
+          and(eq(printers.venueId, venue), eq(printers.role, "checkout")),
+          and(eq(printers.venueId, venue), eq(printers.role, "both")),
+        ),
+      )
+      .orderBy(asc(printers.name), asc(printers.id))
+      .all(),
   );
 
   return (
@@ -50,15 +61,14 @@ export default async function AdminPrintersPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الطابعات</h2>
             <p className="text-sm text-base-content/45">
-              كل الطابعات — تبويب {getVenueName(venue)} يحدد القسم الافتراضي عند
-              الإضافة
+              مطبخ مشترك + فواتير كاشير {getVenueName(venue)}
             </p>
           </div>
         </div>
         <VenueTabs basePath="/admin/printers" venue={venue} />
         <p className="mt-3 text-sm text-base-content/55">
-          المطبخ مشترك. لطابعة الكاشير اختر قسم <strong>مطعم</strong> أو{" "}
-          <strong>كافيه</strong> في النموذج.
+          المطبخ مشترك بين الفرعين. طابعة الكاشير (أو «مطبخ + فاتورة») تظهر فقط
+          في تبويب قسمها.
         </p>
       </div>
 
