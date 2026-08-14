@@ -229,7 +229,7 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
             </span>
           </label>
           <p className="text-xs text-base-content/45">
-            يمكن تعيين كاشير رئيسي واحد فقط — التعيين الجديد يلغي السابق
+            يمكن تعيين أكثر من كاشير رئيسي — كل منهم يطبع تقارير X و Z
           </p>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">

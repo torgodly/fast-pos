@@ -22,7 +22,7 @@ export const users = sqliteTable(
     username: text("username"),
     passwordHash: text("password_hash"),
     pinHash: text("pin_hash"),
-    /** Only the main cashier may open/close shifts and print X/Z. */
+    /** Main cashiers may print X/Z and cancel after kitchen; multiple allowed. */
     isMainCashier: integer("is_main_cashier", { mode: "boolean" })
       .notNull()
       .default(false),

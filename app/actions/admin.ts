@@ -506,10 +506,6 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
     }
   }
 
-  if (isMainCashier) {
-    db.update(users).set({ isMainCashier: false }).run();
-  }
-
   if (id) {
     const updates: {
       name: string;
