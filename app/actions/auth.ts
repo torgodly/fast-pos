@@ -9,6 +9,7 @@ import {
   hashStaffPin,
   isPinTakenByOther,
   isValidPinFormat,
+  normalizePinDigits,
 } from "@/lib/auth/pin";
 import { getSession } from "@/lib/auth/session";
 import { signSessionToken } from "@/lib/auth/token";
@@ -76,9 +77,13 @@ export async function changeStaffPin(formData: FormData): Promise<
   }
 
   const venueId = String(formData.get("venueId") ?? "");
-  const currentPin = String(formData.get("currentPin") ?? "").trim();
-  const newPin = String(formData.get("newPin") ?? "").trim();
-  const confirmPin = String(formData.get("confirmPin") ?? "").trim();
+  const currentPin = normalizePinDigits(
+    String(formData.get("currentPin") ?? ""),
+  );
+  const newPin = normalizePinDigits(String(formData.get("newPin") ?? ""));
+  const confirmPin = normalizePinDigits(
+    String(formData.get("confirmPin") ?? ""),
+  );
 
   if (!isVenueId(venueId)) {
     return { error: "فرع غير صالح" };

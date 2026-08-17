@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { sessionCookieValue } from "@/lib/auth/cookie";
-import { findStaffMatchingPin, isValidPinFormat } from "@/lib/auth/pin";
+import { findStaffMatchingPin, isValidPinFormat, normalizePinDigits } from "@/lib/auth/pin";
 import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   }
 
   const venueId = String(body.venueId ?? "");
-  const pin = String(body.pin ?? "");
+  const pin = normalizePinDigits(String(body.pin ?? ""));
   const requestedUserId =
     body.userId != null && Number.isFinite(Number(body.userId))
       ? Number(body.userId)

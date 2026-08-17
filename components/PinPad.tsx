@@ -10,8 +10,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-
-const PIN_LENGTH = 4;
+import { PIN_MAX_LENGTH, PIN_MIN_LENGTH } from "@/lib/auth/pin";
 
 type Candidate = { id: number; name: string; role: string };
 
@@ -29,7 +28,13 @@ export function PinPad({
   const submittingRef = useRef(false);
 
   function login(currentPin: string, userId?: number) {
-    if (submittingRef.current || currentPin.length < PIN_LENGTH) return;
+    if (
+      submittingRef.current ||
+      currentPin.length < PIN_MIN_LENGTH ||
+      currentPin.length > PIN_MAX_LENGTH
+    ) {
+      return;
+    }
     submittingRef.current = true;
 
     startTransition(async () => {
@@ -70,12 +75,8 @@ export function PinPad({
     if (pending || submittingRef.current || candidates) return;
     setError(null);
     setPin((prev) => {
-      if (prev.length >= PIN_LENGTH) return prev;
-      const next = prev + digit;
-      if (next.length === PIN_LENGTH) {
-        queueMicrotask(() => login(next));
-      }
-      return next;
+      if (prev.length >= PIN_MAX_LENGTH) return prev;
+      return prev + digit;
     });
   }
 
@@ -93,6 +94,8 @@ export function PinPad({
   }
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"];
+  const canSubmit =
+    pin.length >= PIN_MIN_LENGTH && pin.length <= PIN_MAX_LENGTH;
 
   if (candidates) {
     return (
@@ -160,14 +163,14 @@ export function PinPad({
             دخول {venueName}
           </h1>
           <p className="text-xs text-base-content/55 sm:text-sm">
-            أدخل الرمز المكوّن من 4 أرقام
+            أدخل الرمز (4 إلى 6 أرقام) ثم اضغط دخول
           </p>
 
           <div
-            className="my-2 flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14"
+            className="my-2 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14 sm:gap-3"
             dir="ltr"
           >
-            {Array.from({ length: PIN_LENGTH }).map((_, i) => (
+            {Array.from({ length: PIN_MAX_LENGTH }).map((_, i) => (
               <span
                 key={i}
                 className={`size-2.5 rounded-full transition-all sm:size-3 ${
@@ -178,6 +181,11 @@ export function PinPad({
               />
             ))}
           </div>
+          {pin.length > 0 ? (
+            <p className="font-mono text-sm font-bold tabular-nums tracking-[0.35em] text-base-content/50" dir="ltr">
+              {"•".repeat(pin.length)}
+            </p>
+          ) : null}
 
           {error && (
             <div
@@ -236,7 +244,7 @@ export function PinPad({
             type="button"
             className="btn btn-primary btn-lg mt-1 w-full rounded-2xl shadow-lg shadow-primary/20"
             onClick={() => login(pin)}
-            disabled={pending || pin.length < PIN_LENGTH}
+            disabled={pending || !canSubmit}
           >
             {pending ? (
               <>

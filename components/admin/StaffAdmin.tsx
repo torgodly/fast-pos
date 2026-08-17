@@ -49,6 +49,7 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const pin = String(formData.get("pin") ?? "").trim();
 
     startTransition(async () => {
       setError(null);
@@ -59,6 +60,14 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
       }
       closeModal();
       router.refresh();
+      if (pin) {
+        // Keep confirmation in Arabic UI without exposing in URL.
+        window.alert(
+          editing
+            ? `تم تحديث الرمز إلى: ${pin}\nيسجّل الموظف بهذا الرمز ثم يغيّره عند الطلب.`
+            : `تم إنشاء الموظف بالرمز: ${pin}\nيسجّل بهذا الرمز ثم يغيّره عند أول دخول.`,
+        );
+      }
     });
   }
 
@@ -190,7 +199,11 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
         onClose={closeModal}
         pending={pending}
       >
-        <form onSubmit={submit} className="space-y-4">
+        <form
+          key={editing ? `edit-${editing.id}` : "create"}
+          onSubmit={submit}
+          className="space-y-4"
+        >
           {editing ? <input type="hidden" name="id" value={editing.id} /> : null}
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">الاسم</span>

@@ -7,6 +7,8 @@ import { getSession } from "@/lib/auth/session";
 import {
   hashStaffPin,
   isPinTakenByOther,
+  isValidPinFormat,
+  normalizePinDigits,
 } from "@/lib/auth/pin";
 import { db } from "@/lib/db";
 import { applyPartialReset, type ResetOptions } from "@/lib/db/reset";
@@ -479,7 +481,7 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "");
-  const pin = String(formData.get("pin") ?? "").trim();
+  const pin = normalizePinDigits(String(formData.get("pin") ?? ""));
   const isMainCashier =
     role === "cashier" && formData.get("isMainCashier") === "on";
 
@@ -487,10 +489,10 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
     return { error: "بيانات الموظف غير مكتملة" };
   }
 
-  if (!id && !/^\d{4,6}$/.test(pin)) {
+  if (!id && !isValidPinFormat(pin)) {
     return { error: "رمز PIN يجب أن يكون من 4 إلى 6 أرقام" };
   }
-  if (pin && !/^\d{4,6}$/.test(pin)) {
+  if (pin && !isValidPinFormat(pin)) {
     return { error: "رمز PIN يجب أن يكون من 4 إلى 6 أرقام" };
   }
 

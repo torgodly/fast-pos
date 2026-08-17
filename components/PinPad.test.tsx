@@ -14,7 +14,6 @@ describe("PinPad", () => {
         }),
       }),
     );
-    // jsdom location is not fully writable — replace href setter path via assign mock
     Object.defineProperty(window, "location", {
       configurable: true,
       value: { href: "" },
@@ -26,16 +25,17 @@ describe("PinPad", () => {
     vi.restoreAllMocks();
   });
 
-  it("auto-submits when 4 digits are entered", async () => {
+  it("submits when دخول is pressed after 4 digits", async () => {
     const user = userEvent.setup();
     render(<PinPad venueId="cafe" venueName="كافيه" />);
 
     await user.click(screen.getByRole("button", { name: "1" }));
     await user.click(screen.getByRole("button", { name: "1" }));
     await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: "1" }));
     expect(fetch).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "1" }));
+    await user.click(screen.getByRole("button", { name: /دخول/ }));
 
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledTimes(1);
@@ -67,6 +67,7 @@ describe("PinPad", () => {
     await user.click(nine);
     await user.click(nine);
     await user.click(nine);
+    await user.click(screen.getByRole("button", { name: /دخول/ }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "رمز الدخول غير صحيح",
@@ -91,6 +92,7 @@ describe("PinPad", () => {
     for (const digit of ["0", "0", "0", "0"]) {
       await user.click(screen.getByRole("button", { name: digit }));
     }
+    await user.click(screen.getByRole("button", { name: /دخول/ }));
 
     expect(await screen.findByText("من أنت؟")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /أحمد/ })).toBeInTheDocument();

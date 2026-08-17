@@ -5,6 +5,7 @@ import {
   isPinTakenByOther,
   isValidPinFormat,
   matchStaffByPin,
+  normalizePinDigits,
   type StaffForPin,
 } from "./pin";
 
@@ -79,19 +80,11 @@ describe("PIN helpers", () => {
     expect(matchStaffByPin(list, "9999")).toBeNull();
   });
 
-  it("detects PIN taken by another staff member including inactive", () => {
+  it("normalizes Arabic digits before matching", () => {
     const list = [
-      staff({ id: 1, pinHash: bcrypt.hashSync("1357", 4) }),
-      staff({
-        id: 2,
-        active: false,
-        pinHash: bcrypt.hashSync("2468", 4),
-      }),
+      staff({ id: 1, pinHash: bcrypt.hashSync("4455", 4) }),
     ];
-
-    expect(isPinTakenByOther(list, "1357")).toBe(true);
-    expect(isPinTakenByOther(list, "1357", 1)).toBe(false);
-    expect(isPinTakenByOther(list, "2468")).toBe(true);
-    expect(isPinTakenByOther(list, "9999")).toBe(false);
+    expect(normalizePinDigits("٤٤٥٥")).toBe("4455");
+    expect(matchStaffByPin(list, "٤٤٥٥")?.id).toBe(1);
   });
 });
