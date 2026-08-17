@@ -8,9 +8,12 @@ import {
   LoaderCircle,
   RotateCcw,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
 const PIN_LENGTH = 4;
+
+type Candidate = { id: number; name: string; role: string };
 
 export function PinPad({
   venueId,
@@ -21,10 +24,11 @@ export function PinPad({
 }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [pending, startTransition] = useTransition();
   const submittingRef = useRef(false);
 
-  function login(currentPin: string) {
+  function login(currentPin: string, userId?: number) {
     if (submittingRef.current || currentPin.length < PIN_LENGTH) return;
     submittingRef.current = true;
 
@@ -34,18 +38,28 @@ export function PinPad({
         const response = await fetch("/api/auth/pin", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ venueId, pin: currentPin }),
+          body: JSON.stringify({
+            venueId,
+            pin: currentPin,
+            ...(userId != null ? { userId } : {}),
+          }),
         });
         const result = await response.json();
+        if (result.ok && result.needUserPick && Array.isArray(result.candidates)) {
+          setCandidates(result.candidates);
+          return;
+        }
         if (result.ok && result.redirectTo) {
           window.location.href = result.redirectTo;
           return;
         }
         setError(result.error ?? "رمز الدخول غير صحيح");
         setPin("");
+        setCandidates(null);
       } catch {
         setError("تعذر الاتصال بالسيرفر");
         setPin("");
+        setCandidates(null);
       } finally {
         submittingRef.current = false;
       }
@@ -53,7 +67,7 @@ export function PinPad({
   }
 
   function press(digit: string) {
-    if (pending || submittingRef.current) return;
+    if (pending || submittingRef.current || candidates) return;
     setError(null);
     setPin((prev) => {
       if (prev.length >= PIN_LENGTH) return prev;
@@ -69,15 +83,70 @@ export function PinPad({
     if (pending || submittingRef.current) return;
     setPin("");
     setError(null);
+    setCandidates(null);
   }
 
   function backspace() {
-    if (pending || submittingRef.current) return;
+    if (pending || submittingRef.current || candidates) return;
     setPin((prev) => prev.slice(0, -1));
     setError(null);
   }
 
   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "clear", "0", "back"];
+
+  if (candidates) {
+    return (
+      <div className="mx-auto w-full max-w-md">
+        <div className="glass-panel card">
+          <div className="h-1 bg-gradient-to-l from-primary via-secondary to-accent" />
+          <div className="card-body gap-3 p-4 sm:p-6">
+            <div className="grid size-11 place-items-center rounded-2xl bg-primary/10 text-primary sm:size-12">
+              <UserRound className="size-5 sm:size-6" />
+            </div>
+            <h1 className="card-title text-xl font-black sm:text-2xl">
+              من أنت؟
+            </h1>
+            <p className="text-xs text-base-content/55 sm:text-sm">
+              أكثر من موظف يستخدم نفس الرمز — اختر اسمك للمتابعة
+            </p>
+            {error && (
+              <div
+                role="alert"
+                className="alert alert-error alert-soft w-full py-2 text-sm"
+              >
+                <span>{error}</span>
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              {candidates.map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  className="btn btn-outline h-auto min-h-12 justify-start gap-3 rounded-xl py-3"
+                  disabled={pending}
+                  onClick={() => login(pin, person.id)}
+                >
+                  <UserRound className="size-4 shrink-0" />
+                  <span className="font-bold">{person.name}</span>
+                  <span className="ms-auto text-xs opacity-60">
+                    {person.role === "waiter" ? "سفرادجي" : "كاشير"}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm mt-1"
+              onClick={clear}
+              disabled={pending}
+            >
+              رجوع وإعادة إدخال الرمز
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-md">

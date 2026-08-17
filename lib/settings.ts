@@ -1,5 +1,5 @@
 import type { VenueId } from "@/lib/types";
-import { tripoliMinutesOfDay } from "@/lib/time/tripoli";
+import { tripoliMinutesOfDay, tripoliParts } from "@/lib/time/tripoli";
 import { getSqlite } from "./db/index";
 
 const DEFAULT_FOOTER = "شكراً لزيارتكم — نراكم قريباً";
@@ -115,30 +115,99 @@ function minutesOfDay(hhmm: string): number {
   return h! * 60 + m!;
 }
 
+function resolveWindowTimes(
+  startOrVenue?: string | VenueId,
+  end?: string,
+): { start: string; finish: string } {
+  if (startOrVenue === "cafe" || startOrVenue === "restaurant") {
+    return {
+      start: getZWindowStart(startOrVenue),
+      finish: getZWindowEnd(startOrVenue),
+    };
+  }
+  if (typeof startOrVenue === "string" && end) {
+    return { start: startOrVenue, finish: end };
+  }
+  return { start: getZWindowStart(), finish: getZWindowEnd() };
+}
+
+function addCalendarDays(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y!, m! - 1, d!));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}-${String(dt.getUTCDate()).padStart(2, "0")}`;
+}
+
 /** True if `date` is inside the venue's overnight-capable Z window. */
 export function isWithinZWindow(
   date = new Date(),
   startOrVenue?: string | VenueId,
   end?: string,
 ): boolean {
-  let start = DEFAULT_Z_START;
-  let finish = DEFAULT_Z_END;
-
-  if (startOrVenue === "cafe" || startOrVenue === "restaurant") {
-    start = getZWindowStart(startOrVenue);
-    finish = getZWindowEnd(startOrVenue);
-  } else if (typeof startOrVenue === "string" && end) {
-    start = startOrVenue;
-    finish = end;
-  } else {
-    start = getZWindowStart();
-    finish = getZWindowEnd();
-  }
-
+  const { start, finish } = resolveWindowTimes(startOrVenue, end);
   const now = tripoliMinutesOfDay(date);
   const from = minutesOfDay(start);
   const to = minutesOfDay(finish);
   if (from === to) return true;
   if (from < to) return now >= from && now <= to;
   return now >= from || now <= to;
+}
+
+export type ZWindowBounds = {
+  /** Inclusive Tripoli SQL datetime for window start. */
+  startSql: string;
+  /** Inclusive Tripoli SQL datetime for window end. */
+  endSql: string;
+};
+
+/**
+ * Contiguous Z closing window that contains `date`, or null if outside.
+ * Handles overnight ranges (e.g. 23:00 → 01:00).
+ */
+export function resolveZWindowBounds(
+  date = new Date(),
+  startOrVenue?: string | VenueId,
+  end?: string,
+): ZWindowBounds | null {
+  if (!isWithinZWindow(date, startOrVenue, end)) return null;
+
+  const { start, finish } = resolveWindowTimes(startOrVenue, end);
+  const p = tripoliParts(date);
+  const today = `${p.year}-${p.month}-${p.day}`;
+  const nowMin = tripoliMinutesOfDay(date);
+  const from = minutesOfDay(start);
+  const to = minutesOfDay(finish);
+
+  if (from === to) {
+    return {
+      startSql: `${today} 00:00:00`,
+      endSql: `${today} 23:59:59`,
+    };
+  }
+
+  if (from < to) {
+    return {
+      startSql: `${today} ${start}:00`,
+      endSql: `${today} ${finish}:59`,
+    };
+  }
+
+  if (nowMin >= from) {
+    return {
+      startSql: `${today} ${start}:00`,
+      endSql: `${addCalendarDays(today, 1)} ${finish}:59`,
+    };
+  }
+  return {
+    startSql: `${addCalendarDays(today, -1)} ${start}:00`,
+    endSql: `${today} ${finish}:59`,
+  };
+}
+
+/** Whether a Tripoli SQL datetime falls inside the given Z window bounds. */
+export function isSqlInZWindowBounds(
+  sqlTime: string,
+  bounds: ZWindowBounds,
+): boolean {
+  return sqlTime >= bounds.startSql && sqlTime <= bounds.endSql;
 }

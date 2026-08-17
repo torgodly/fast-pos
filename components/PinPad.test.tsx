@@ -72,4 +72,50 @@ describe("PinPad", () => {
       "رمز الدخول غير صحيح",
     );
   });
+
+  it("asks to pick a user when several share the PIN", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      json: async () => ({
+        ok: true,
+        needUserPick: true,
+        candidates: [
+          { id: 1, name: "أحمد", role: "waiter" },
+          { id: 2, name: "سارة", role: "cashier" },
+        ],
+      }),
+    } as Response);
+
+    const user = userEvent.setup();
+    render(<PinPad venueId="cafe" venueName="كافيه" />);
+
+    for (const digit of ["0", "0", "0", "0"]) {
+      await user.click(screen.getByRole("button", { name: digit }));
+    }
+
+    expect(await screen.findByText("من أنت؟")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /أحمد/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /سارة/ })).toBeInTheDocument();
+
+    vi.mocked(fetch).mockResolvedValueOnce({
+      json: async () => ({
+        ok: true,
+        redirectTo: "/pin/cafe/change-pin",
+      }),
+    } as Response);
+
+    await user.click(screen.getByRole("button", { name: /أحمد/ }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenLastCalledWith(
+        "/api/auth/pin",
+        expect.objectContaining({
+          body: JSON.stringify({ venueId: "cafe", pin: "0000", userId: 1 }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(window.location.href).toBe("/pin/cafe/change-pin");
+    });
+  });
 });

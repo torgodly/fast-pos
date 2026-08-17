@@ -9,27 +9,53 @@ export type StaffForPin = {
   role: UserRole;
   pinHash: string | null;
   active: boolean;
+  mustChangePin?: boolean;
 };
 
 export function isValidPinFormat(pin: string): boolean {
   return PIN_PATTERN.test(pin);
 }
 
-/** Find the active waiter/cashier whose PIN matches. */
+export function hashStaffPin(pin: string): string {
+  return bcrypt.hashSync(pin, 10);
+}
+
+/** All active waiters/cashiers whose PIN matches. */
+export function findStaffMatchingPin(
+  staff: StaffForPin[],
+  pin: string,
+): StaffForPin[] {
+  if (!isValidPinFormat(pin)) return [];
+
+  return staff.filter((user) => {
+    if (!user.active) return false;
+    if (user.role !== "waiter" && user.role !== "cashier") return false;
+    if (!user.pinHash) return false;
+    return bcrypt.compareSync(pin, user.pinHash);
+  });
+}
+
+/** Find the first active waiter/cashier whose PIN matches. */
 export function matchStaffByPin(
   staff: StaffForPin[],
   pin: string,
 ): StaffForPin | null {
-  if (!isValidPinFormat(pin)) return null;
+  return findStaffMatchingPin(staff, pin)[0] ?? null;
+}
 
-  for (const user of staff) {
-    if (!user.active) continue;
-    if (user.role !== "waiter" && user.role !== "cashier") continue;
-    if (!user.pinHash) continue;
-    if (bcrypt.compareSync(pin, user.pinHash)) {
-      return user;
-    }
-  }
+/** True if another active waiter/cashier already uses this PIN. */
+export function isPinTakenByOther(
+  staff: StaffForPin[],
+  pin: string,
+  excludeUserId?: number | null,
+): boolean {
+  if (!isValidPinFormat(pin)) return false;
 
-  return null;
+  return staff.some((user) => {
+    if (excludeUserId != null && user.id === excludeUserId) return false;
+    if (!user.active) return false;
+    if (user.role !== "waiter" && user.role !== "cashier") return false;
+    if (!user.pinHash) return false;
+    return bcrypt.compareSync(pin, user.pinHash);
+  });
 }

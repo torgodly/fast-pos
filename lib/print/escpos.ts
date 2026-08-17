@@ -230,6 +230,10 @@ export function buildKitchenEscPos(data: KitchenReceiptData): Uint8Array {
 
   for (const item of data.lines) {
     kitchenLine(parts, `${item.qty}× ${item.name}`, { emphasis: true });
+    const note = item.note?.trim();
+    if (note) {
+      kitchenLine(parts, note);
+    }
   }
 
   kitchenSep(parts);
@@ -328,6 +332,7 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   fieldLine(parts, "اليوم", data.workDate);
   fieldLine(parts, "من", data.periodFrom);
   fieldLine(parts, "إلى", data.periodTo);
+  fieldLine(parts, "طباعة", data.printedAt);
   fieldLine(parts, "بواسطة", data.printedByName);
   if (data.isReprint) {
     fieldLine(parts, "النوع", "إعادة طباعة Z");

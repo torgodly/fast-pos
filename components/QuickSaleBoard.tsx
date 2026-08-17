@@ -66,6 +66,7 @@ export function QuickSaleBoard({
     qty: line.qty,
     lineTotal: line.unitPrice * line.qty,
     unitPrice: line.unitPrice,
+    note: line.note,
   }));
 
   function add(item: MenuItem) {
@@ -83,6 +84,7 @@ export function QuickSaleBoard({
           name: item.name,
           unitPrice: item.price,
           qty: 1,
+          note: "",
         },
       ];
     });
@@ -100,6 +102,15 @@ export function QuickSaleBoard({
   function remove(key: string | number) {
     const itemId = Number(key);
     setCart((prev) => prev.filter((line) => line.itemId !== itemId));
+  }
+
+  function changeNote(key: string | number, note: string) {
+    const itemId = Number(key);
+    setCart((prev) =>
+      prev.map((line) =>
+        line.itemId === itemId ? { ...line, note } : line,
+      ),
+    );
   }
 
   function askConfirm(selected: "cash" | "card") {
@@ -232,6 +243,7 @@ export function QuickSaleBoard({
             compact
             onChangeQty={changeQty}
             onRemove={remove}
+            onChangeNote={changeNote}
             footer={payFooter}
           />
         </div>

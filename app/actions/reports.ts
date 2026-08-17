@@ -13,7 +13,7 @@ import {
 } from "@/lib/print/receipts";
 import { type ReportFiltersInput } from "@/lib/reports/filters";
 import { getReportSummary } from "@/lib/reports/summary";
-import { formatDateTime } from "@/lib/venues";
+import { formatPrintTimestamp } from "@/lib/venues";
 
 async function assertAdmin() {
   const session = await getSession();
@@ -30,13 +30,11 @@ function byRevenue<T extends { revenue: number }>(rows: T[]) {
 function summaryToPrintData(
   summary: ReturnType<typeof getReportSummary>,
 ): ReportSummaryPrintData {
-  const printedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
-
   return {
     venueName: summary.venueName,
-    fromLabel: formatDateTime(summary.fromSql),
-    toLabel: formatDateTime(summary.toSql),
-    printedAt: formatDateTime(printedAt),
+    fromLabel: formatPrintTimestamp(summary.fromSql),
+    toLabel: formatPrintTimestamp(summary.toSql),
+    printedAt: formatPrintTimestamp(new Date()),
     invoiceCount: summary.rows.length,
     totalSales: summary.totalSales,
     cashTotal: summary.cashTotal,

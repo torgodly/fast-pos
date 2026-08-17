@@ -11,7 +11,11 @@ import {
 export type { SessionPayload };
 export { COOKIE_NAME, verifyToken };
 
-export async function getSession(): Promise<SessionPayload | null> {
+export type AppSession = SessionPayload & {
+  mustChangePin: boolean;
+};
+
+export async function getSession(): Promise<AppSession | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) return null;
@@ -34,5 +38,8 @@ export async function getSession(): Promise<SessionPayload | null> {
     name: user.name,
     role: user.role,
     venueId: payload.venueId,
+    mustChangePin:
+      (user.role === "waiter" || user.role === "cashier") &&
+      Boolean(user.mustChangePin),
   };
 }

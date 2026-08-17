@@ -36,6 +36,7 @@ export default async function AdminStaffPage() {
           role: person.role,
           active: person.active,
           isMainCashier: person.isMainCashier,
+          mustChangePin: person.mustChangePin,
         }))}
       />
     </div>

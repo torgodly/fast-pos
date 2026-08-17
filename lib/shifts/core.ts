@@ -9,10 +9,10 @@ import {
   users,
 } from "@/lib/db/schema";
 import { reportGroupsForVenue } from "@/lib/reports/groups";
-import { getZWindowEnd, getZWindowStart, isWithinZWindow } from "@/lib/settings";
+import { getZWindowEnd, getZWindowStart, isWithinZWindow, isSqlInZWindowBounds, resolveZWindowBounds } from "@/lib/settings";
 import { nowSqlTripoli, workDateTripoli } from "@/lib/time/tripoli";
 import type { VenueId } from "@/lib/types";
-import { formatDateTime, getVenueName } from "@/lib/venues";
+import { formatDateTime, formatPrintTimestamp, getVenueName } from "@/lib/venues";
 
 export function workDateToday() {
   return workDateTripoli();
@@ -81,6 +81,7 @@ export type DayReportData = {
   workDate: string;
   periodFrom: string;
   periodTo: string;
+  printedAt: string;
   printedByName: string;
   invoiceCount: number;
   totalSales: number;
@@ -225,9 +226,10 @@ function assembleDayReport(options: {
     venueName: getVenueName(venueId),
     workDate,
     periodFrom: periodFromExclusive
-      ? formatDateTime(periodFromExclusive)
+      ? formatPrintTimestamp(periodFromExclusive)
       : "بداية التشغيل",
-    periodTo: formatDateTime(periodToInclusive),
+    periodTo: formatPrintTimestamp(periodToInclusive),
+    printedAt: formatPrintTimestamp(new Date()),
     printedByName,
     invoiceCount: paidOrders.length,
     totalSales,
@@ -239,7 +241,14 @@ function assembleDayReport(options: {
     groups,
     zWindowStart: getZWindowStart(venueId),
     zWindowEnd: getZWindowEnd(venueId),
-    canPrintZ: isWithinZWindow(new Date(), venueId),
+    canPrintZ: (() => {
+      const within = isWithinZWindow(new Date(), venueId);
+      if (!within) return false;
+      const bounds = resolveZWindowBounds(new Date(), venueId);
+      const last = getLastZAt(venueId);
+      if (bounds && last && isSqlInZWindowBounds(last, bounds)) return false;
+      return true;
+    })(),
     isReprint,
   };
 }
@@ -362,15 +371,29 @@ export function listZReports(
   });
 }
 
+export function alreadyClosedZThisWindow(
+  venueId: VenueId,
+  date = new Date(),
+): boolean {
+  const bounds = resolveZWindowBounds(date, venueId);
+  if (!bounds) return false;
+  const lastZ = getLastZAt(venueId);
+  if (!lastZ) return false;
+  return isSqlInZWindowBounds(lastZ, bounds);
+}
+
 export function getDayReportStatus(venueId: VenueId) {
   const lastZ = getLastZAt(venueId);
+  const withinWindow = isWithinZWindow(new Date(), venueId);
+  const zAlreadyClosedThisWindow = alreadyClosedZThisWindow(venueId);
   return {
     venueId,
     lastZAt: lastZ,
     lastZLabel: lastZ ? formatDateTime(lastZ) : null,
     zWindowStart: getZWindowStart(venueId),
     zWindowEnd: getZWindowEnd(venueId),
-    canPrintZ: isWithinZWindow(new Date(), venueId),
+    canPrintZ: withinWindow && !zAlreadyClosedThisWindow,
+    zAlreadyClosedThisWindow,
     workDate: workDateToday(),
     canReprintZ: Boolean(lastZ),
   };

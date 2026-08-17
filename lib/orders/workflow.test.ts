@@ -29,6 +29,7 @@ function createMemoryDb() {
       password_hash TEXT,
       pin_hash TEXT,
       is_main_cashier INTEGER NOT NULL DEFAULT 0,
+      must_change_pin INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -88,7 +89,8 @@ function createMemoryDb() {
       unit_price REAL NOT NULL,
       qty INTEGER NOT NULL DEFAULT 1,
       line_total REAL NOT NULL,
-      kitchen_sent_qty INTEGER NOT NULL DEFAULT 0
+      kitchen_sent_qty INTEGER NOT NULL DEFAULT 0,
+      note TEXT
     );
     CREATE TABLE cancelled_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

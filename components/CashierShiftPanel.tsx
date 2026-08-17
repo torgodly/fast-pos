@@ -24,6 +24,7 @@ export function CashierShiftPanel({
   zWindowEnd,
   canPrintZ,
   canReprintZ,
+  zAlreadyClosedThisWindow,
   preview,
 }: {
   venueId: string;
@@ -33,6 +34,7 @@ export function CashierShiftPanel({
   zWindowEnd: string;
   canPrintZ: boolean;
   canReprintZ: boolean;
+  zAlreadyClosedThisWindow: boolean;
   preview: {
     invoiceCount: number;
     totalSales: number;
@@ -66,15 +68,14 @@ export function CashierShiftPanel({
             <p className="text-xs font-bold text-base-content/45">
               تقارير {venueLabel} فقط — مستقلة عن الفرع الآخر
             </p>
-            <h3 className="text-lg font-black">X أي وقت · Z فقط عند الإقفال</h3>
+            <h3 className="text-lg font-black">X أي وقت · Z مرة واحدة عند الإقفال</h3>
             <p className="mt-1 text-sm text-base-content/50">
-              المبيعات المعروضة: من {lastZLabel ?? "بداية التشغيل"} حتى الآن
+              المبيعات المعروضة: من {lastZLabel ?? "أول فاتورة / بداية التشغيل"}{" "}
+              حتى الآن
             </p>
             <p className="text-xs text-base-content/45">
-              زر Z يعمل فقط بين {zWindowStart} و {zWindowEnd} (توقيت طرابلس)
-              {canPrintZ
-                ? " — متاح الآن"
-                : " — مقفول الآن (لا يمكن إقفال اليوم مبكراً)"}
+              زر Z يعمل فقط بين {zWindowStart} و {zWindowEnd} (توقيت طرابلس)،
+              ومرة واحدة لكل فترة إقفال — بعدها استخدم إعادة الطباعة
             </p>
           </div>
 
@@ -121,7 +122,9 @@ export function CashierShiftPanel({
               title={
                 canPrintZ
                   ? undefined
-                  : `متاح فقط من ${zWindowStart} إلى ${zWindowEnd} (طرابلس)`
+                  : zAlreadyClosedThisWindow
+                    ? "تم إقفال Z لهذه الفترة — استخدم إعادة الطباعة"
+                    : `متاح فقط من ${zWindowStart} إلى ${zWindowEnd} (طرابلس)`
               }
             >
               <Lock className="size-4" />
@@ -131,14 +134,18 @@ export function CashierShiftPanel({
 
           <button
             type="button"
-            className="btn btn-ghost btn-sm h-10 w-full gap-2 rounded-xl border border-base-300"
+            className={`btn h-10 w-full gap-2 rounded-xl ${
+              zAlreadyClosedThisWindow
+                ? "btn-warning"
+                : "btn-ghost border border-base-300"
+            }`}
             disabled={pending || !canReprintZ}
             onClick={() => run(() => reprintLastZReport(venueId))}
             title={
               canReprintZ
                 ? lastZLabel
-                  ? `آخر Z: ${lastZLabel}`
-                  : undefined
+                  ? `آخر Z: ${lastZLabel} — بدون إقفال جديد`
+                  : "بدون إقفال جديد"
                 : "لا يوجد Z سابق"
             }
           >
@@ -150,7 +157,12 @@ export function CashierShiftPanel({
             إعادة طباعة آخر Z
           </button>
 
-          {!canPrintZ ? (
+          {zAlreadyClosedThisWindow ? (
+            <p className="text-xs font-bold text-warning">
+              تم إقفال Z لهذه الفترة — لا إقفال ثانٍ حتى نافذة الغد. إن فشلت
+              الطباعة استخدم «إعادة طباعة آخر Z».
+            </p>
+          ) : !canPrintZ ? (
             <p className="text-xs font-bold text-warning">
               لا يمكن طباعة Z الآن — انتظروا وقت الإقفال ({zWindowStart}–
               {zWindowEnd} بتوقيت طرابلس)
@@ -166,8 +178,9 @@ export function CashierShiftPanel({
           </div>
           <h3 className="text-xl font-black">تأكيد تقرير Z</h3>
           <p className="mt-2 text-sm leading-7 text-base-content/60">
-            سيُطبع ملخص مبيعات {venueLabel} من آخر Z حتى الآن. بعدها يبدأ عدّاد
-            يوم جديد لهذا الفرع فقط. البيع يستمر بدون فتح وردية.
+            سيُطبع ملخص مبيعات {venueLabel} من آخر Z (أو أول فاتورة) حتى الآن،
+            ثم يُقفل اليوم مرة واحدة لهذه الفترة. بعدها لا يمكن إقفال Z مرة أخرى
+            حتى نافذة الغد — فقط إعادة طباعة. البيع يستمر بدون فتح وردية.
           </p>
           <div className="modal-action mt-6 flex-col gap-2 sm:flex-row">
             <button

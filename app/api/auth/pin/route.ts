@@ -7,14 +7,14 @@ import {
   clientRateLimitKey,
   recordAuthFailure,
 } from "@/lib/auth/rate-limit";
-import { isValidPinFormat, matchStaffByPin } from "@/lib/auth/pin";
+import { findStaffMatchingPin, isValidPinFormat } from "@/lib/auth/pin";
 import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
 
 export async function POST(request: Request) {
-  let body: { venueId?: string; pin?: string };
+  let body: { venueId?: string; pin?: string; userId?: number };
   try {
     body = await request.json();
   } catch {
@@ -23,6 +23,10 @@ export async function POST(request: Request) {
 
   const venueId = String(body.venueId ?? "");
   const pin = String(body.pin ?? "");
+  const requestedUserId =
+    body.userId != null && Number.isFinite(Number(body.userId))
+      ? Number(body.userId)
+      : null;
 
   if (!isVenueId(venueId)) {
     return NextResponse.json({ error: "فرع غير صالح" }, { status: 400 });
@@ -48,13 +52,37 @@ export async function POST(request: Request) {
     );
   }
 
-  const staff = db
-    .select()
-    .from(users)
-    .where(eq(users.active, true))
-    .all();
+  const staff = db.select().from(users).where(eq(users.active, true)).all();
+  const matches = findStaffMatchingPin(staff, pin);
 
-  const match = matchStaffByPin(staff, pin);
+  if (matches.length === 0) {
+    const failure = recordAuthFailure(rateKey);
+    return NextResponse.json(
+      {
+        error: failure.locked
+          ? `محاولات كثيرة. حاول بعد ${failure.retryAfterSec} ثانية`
+          : "رمز الدخول غير صحيح",
+      },
+      { status: failure.locked ? 429 : 401 },
+    );
+  }
+
+  if (matches.length > 1 && requestedUserId == null) {
+    return NextResponse.json({
+      ok: true,
+      needUserPick: true,
+      candidates: matches.map((m) => ({
+        id: m.id,
+        name: m.name,
+        role: m.role,
+      })),
+    });
+  }
+
+  const match =
+    requestedUserId != null
+      ? matches.find((m) => m.id === requestedUserId)
+      : matches[0];
 
   if (!match) {
     const failure = recordAuthFailure(rateKey);
@@ -77,8 +105,13 @@ export async function POST(request: Request) {
     venueId,
   });
 
-  const redirectTo =
-    match.role === "waiter"
+  const mustChangePin = Boolean(
+    staff.find((u) => u.id === match.id)?.mustChangePin,
+  );
+
+  const redirectTo = mustChangePin
+    ? `/pin/${venueId}/change-pin`
+    : match.role === "waiter"
       ? `/waiter/${venueId}`
       : `/cashier/${venueId}`;
 

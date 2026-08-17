@@ -201,6 +201,7 @@ function ensureSchema(sqlite: Database.Database) {
       password_hash TEXT,
       pin_hash TEXT,
       is_main_cashier INTEGER NOT NULL DEFAULT 0,
+      must_change_pin INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -287,7 +288,8 @@ function ensureSchema(sqlite: Database.Database) {
       unit_price REAL NOT NULL,
       qty INTEGER NOT NULL DEFAULT 1,
       line_total REAL NOT NULL,
-      kitchen_sent_qty INTEGER NOT NULL DEFAULT 0
+      kitchen_sent_qty INTEGER NOT NULL DEFAULT 0,
+      note TEXT
     );
 
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -347,6 +349,12 @@ function ensureSchema(sqlite: Database.Database) {
 
   try {
     sqlite.exec(`ALTER TABLE order_items ADD COLUMN category_name TEXT`);
+  } catch {
+    // column already exists
+  }
+
+  try {
+    sqlite.exec(`ALTER TABLE order_items ADD COLUMN note TEXT`);
   } catch {
     // column already exists
   }
@@ -425,6 +433,40 @@ function ensureSchema(sqlite: Database.Database) {
     );
   } catch {
     // column already exists
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE users ADD COLUMN must_change_pin INTEGER NOT NULL DEFAULT 0`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  // One-time: force every existing waiter/cashier to set a new personal PIN.
+  try {
+    const flag = sqlite
+      .prepare(
+        `SELECT value FROM app_settings WHERE key = ?`,
+      )
+      .get("force_staff_pin_change_v1") as { value: string } | undefined;
+    if (!flag?.value) {
+      sqlite
+        .prepare(
+          `UPDATE users
+           SET must_change_pin = 1
+           WHERE role IN ('waiter', 'cashier')`,
+        )
+        .run();
+      sqlite
+        .prepare(
+          `INSERT INTO app_settings (key, value) VALUES (?, ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        )
+        .run("force_staff_pin_change_v1", "1");
+    }
+  } catch {
+    // best-effort — app_settings may not exist yet on very early boot
   }
 
   // Ghost quick-sale invoices: kitchen abort deleted lines but order stayed

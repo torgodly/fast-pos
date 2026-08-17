@@ -62,6 +62,16 @@ async function printDayReport(
     };
   }
 
+  if (kind === "Z") {
+    const status = getDayReportStatus(venueId);
+    if (status.zAlreadyClosedThisWindow) {
+      return {
+        error:
+          "تم إقفال Z لهذه الفترة مسبقاً — استخدم «إعادة طباعة آخر Z» بدون إقفال جديد. الإقفال التالي في نافذة الغد",
+      };
+    }
+  }
+
   const stationCtx = await getCashierStationContext(venueId);
   if ("error" in stationCtx) {
     return { error: stationCtx.error };
@@ -74,16 +84,17 @@ async function printDayReport(
   }
 
   try {
-    // Build period BEFORE recording Z so the slip includes today's sales
+    // Build period BEFORE close. Print first — only record Z after success
+    // so a dead printer does not cut the day (use reprint if close already saved).
     const data = buildDayReportData(venueId, kind, session.name);
-    if (kind === "Z") {
-      recordZClose(venueId, session.userId);
-    }
     await printToPrinter({
       host: stationCtx.printer.host,
       port: stationCtx.printer.port,
       data: buildShiftReportEscPos(data),
     });
+    if (kind === "Z") {
+      recordZClose(venueId, session.userId);
+    }
     recordSessionAudit(session, {
       venueId,
       kind: kind === "Z" ? "z_report" : "x_report",
@@ -117,7 +128,7 @@ async function printDayReport(
     return {
       error:
         error instanceof Error
-          ? error.message
+          ? `${error.message}${kind === "Z" ? " — لم يُقفل اليوم، أعد المحاولة أو أصلِح الطابعة" : ""}`
           : `تعذر طباعة تقرير ${kind}`,
     };
   }

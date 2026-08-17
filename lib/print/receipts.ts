@@ -3,6 +3,7 @@ export type ReceiptLine = {
   qty: number;
   unitPrice?: number;
   lineTotal?: number;
+  note?: string | null;
 };
 
 export type ReportSummaryPrintData = {
@@ -38,6 +39,7 @@ export type ShiftReportPrintData = {
   workDate: string;
   periodFrom: string;
   periodTo: string;
+  printedAt: string;
   printedByName: string;
   invoiceCount: number;
   totalSales: number;
@@ -288,6 +290,14 @@ function shell(title: string, body: string) {
       color: #000;
     }
 
+    .note {
+      margin-top: 0.5mm;
+      font-size: 13px;
+      font-weight: 700;
+      line-height: 1.3;
+      color: #000;
+    }
+
     .rpt-section {
       margin: 3mm 0 1.5mm;
       padding: 1.5mm 0;
@@ -338,13 +348,21 @@ function shell(title: string, body: string) {
 export function buildKitchenReceiptHtml(data: KitchenReceiptData) {
   const partTag = data.ticketPart ? ` ${escapeHtml(data.ticketPart)}` : "";
   const lines = data.lines
-    .map(
-      (line) => `
+    .map((line) => {
+      const note = line.note?.trim();
+      return `
       <tr>
-        <td class="name">${escapeHtml(line.name)}</td>
+        <td class="name">
+          ${escapeHtml(line.name)}
+          ${
+            note
+              ? `<div class="note">${escapeHtml(note)}</div>`
+              : ""
+          }
+        </td>
         <td class="kitchen-qty">${line.qty}×</td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
 
   const voidBanner =

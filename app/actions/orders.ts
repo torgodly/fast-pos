@@ -238,6 +238,42 @@ export async function removeOrderItem(orderItemId: number) {
   return updateOrderItemQty(orderItemId, 0);
 }
 
+const MAX_ITEM_NOTE_LEN = 80;
+
+export async function updateOrderItemNote(
+  orderItemId: number,
+  note: string,
+) {
+  const session = await getSession();
+  if (!session || (session.role !== "waiter" && session.role !== "cashier")) {
+    return { error: "غير مصرح" };
+  }
+
+  const line = db
+    .select()
+    .from(orderItems)
+    .where(eq(orderItems.id, orderItemId))
+    .get();
+  if (!line) return { error: "البند غير موجود" };
+
+  const order = db.select().from(orders).where(eq(orders.id, line.orderId)).get();
+  if (!order || order.status !== "open") {
+    return { error: "غير مصرح" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
+  }
+
+  const trimmed = note.trim().slice(0, MAX_ITEM_NOTE_LEN);
+  db.update(orderItems)
+    .set({ note: trimmed || null })
+    .where(eq(orderItems.id, orderItemId))
+    .run();
+
+  revalidateOrderPaths(order.venueId as VenueId, order.id, session.role);
+  return { ok: true };
+}
+
 export async function cancelPrintedOrderItem(
   orderItemId: number,
   removeQty: number,
@@ -518,6 +554,7 @@ async function sendPendingKitchenTickets(options: {
     lineId: number;
     name: string;
     qty: number;
+    note: string | null;
     printerId: number;
     printerName: string;
     host: string;
@@ -565,6 +602,7 @@ async function sendPendingKitchenTickets(options: {
       lineId: line.id,
       name: line.itemName,
       qty,
+      note: line.note?.trim() || null,
       printerId: printer.id,
       printerName: printer.name,
       host: printer.host,
@@ -600,7 +638,11 @@ async function sendPendingKitchenTickets(options: {
       printerName: sample.printerName,
       host: sample.host,
     };
-    const itemLines = group.map((g) => ({ name: g.name, qty: g.qty }));
+    const itemLines = group.map((g) => ({
+      name: g.name,
+      qty: g.qty,
+      note: g.note,
+    }));
     const chunks = chunkKitchenLines(itemLines);
     try {
       for (let i = 0; i < chunks.length; i++) {
@@ -986,6 +1028,7 @@ export type QuickSaleLine = {
   name: string;
   unitPrice: number;
   qty: number;
+  note?: string | null;
 };
 
 export async function payQuickSale(
@@ -1062,6 +1105,8 @@ export async function payQuickSale(
         .get();
 
       for (const line of validLines) {
+        const cartLine = cart.find((c) => c.itemId === line.item.id);
+        const note = cartLine?.note?.trim().slice(0, 80) || null;
         db.insert(orderItems)
           .values({
             orderId: created.id,
@@ -1072,6 +1117,7 @@ export async function payQuickSale(
             qty: line.qty,
             lineTotal: line.item.price * line.qty,
             kitchenSentQty: 0,
+            note,
           })
           .run();
       }

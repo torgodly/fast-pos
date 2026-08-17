@@ -61,6 +61,7 @@ export default async function CashierShiftPage({
           zWindowEnd={status.zWindowEnd}
           canPrintZ={status.canPrintZ}
           canReprintZ={status.canReprintZ}
+          zAlreadyClosedThisWindow={status.zAlreadyClosedThisWindow}
           preview={{
             invoiceCount: preview.invoiceCount,
             totalSales: preview.totalSales,

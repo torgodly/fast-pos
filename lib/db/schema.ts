@@ -26,6 +26,10 @@ export const users = sqliteTable(
     isMainCashier: integer("is_main_cashier", { mode: "boolean" })
       .notNull()
       .default(false),
+    /** Waiter/cashier must set a personal PIN before using POS. */
+    mustChangePin: integer("must_change_pin", { mode: "boolean" })
+      .notNull()
+      .default(false),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at")
       .notNull()
@@ -160,6 +164,8 @@ export const orderItems = sqliteTable("order_items", {
   qty: integer("qty").notNull().default(1),
   lineTotal: real("line_total").notNull(),
   kitchenSentQty: integer("kitchen_sent_qty").notNull().default(0),
+  /** Prep note shown on kitchen tickets. */
+  note: text("note"),
 });
 
 export const cancelledItems = sqliteTable("cancelled_items", {

@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { MessageSquareText, Minus, Plus, Trash2 } from "lucide-react";
 import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
@@ -14,7 +14,99 @@ export type PosTicketLine = {
   kitchenSent?: number;
   canReduce?: boolean;
   canRemove?: boolean;
+  note?: string | null;
 };
+
+const MAX_NOTE_LEN = 80;
+
+function LineNoteEditor({
+  lineKey,
+  note,
+  pending,
+  compact,
+  onChangeNote,
+}: {
+  lineKey: string | number;
+  note?: string | null;
+  pending?: boolean;
+  compact?: boolean;
+  onChangeNote?: (key: string | number, note: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(note ?? "");
+
+  if (!onChangeNote) {
+    if (!note?.trim()) return null;
+    return (
+      <p
+        className={`mt-0.5 text-base-content/55 ${
+          compact ? "text-[10px] leading-3" : "text-xs leading-4"
+        }`}
+      >
+        {note}
+      </p>
+    );
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={`mt-0.5 flex max-w-full items-start gap-1 text-start disabled:opacity-40 ${
+          compact ? "text-[10px] leading-3" : "text-xs leading-4"
+        } ${
+          note?.trim()
+            ? "font-bold text-secondary"
+            : "font-bold text-base-content/40"
+        }`}
+        disabled={pending}
+        onClick={() => {
+          setDraft(note ?? "");
+          setEditing(true);
+        }}
+      >
+        <MessageSquareText
+          className={`mt-px shrink-0 ${compact ? "size-3" : "size-3.5"}`}
+        />
+        <span className="min-w-0 break-words">
+          {note?.trim() || "ملاحظة للمطبخ"}
+        </span>
+      </button>
+    );
+  }
+
+  function save() {
+    onChangeNote?.(lineKey, draft.trim().slice(0, MAX_NOTE_LEN));
+    setEditing(false);
+  }
+
+  return (
+    <div className="mt-1 flex flex-col gap-1">
+      <input
+        autoFocus
+        value={draft}
+        maxLength={MAX_NOTE_LEN}
+        disabled={pending}
+        placeholder="مثال: بدون بصل"
+        className={`input input-bordered input-xs w-full ${
+          compact ? "h-7 text-[11px]" : "h-8 text-xs"
+        }`}
+        onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            save();
+          }
+          if (event.key === "Escape") {
+            setEditing(false);
+            setDraft(note ?? "");
+          }
+        }}
+        onBlur={save}
+      />
+    </div>
+  );
+}
 
 export function PosTicketLines({
   lines,
@@ -23,6 +115,7 @@ export function PosTicketLines({
   compact = false,
   onChangeQty,
   onRemove,
+  onChangeNote,
 }: {
   lines: PosTicketLine[];
   pending?: boolean;
@@ -30,6 +123,7 @@ export function PosTicketLines({
   compact?: boolean;
   onChangeQty: (key: string | number, qty: number) => void;
   onRemove: (key: string | number) => void;
+  onChangeNote?: (key: string | number, note: string) => void;
 }) {
   if (lines.length === 0) {
     return (
@@ -51,14 +145,23 @@ export function PosTicketLines({
           return (
             <li key={line.key} className="border-b border-base-300/70 py-1.5">
               <div className="flex items-start justify-between gap-1">
-                <p className="min-w-0 text-[13px] font-black leading-4">
-                  {line.name}
-                  {kitchenSent > 0 ? (
-                    <span className="ms-1 text-[10px] font-bold text-warning">
-                      مطبخ {kitchenSent}
-                    </span>
-                  ) : null}
-                </p>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-black leading-4">
+                    {line.name}
+                    {kitchenSent > 0 ? (
+                      <span className="ms-1 text-[10px] font-bold text-warning">
+                        مطبخ {kitchenSent}
+                      </span>
+                    ) : null}
+                  </p>
+                  <LineNoteEditor
+                    lineKey={line.key}
+                    note={line.note}
+                    pending={pending}
+                    compact
+                    onChangeNote={onChangeNote}
+                  />
+                </div>
                 <p className="shrink-0 text-[12px] font-black tabular-nums text-primary">
                   {formatMoney(line.lineTotal)}
                 </p>
@@ -101,55 +204,60 @@ export function PosTicketLines({
           );
         }
         return (
-          <li
-            key={line.key}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1 py-1.5"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold leading-5">
-                {line.name}
-                {kitchenSent > 0 ? (
-                  <span className="ms-1 text-xs font-bold text-warning">
-                    مطبخ {kitchenSent}
-                  </span>
-                ) : null}
+          <li key={line.key} className="py-1.5">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold leading-5">
+                  {line.name}
+                  {kitchenSent > 0 ? (
+                    <span className="ms-1 text-xs font-bold text-warning">
+                      مطبخ {kitchenSent}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
+                <button
+                  type="button"
+                  className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
+                  disabled={pending || !canReduce}
+                  onClick={() => onChangeQty(line.key, line.qty - 1)}
+                  aria-label="تقليل"
+                >
+                  <Minus className="size-4" strokeWidth={2.5} />
+                </button>
+                <span className="min-w-8 px-0.5 text-center text-base font-black tabular-nums">
+                  {line.qty}
+                </span>
+                <button
+                  type="button"
+                  className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
+                  disabled={pending}
+                  onClick={() => onChangeQty(line.key, line.qty + 1)}
+                  aria-label="زيادة"
+                >
+                  <Plus className="size-4" strokeWidth={2.5} />
+                </button>
+              </div>
+              <p className="min-w-[4.75rem] shrink-0 whitespace-nowrap text-end text-sm font-black tabular-nums text-primary">
+                {formatMoney(line.lineTotal)}
               </p>
-            </div>
-            <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
               <button
                 type="button"
-                className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
-                disabled={pending || !canReduce}
-                onClick={() => onChangeQty(line.key, line.qty - 1)}
-                aria-label="تقليل"
+                className={`grid ${btn} place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20`}
+                disabled={pending || !canRemove}
+                onClick={() => onRemove(line.key)}
+                aria-label="حذف"
               >
-                <Minus className="size-4" strokeWidth={2.5} />
-              </button>
-              <span className="min-w-8 px-0.5 text-center text-base font-black tabular-nums">
-                {line.qty}
-              </span>
-              <button
-                type="button"
-                className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
-                disabled={pending}
-                onClick={() => onChangeQty(line.key, line.qty + 1)}
-                aria-label="زيادة"
-              >
-                <Plus className="size-4" strokeWidth={2.5} />
+                <Trash2 className="size-4" />
               </button>
             </div>
-            <p className="min-w-[4.75rem] shrink-0 whitespace-nowrap text-end text-sm font-black tabular-nums text-primary">
-              {formatMoney(line.lineTotal)}
-            </p>
-            <button
-              type="button"
-              className={`grid ${btn} place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20`}
-              disabled={pending || !canRemove}
-              onClick={() => onRemove(line.key)}
-              aria-label="حذف"
-            >
-              <Trash2 className="size-4" />
-            </button>
+            <LineNoteEditor
+              lineKey={line.key}
+              note={line.note}
+              pending={pending}
+              onChangeNote={onChangeNote}
+            />
           </li>
         );
       })}
@@ -168,6 +276,7 @@ export function PosTicketPanel({
   compact = false,
   onChangeQty,
   onRemove,
+  onChangeNote,
 }: {
   title?: string;
   itemCount: number;
@@ -179,6 +288,7 @@ export function PosTicketPanel({
   compact?: boolean;
   onChangeQty: (key: string | number, qty: number) => void;
   onRemove: (key: string | number) => void;
+  onChangeNote?: (key: string | number, note: string) => void;
 }) {
   const listRef = useDragScroll<HTMLDivElement>("y");
   return (
@@ -202,6 +312,7 @@ export function PosTicketPanel({
           compact={compact}
           onChangeQty={onChangeQty}
           onRemove={onRemove}
+          onChangeNote={onChangeNote}
         />
       </div>
       <div

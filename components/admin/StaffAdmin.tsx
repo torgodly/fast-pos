@@ -25,6 +25,7 @@ type StaffRow = {
   role: string;
   active: boolean;
   isMainCashier: boolean;
+  mustChangePin: boolean;
 };
 
 export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
@@ -108,7 +109,14 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
                             <UserRound className="mx-auto mt-2 size-4" />
                           </div>
                         </div>
-                        <span className="font-bold">{person.name}</span>
+                        <div>
+                          <span className="font-bold">{person.name}</span>
+                          {person.mustChangePin ? (
+                            <p className="text-[11px] font-bold text-warning">
+                              يجب تغيير الرمز
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                     <td>
@@ -211,12 +219,21 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
             </span>
             <input
               name="pin"
-              placeholder={editing ? "اتركه فارغاً للإبقاء على الرمز" : "4-6 أرقام"}
+              placeholder={
+                editing
+                  ? "اتركه فارغاً للإبقاء على الرمز"
+                  : "4-6 أرقام — مؤقت لأول دخول"
+              }
               className="input input-bordered w-full font-mono"
-              pattern={editing ? undefined : "\\d{4,6}"}
+              pattern="\\d{4,6}"
               required={!editing}
             />
           </label>
+          <p className="text-xs text-base-content/45">
+            {editing
+              ? "إن غيّرت الرمز هنا، يُطلب من الموظف تغييره عند دخوله التالي قبل العمل."
+              : "عيّن رمزاً مؤقتاً. عند أول دخول يجب على الموظف تغييره قبل العمل."}
+          </p>
           <label className="label cursor-pointer justify-start gap-3 rounded-xl border border-base-300/70 px-3 py-2.5">
             <input
               type="checkbox"

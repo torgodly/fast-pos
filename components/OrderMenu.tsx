@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import {
   addItemToOrder,
   removeOrderItem,
+  updateOrderItemNote,
   updateOrderItemQty,
 } from "@/app/actions/orders";
 import {
@@ -28,6 +29,7 @@ type Line = {
   unitPrice: number;
   lineTotal: number;
   kitchenSentQty?: number | null;
+  note?: string | null;
 };
 
 export type CancelledTicketLine = {
@@ -90,6 +92,7 @@ export function OrderMenu({
       lineTotal: line.lineTotal,
       unitPrice: line.unitPrice,
       kitchenSent,
+      note: line.note,
       canReduce: isMainCashier || line.qty > kitchenSent,
       canRemove: isMainCashier || kitchenSent === 0,
     };
@@ -134,6 +137,12 @@ export function OrderMenu({
     }
     startTransition(async () => {
       await removeOrderItem(Number(key));
+    });
+  }
+
+  function changeNote(key: string | number, note: string) {
+    startTransition(async () => {
+      await updateOrderItemNote(Number(key), note);
     });
   }
 
@@ -189,6 +198,7 @@ export function OrderMenu({
             compact
             onChangeQty={changeQty}
             onRemove={remove}
+            onChangeNote={changeNote}
             footer={ticketFooter}
           />
         </div>

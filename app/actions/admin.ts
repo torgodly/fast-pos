@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth/session";
+import {
+  hashStaffPin,
+  isPinTakenByOther,
+} from "@/lib/auth/pin";
 import { db } from "@/lib/db";
 import { applyPartialReset, type ResetOptions } from "@/lib/db/reset";
 
@@ -490,20 +494,10 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
     return { error: "رمز PIN يجب أن يكون من 4 إلى 6 أرقام" };
   }
 
-  if (pin) {
-    const others = db
-      .select()
-      .from(users)
-      .where(eq(users.active, true))
-      .all()
-      .filter((u) => u.id !== id && (u.role === "waiter" || u.role === "cashier"));
+  const staff = db.select().from(users).where(eq(users.active, true)).all();
 
-    const conflict = others.some(
-      (u) => u.pinHash && bcrypt.compareSync(pin, u.pinHash),
-    );
-    if (conflict) {
-      return { error: "رمز الدخول مستخدم من موظف آخر" };
-    }
+  if (pin && isPinTakenByOther(staff, pin, id)) {
+    return { error: "رمز الدخول مستخدم من موظف آخر" };
   }
 
   if (id) {
@@ -513,13 +507,17 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
       venueId: null;
       pinHash?: string;
       isMainCashier: boolean;
+      mustChangePin?: boolean;
     } = {
       name,
       role: role as "waiter" | "cashier",
       venueId: null,
       isMainCashier: role === "cashier" ? isMainCashier : false,
     };
-    if (pin) updates.pinHash = bcrypt.hashSync(pin, 10);
+    if (pin) {
+      updates.pinHash = hashStaffPin(pin);
+      updates.mustChangePin = true;
+    }
     db.update(users).set(updates).where(eq(users.id, id)).run();
   } else {
     db.insert(users)
@@ -527,8 +525,9 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
         name,
         role: role as "waiter" | "cashier",
         venueId: null,
-        pinHash: bcrypt.hashSync(pin, 10),
+        pinHash: hashStaffPin(pin),
         isMainCashier: role === "cashier" ? isMainCashier : false,
+        mustChangePin: true,
         active: true,
       })
       .run();
