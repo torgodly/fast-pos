@@ -71,8 +71,9 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="current-password"
+                dir="ltr"
                 pattern="[0-9]{4,6}"
-                className="input input-bordered w-full font-mono tracking-widest"
+                className="input input-bordered w-full text-left font-mono tracking-widest"
                 placeholder="الرمز المؤقت"
                 required
               />
@@ -84,8 +85,9 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="new-password"
+                dir="ltr"
                 pattern="[0-9]{4,6}"
-                className="input input-bordered w-full font-mono tracking-widest"
+                className="input input-bordered w-full text-left font-mono tracking-widest"
                 placeholder="4–6 أرقام"
                 required
               />
@@ -97,8 +99,9 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="new-password"
+                dir="ltr"
                 pattern="[0-9]{4,6}"
-                className="input input-bordered w-full font-mono tracking-widest"
+                className="input input-bordered w-full text-left font-mono tracking-widest"
                 placeholder="أعد إدخال الرمز"
                 required
               />

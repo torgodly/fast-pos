@@ -163,7 +163,10 @@ export function PinPad({
             أدخل الرمز المكوّن من 4 أرقام
           </p>
 
-          <div className="my-2 flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14">
+          <div
+            className="my-2 flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-base-300/70 bg-base-200/60 px-4 sm:min-h-14"
+            dir="ltr"
+          >
             {Array.from({ length: PIN_LENGTH }).map((_, i) => (
               <span
                 key={i}
@@ -185,7 +188,7 @@ export function PinPad({
             </div>
           )}
 
-          <div className="grid w-full grid-cols-3 gap-2">
+          <div className="grid w-full grid-cols-3 gap-2" dir="ltr">
             {keys.map((key) => {
               if (key === "clear") {
                 return (

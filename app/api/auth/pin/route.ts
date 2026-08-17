@@ -1,12 +1,6 @@
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { sessionCookieValue } from "@/lib/auth/cookie";
-import {
-  checkRateLimit,
-  clearAuthFailures,
-  clientRateLimitKey,
-  recordAuthFailure,
-} from "@/lib/auth/rate-limit";
 import { findStaffMatchingPin, isValidPinFormat } from "@/lib/auth/pin";
 import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
@@ -38,32 +32,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const rateKey = clientRateLimitKey(request, venueId);
-  const rate = checkRateLimit(rateKey);
-  if (!rate.ok) {
-    return NextResponse.json(
-      {
-        error: `محاولات كثيرة. حاول بعد ${rate.retryAfterSec} ثانية`,
-      },
-      {
-        status: 429,
-        headers: { "Retry-After": String(rate.retryAfterSec) },
-      },
-    );
-  }
-
   const staff = db.select().from(users).where(eq(users.active, true)).all();
   const matches = findStaffMatchingPin(staff, pin);
 
   if (matches.length === 0) {
-    const failure = recordAuthFailure(rateKey);
     return NextResponse.json(
-      {
-        error: failure.locked
-          ? `محاولات كثيرة. حاول بعد ${failure.retryAfterSec} ثانية`
-          : "رمز الدخول غير صحيح",
-      },
-      { status: failure.locked ? 429 : 401 },
+      { error: "رمز الدخول غير صحيح" },
+      { status: 401 },
     );
   }
 
@@ -85,18 +60,11 @@ export async function POST(request: Request) {
       : matches[0];
 
   if (!match) {
-    const failure = recordAuthFailure(rateKey);
     return NextResponse.json(
-      {
-        error: failure.locked
-          ? `محاولات كثيرة. حاول بعد ${failure.retryAfterSec} ثانية`
-          : "رمز الدخول غير صحيح",
-      },
-      { status: failure.locked ? 429 : 401 },
+      { error: "رمز الدخول غير صحيح" },
+      { status: 401 },
     );
   }
-
-  clearAuthFailures(rateKey);
 
   const token = await signSessionToken({
     userId: match.id,

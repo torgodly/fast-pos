@@ -219,20 +219,23 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
             </span>
             <input
               name="pin"
+              inputMode="numeric"
+              autoComplete="off"
+              dir="ltr"
               placeholder={
                 editing
                   ? "اتركه فارغاً للإبقاء على الرمز"
                   : "4-6 أرقام — مؤقت لأول دخول"
               }
-              className="input input-bordered w-full font-mono"
+              className="input input-bordered w-full text-left font-mono tracking-widest"
               pattern="[0-9]{4,6}"
               required={!editing}
             />
           </label>
           <p className="text-xs text-base-content/45">
             {editing
-              ? "إن غيّرت الرمز هنا، يُطلب من الموظف تغييره عند دخوله التالي قبل العمل."
-              : "عيّن رمزاً مؤقتاً من 4 إلى 6 أرقام (مثل 8888). عند أول دخول يجب على الموظف تغييره قبل العمل."}
+              ? "إن غيّرت الرمز هنا، يُطلب من الموظف تغييره عند دخوله التالي قبل العمل. الأرقام تُكتب من اليسار لليمين."
+              : "عيّن رمزاً مؤقتاً من 4 إلى 6 أرقام (مثل 8888) — يُكتب من اليسار لليمين. عند أول دخول يجب على الموظف تغييره قبل العمل."}
           </p>
           <label className="label cursor-pointer justify-start gap-3 rounded-xl border border-base-300/70 px-3 py-2.5">
             <input
