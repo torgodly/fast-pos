@@ -19,6 +19,19 @@ export function ChangePinForm({
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const currentPin = String(formData.get("currentPin") ?? "").trim();
+    const newPin = String(formData.get("newPin") ?? "").trim();
+    const confirmPin = String(formData.get("confirmPin") ?? "").trim();
+
+    if (newPin === currentPin) {
+      setError("الرمز الجديد لا يمكن أن يكون نفس الرمز القديم");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      setError("تأكيد الرمز غير مطابق");
+      return;
+    }
+
     startTransition(async () => {
       setError(null);
       const result = await changeStaffPin(formData);
@@ -41,9 +54,12 @@ export function ChangePinForm({
           <div>
             <h1 className="text-xl font-black sm:text-2xl">تغيير رمز الدخول</h1>
             <p className="mt-1 text-sm text-base-content/55">
-              مرحباً {staffName} — يجب تعيين رمز شخصي جديد قبل بدء العمل، ولا
-              يمكن أن يكون نفس الرمز الحالي.
+              مرحباً {staffName} — عيّن رمزاً شخصياً جديداً قبل العمل.
             </p>
+            <ul className="mt-2 list-disc space-y-1 pe-5 text-xs font-bold text-base-content/55">
+              <li>لا يمكن أن يكون نفس الرمز القديم</li>
+              <li>لا يمكن أن يكون مستخدماً من أي موظف آخر</li>
+            </ul>
           </div>
 
           <form onSubmit={submit} className="space-y-3">
@@ -55,7 +71,7 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="current-password"
-                pattern="\d{4,6}"
+                pattern="[0-9]{4,6}"
                 className="input input-bordered w-full font-mono tracking-widest"
                 placeholder="الرمز المؤقت"
                 required
@@ -68,7 +84,7 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="new-password"
-                pattern="\d{4,6}"
+                pattern="[0-9]{4,6}"
                 className="input input-bordered w-full font-mono tracking-widest"
                 placeholder="4–6 أرقام"
                 required
@@ -81,7 +97,7 @@ export function ChangePinForm({
                 type="password"
                 inputMode="numeric"
                 autoComplete="new-password"
-                pattern="\d{4,6}"
+                pattern="[0-9]{4,6}"
                 className="input input-bordered w-full font-mono tracking-widest"
                 placeholder="أعد إدخال الرمز"
                 required

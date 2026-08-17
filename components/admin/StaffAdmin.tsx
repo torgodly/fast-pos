@@ -225,14 +225,14 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
                   : "4-6 أرقام — مؤقت لأول دخول"
               }
               className="input input-bordered w-full font-mono"
-              pattern="\\d{4,6}"
+              pattern="[0-9]{4,6}"
               required={!editing}
             />
           </label>
           <p className="text-xs text-base-content/45">
             {editing
               ? "إن غيّرت الرمز هنا، يُطلب من الموظف تغييره عند دخوله التالي قبل العمل."
-              : "عيّن رمزاً مؤقتاً. عند أول دخول يجب على الموظف تغييره قبل العمل."}
+              : "عيّن رمزاً مؤقتاً من 4 إلى 6 أرقام (مثل 8888). عند أول دخول يجب على الموظف تغييره قبل العمل."}
           </p>
           <label className="label cursor-pointer justify-start gap-3 rounded-xl border border-base-300/70 px-3 py-2.5">
             <input

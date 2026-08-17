@@ -43,7 +43,7 @@ export function matchStaffByPin(
   return findStaffMatchingPin(staff, pin)[0] ?? null;
 }
 
-/** True if another active waiter/cashier already uses this PIN. */
+/** True if another waiter/cashier (active or not) already uses this PIN. */
 export function isPinTakenByOther(
   staff: StaffForPin[],
   pin: string,
@@ -53,7 +53,6 @@ export function isPinTakenByOther(
 
   return staff.some((user) => {
     if (excludeUserId != null && user.id === excludeUserId) return false;
-    if (!user.active) return false;
     if (user.role !== "waiter" && user.role !== "cashier") return false;
     if (!user.pinHash) return false;
     return bcrypt.compareSync(pin, user.pinHash);

@@ -494,10 +494,10 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
     return { error: "رمز PIN يجب أن يكون من 4 إلى 6 أرقام" };
   }
 
-  const staff = db.select().from(users).where(eq(users.active, true)).all();
+  const staff = db.select().from(users).all();
 
   if (pin && isPinTakenByOther(staff, pin, id)) {
-    return { error: "رمز الدخول مستخدم من موظف آخر" };
+    return { error: "رمز الدخول مستخدم من موظف آخر — اختر رمزاً مختلفاً" };
   }
 
   if (id) {

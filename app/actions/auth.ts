@@ -94,7 +94,7 @@ export async function changeStaffPin(formData: FormData): Promise<
     return { error: "تأكيد الرمز غير مطابق" };
   }
   if (newPin === currentPin) {
-    return { error: "الرمز الجديد يجب أن يختلف عن الرمز الحالي" };
+    return { error: "الرمز الجديد لا يمكن أن يكون نفس الرمز القديم" };
   }
 
   const user = db.select().from(users).where(eq(users.id, session.userId)).get();
@@ -104,13 +104,16 @@ export async function changeStaffPin(formData: FormData): Promise<
   if (!bcrypt.compareSync(currentPin, user.pinHash)) {
     return { error: "الرمز الحالي غير صحيح" };
   }
+  // Same as stored hash (covers mistyped "current" matching old via other paths)
   if (bcrypt.compareSync(newPin, user.pinHash)) {
-    return { error: "الرمز الجديد يجب أن يختلف عن الرمز الحالي" };
+    return { error: "الرمز الجديد لا يمكن أن يكون نفس الرمز القديم" };
   }
 
-  const staff = db.select().from(users).where(eq(users.active, true)).all();
+  const staff = db.select().from(users).all();
   if (isPinTakenByOther(staff, newPin, session.userId)) {
-    return { error: "رمز الدخول مستخدم من موظف آخر" };
+    return {
+      error: "الرمز الجديد مستخدم من موظف آخر — اختر رمزاً مختلفاً",
+    };
   }
 
   db.update(users)
