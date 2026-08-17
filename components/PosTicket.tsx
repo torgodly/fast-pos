@@ -2,6 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import { MessageSquareText, Minus, Plus, Trash2 } from "lucide-react";
+import {
+  KitchenNoteDialog,
+  type KitchenNoteTarget,
+} from "@/components/KitchenNoteDialog";
 import { useDragScroll } from "@/components/useDragScroll";
 import { formatMoney } from "@/lib/venues";
 
@@ -16,97 +20,6 @@ export type PosTicketLine = {
   canRemove?: boolean;
   note?: string | null;
 };
-
-const MAX_NOTE_LEN = 80;
-
-function LineNoteEditor({
-  lineKey,
-  note,
-  pending,
-  compact,
-  onChangeNote,
-}: {
-  lineKey: string | number;
-  note?: string | null;
-  pending?: boolean;
-  compact?: boolean;
-  onChangeNote?: (key: string | number, note: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(note ?? "");
-
-  if (!onChangeNote) {
-    if (!note?.trim()) return null;
-    return (
-      <p
-        className={`mt-0.5 text-base-content/55 ${
-          compact ? "text-[10px] leading-3" : "text-xs leading-4"
-        }`}
-      >
-        {note}
-      </p>
-    );
-  }
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        className={`mt-0.5 flex max-w-full items-start gap-1 text-start disabled:opacity-40 ${
-          compact ? "text-[10px] leading-3" : "text-xs leading-4"
-        } ${
-          note?.trim()
-            ? "font-bold text-secondary"
-            : "font-bold text-base-content/40"
-        }`}
-        disabled={pending}
-        onClick={() => {
-          setDraft(note ?? "");
-          setEditing(true);
-        }}
-      >
-        <MessageSquareText
-          className={`mt-px shrink-0 ${compact ? "size-3" : "size-3.5"}`}
-        />
-        <span className="min-w-0 break-words">
-          {note?.trim() || "ملاحظة للمطبخ"}
-        </span>
-      </button>
-    );
-  }
-
-  function save() {
-    onChangeNote?.(lineKey, draft.trim().slice(0, MAX_NOTE_LEN));
-    setEditing(false);
-  }
-
-  return (
-    <div className="mt-1 flex flex-col gap-1">
-      <input
-        autoFocus
-        value={draft}
-        maxLength={MAX_NOTE_LEN}
-        disabled={pending}
-        placeholder="مثال: بدون بصل"
-        className={`input input-bordered input-xs w-full ${
-          compact ? "h-7 text-[11px]" : "h-8 text-xs"
-        }`}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            save();
-          }
-          if (event.key === "Escape") {
-            setEditing(false);
-            setDraft(note ?? "");
-          }
-        }}
-        onBlur={save}
-      />
-    </div>
-  );
-}
 
 export function PosTicketLines({
   lines,
@@ -125,6 +38,8 @@ export function PosTicketLines({
   onRemove: (key: string | number) => void;
   onChangeNote?: (key: string | number, note: string) => void;
 }) {
+  const [noteTarget, setNoteTarget] = useState<KitchenNoteTarget | null>(null);
+
   if (lines.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-base-content/40">
@@ -136,17 +51,26 @@ export function PosTicketLines({
   const btn = compact ? "size-8" : "size-10";
 
   return (
-    <ul className="divide-y divide-base-300/60">
-      {lines.map((line) => {
-        const kitchenSent = line.kitchenSent ?? 0;
-        const canReduce = line.canReduce ?? line.qty > kitchenSent;
-        const canRemove = line.canRemove ?? kitchenSent === 0;
-        if (compact) {
+    <>
+      <ul className="divide-y divide-base-300/60">
+        {lines.map((line) => {
+          const kitchenSent = line.kitchenSent ?? 0;
+          const canReduce = line.canReduce ?? line.qty > kitchenSent;
+          const canRemove = line.canRemove ?? kitchenSent === 0;
+          const hasNote = Boolean(line.note?.trim());
+
           return (
-            <li key={line.key} className="border-b border-base-300/70 py-1.5">
-              <div className="flex items-start justify-between gap-1">
-                <div className="min-w-0">
-                  <p className="text-[13px] font-black leading-4">
+            <li
+              key={line.key}
+              className={`border-b border-base-300/70 ${compact ? "py-2" : "py-2.5"}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`font-black leading-5 ${
+                      compact ? "text-[13px]" : "text-sm"
+                    }`}
+                  >
                     {line.name}
                     {kitchenSent > 0 ? (
                       <span className="ms-1 text-[10px] font-bold text-warning">
@@ -154,114 +78,108 @@ export function PosTicketLines({
                       </span>
                     ) : null}
                   </p>
-                  <LineNoteEditor
-                    lineKey={line.key}
-                    note={line.note}
-                    pending={pending}
-                    compact
-                    onChangeNote={onChangeNote}
-                  />
+                  {hasNote ? (
+                    <p
+                      className={`mt-1 rounded-lg bg-secondary/10 px-2 py-1 font-bold text-secondary ${
+                        compact ? "text-[11px] leading-4" : "text-xs leading-5"
+                      }`}
+                    >
+                      ملاحظة: {line.note}
+                    </p>
+                  ) : null}
                 </div>
-                <p className="shrink-0 text-[12px] font-black tabular-nums text-primary">
+                <p
+                  className={`shrink-0 font-black tabular-nums text-primary ${
+                    compact ? "text-[12px]" : "text-sm"
+                  }`}
+                >
                   {formatMoney(line.lineTotal)}
                 </p>
               </div>
-              <div className="mt-1 flex items-center justify-between">
-                <div className="inline-flex items-center overflow-hidden rounded-md border border-base-300">
+
+              <div className="mt-2 flex items-center gap-1.5">
+                <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
                   <button
                     type="button"
-                    className="grid size-7 place-items-center disabled:opacity-30"
+                    className={`grid place-items-center disabled:opacity-30 ${
+                      compact ? "size-8" : btn
+                    }`}
                     disabled={pending || !canReduce}
                     onClick={() => onChangeQty(line.key, line.qty - 1)}
                     aria-label="تقليل"
                   >
-                    <Minus className="size-3.5" strokeWidth={2.5} />
+                    <Minus className="size-4" strokeWidth={2.5} />
                   </button>
-                  <span className="min-w-6 text-center text-sm font-black tabular-nums">
+                  <span
+                    className={`min-w-7 text-center font-black tabular-nums ${
+                      compact ? "text-sm" : "text-base"
+                    }`}
+                  >
                     {line.qty}
                   </span>
                   <button
                     type="button"
-                    className="grid size-7 place-items-center disabled:opacity-30"
+                    className={`grid place-items-center disabled:opacity-30 ${
+                      compact ? "size-8" : btn
+                    }`}
                     disabled={pending}
                     onClick={() => onChangeQty(line.key, line.qty + 1)}
                     aria-label="زيادة"
                   >
-                    <Plus className="size-3.5" strokeWidth={2.5} />
+                    <Plus className="size-4" strokeWidth={2.5} />
                   </button>
                 </div>
+
+                {onChangeNote ? (
+                  <button
+                    type="button"
+                    className={`btn btn-sm h-8 min-h-8 flex-1 gap-1.5 rounded-lg px-2 ${
+                      hasNote
+                        ? "btn-secondary"
+                        : "btn-ghost border border-base-300"
+                    }`}
+                    disabled={pending}
+                    onClick={() =>
+                      setNoteTarget({
+                        key: line.key,
+                        name: line.name,
+                        note: line.note,
+                      })
+                    }
+                  >
+                    <MessageSquareText className="size-3.5 shrink-0" />
+                    <span className="truncate text-xs font-black">
+                      {hasNote ? "تعديل ملاحظة" : "ملاحظة مطبخ"}
+                    </span>
+                  </button>
+                ) : null}
+
                 <button
                   type="button"
-                  className="grid size-7 place-items-center rounded-md text-error disabled:opacity-20"
+                  className={`grid place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20 ${
+                    compact ? "size-8" : btn
+                  }`}
                   disabled={pending || !canRemove}
                   onClick={() => onRemove(line.key)}
                   aria-label="حذف"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-4" />
                 </button>
               </div>
             </li>
           );
-        }
-        return (
-          <li key={line.key} className="py-1.5">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-1">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-bold leading-5">
-                  {line.name}
-                  {kitchenSent > 0 ? (
-                    <span className="ms-1 text-xs font-bold text-warning">
-                      مطبخ {kitchenSent}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-              <div className="inline-flex items-center overflow-hidden rounded-lg border border-base-300">
-                <button
-                  type="button"
-                  className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
-                  disabled={pending || !canReduce}
-                  onClick={() => onChangeQty(line.key, line.qty - 1)}
-                  aria-label="تقليل"
-                >
-                  <Minus className="size-4" strokeWidth={2.5} />
-                </button>
-                <span className="min-w-8 px-0.5 text-center text-base font-black tabular-nums">
-                  {line.qty}
-                </span>
-                <button
-                  type="button"
-                  className={`grid ${btn} place-items-center text-base-content/70 disabled:opacity-30`}
-                  disabled={pending}
-                  onClick={() => onChangeQty(line.key, line.qty + 1)}
-                  aria-label="زيادة"
-                >
-                  <Plus className="size-4" strokeWidth={2.5} />
-                </button>
-              </div>
-              <p className="min-w-[4.75rem] shrink-0 whitespace-nowrap text-end text-sm font-black tabular-nums text-primary">
-                {formatMoney(line.lineTotal)}
-              </p>
-              <button
-                type="button"
-                className={`grid ${btn} place-items-center rounded-lg text-error hover:bg-error/10 disabled:opacity-20`}
-                disabled={pending || !canRemove}
-                onClick={() => onRemove(line.key)}
-                aria-label="حذف"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-            <LineNoteEditor
-              lineKey={line.key}
-              note={line.note}
-              pending={pending}
-              onChangeNote={onChangeNote}
-            />
-          </li>
-        );
-      })}
-    </ul>
+        })}
+      </ul>
+
+      {onChangeNote ? (
+        <KitchenNoteDialog
+          target={noteTarget}
+          pending={pending}
+          onClose={() => setNoteTarget(null)}
+          onSave={onChangeNote}
+        />
+      ) : null}
+    </>
   );
 }
 
