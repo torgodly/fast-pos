@@ -29,21 +29,11 @@ export async function requireAdmin() {
   return session;
 }
 
-function redirectIfMustChangePin(
-  session: { mustChangePin: boolean },
-  venueId: string,
-) {
-  if (session.mustChangePin) {
-    redirect(`/pin/${venueId}/change-pin`);
-  }
-}
-
 export async function requireWaiter(venueId: string) {
   const session = await getSession();
   if (!session || session.role !== "waiter") {
     redirect(`/pin/${venueId}`);
   }
-  redirectIfMustChangePin(session, venueId);
   return session;
 }
 
@@ -52,7 +42,6 @@ export async function requireCashier(venueId: string) {
   if (!session || session.role !== "cashier") {
     redirect(`/pin/${venueId}`);
   }
-  redirectIfMustChangePin(session, venueId);
   return session;
 }
 
@@ -124,7 +113,6 @@ export async function changeStaffPin(formData: FormData): Promise<
   db.update(users)
     .set({
       pinHash: hashStaffPin(newPin),
-      mustChangePin: false,
     })
     .where(eq(users.id, session.userId))
     .run();

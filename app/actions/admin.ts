@@ -482,6 +482,9 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
   const name = String(formData.get("name") ?? "").trim();
   const role = String(formData.get("role") ?? "");
   const pin = normalizePinDigits(String(formData.get("pin") ?? ""));
+  const pinConfirm = normalizePinDigits(
+    String(formData.get("pinConfirm") ?? ""),
+  );
   const isMainCashier =
     role === "cashier" && formData.get("isMainCashier") === "on";
 
@@ -494,6 +497,12 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
   }
   if (pin && !isValidPinFormat(pin)) {
     return { error: "رمز PIN يجب أن يكون من 4 إلى 6 أرقام" };
+  }
+  if (pin && pin !== pinConfirm) {
+    return { error: "تأكيد الرمز غير مطابق — أعد إدخال نفس الأرقام" };
+  }
+  if (!pin && pinConfirm) {
+    return { error: "أدخل الرمز الجديد ثم أكّده" };
   }
 
   const staff = db.select().from(users).all();
@@ -509,30 +518,44 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
       venueId: null;
       pinHash?: string;
       isMainCashier: boolean;
-      mustChangePin?: boolean;
+      mustChangePin: boolean;
     } = {
       name,
       role: role as "waiter" | "cashier",
       venueId: null,
       isMainCashier: role === "cashier" ? isMainCashier : false,
+      mustChangePin: false,
     };
     if (pin) {
       updates.pinHash = hashStaffPin(pin);
-      updates.mustChangePin = true;
     }
     db.update(users).set(updates).where(eq(users.id, id)).run();
+
+    // Verify the PIN we just stored actually matches (guards hash/save bugs).
+    if (pin) {
+      const saved = db.select().from(users).where(eq(users.id, id)).get();
+      if (!saved?.pinHash || !bcrypt.compareSync(pin, saved.pinHash)) {
+        return { error: "فشل حفظ الرمز — أعد المحاولة" };
+      }
+    }
   } else {
-    db.insert(users)
+    const inserted = db
+      .insert(users)
       .values({
         name,
         role: role as "waiter" | "cashier",
         venueId: null,
         pinHash: hashStaffPin(pin),
         isMainCashier: role === "cashier" ? isMainCashier : false,
-        mustChangePin: true,
+        mustChangePin: false,
         active: true,
       })
-      .run();
+      .returning({ id: users.id, pinHash: users.pinHash })
+      .get();
+
+    if (!inserted?.pinHash || !bcrypt.compareSync(pin, inserted.pinHash)) {
+      return { error: "فشل حفظ الرمز — أعد المحاولة" };
+    }
   }
 
   revalidatePath("/admin/staff");

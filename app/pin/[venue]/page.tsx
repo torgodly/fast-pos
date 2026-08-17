@@ -17,13 +17,6 @@ export default async function PinPage({
   if (session?.role === "admin") {
     redirect("/admin");
   }
-  if (
-    session &&
-    (session.role === "waiter" || session.role === "cashier") &&
-    session.mustChangePin
-  ) {
-    redirect(`/pin/${venue}/change-pin`);
-  }
   if (session?.role === "waiter") {
     redirect(`/waiter/${venue}`);
   }

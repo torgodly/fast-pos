@@ -73,15 +73,8 @@ export async function POST(request: Request) {
     venueId,
   });
 
-  const mustChangePin = Boolean(
-    staff.find((u) => u.id === match.id)?.mustChangePin,
-  );
-
-  const redirectTo = mustChangePin
-    ? `/pin/${venueId}/change-pin`
-    : match.role === "waiter"
-      ? `/waiter/${venueId}`
-      : `/cashier/${venueId}`;
+  const redirectTo =
+    match.role === "waiter" ? `/waiter/${venueId}` : `/cashier/${venueId}`;
 
   const response = NextResponse.json({ ok: true, redirectTo });
   const session = sessionCookieValue(token);

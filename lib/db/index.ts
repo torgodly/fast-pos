@@ -443,30 +443,24 @@ function ensureSchema(sqlite: Database.Database) {
     // column already exists
   }
 
-  // One-time: force every existing waiter/cashier to set a new personal PIN.
+  // Clear any leftover "must change PIN" flags — force-change flow removed.
   try {
-    const flag = sqlite
-      .prepare(
-        `SELECT value FROM app_settings WHERE key = ?`,
-      )
-      .get("force_staff_pin_change_v1") as { value: string } | undefined;
-    if (!flag?.value) {
+    const clearFlag = sqlite
+      .prepare(`SELECT value FROM app_settings WHERE key = ?`)
+      .get("clear_must_change_pin_v1") as { value: string } | undefined;
+    if (!clearFlag?.value) {
       sqlite
-        .prepare(
-          `UPDATE users
-           SET must_change_pin = 1
-           WHERE role IN ('waiter', 'cashier')`,
-        )
+        .prepare(`UPDATE users SET must_change_pin = 0`)
         .run();
       sqlite
         .prepare(
           `INSERT INTO app_settings (key, value) VALUES (?, ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         )
-        .run("force_staff_pin_change_v1", "1");
+        .run("clear_must_change_pin_v1", "1");
     }
   } catch {
-    // best-effort — app_settings may not exist yet on very early boot
+    // best-effort
   }
 
   // Ghost quick-sale invoices: kitchen abort deleted lines but order stayed

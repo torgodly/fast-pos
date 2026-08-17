@@ -64,8 +64,8 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
         // Keep confirmation in Arabic UI without exposing in URL.
         window.alert(
           editing
-            ? `تم تحديث الرمز إلى: ${pin}\nيسجّل الموظف بهذا الرمز ثم يغيّره عند الطلب.`
-            : `تم إنشاء الموظف بالرمز: ${pin}\nيسجّل بهذا الرمز ثم يغيّره عند أول دخول.`,
+            ? `تم تحديث الرمز إلى: ${pin}\nجرّب الدخول الآن بهذا الرمز ثم اضغط «دخول».`
+            : `تم إنشاء الموظف بالرمز: ${pin}\nيسجّل بهذا الرمز ثم اضغط «دخول».`,
         );
       }
     });
@@ -120,11 +120,6 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
                         </div>
                         <div>
                           <span className="font-bold">{person.name}</span>
-                          {person.mustChangePin ? (
-                            <p className="text-[11px] font-bold text-warning">
-                              يجب تغيير الرمز
-                            </p>
-                          ) : null}
                         </div>
                       </div>
                     </td>
@@ -233,22 +228,34 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
             <input
               name="pin"
               inputMode="numeric"
-              autoComplete="off"
+              autoComplete="new-password"
               dir="ltr"
               placeholder={
                 editing
                   ? "اتركه فارغاً للإبقاء على الرمز"
-                  : "4-6 أرقام — مؤقت لأول دخول"
+                  : "4-6 أرقام من اليسار لليمين"
               }
               className="input input-bordered w-full text-left font-mono tracking-widest"
               pattern="[0-9]{4,6}"
               required={!editing}
             />
           </label>
+          <label className="form-control w-full">
+            <span className="label-text mb-2 font-bold">تأكيد رمز PIN</span>
+            <input
+              name="pinConfirm"
+              inputMode="numeric"
+              autoComplete="new-password"
+              dir="ltr"
+              placeholder="أعد إدخال نفس الرمز"
+              className="input input-bordered w-full text-left font-mono tracking-widest"
+              pattern="[0-9]{4,6}"
+              required={!editing}
+            />
+          </label>
           <p className="text-xs text-base-content/45">
-            {editing
-              ? "إن غيّرت الرمز هنا، يُطلب من الموظف تغييره عند دخوله التالي قبل العمل. الأرقام تُكتب من اليسار لليمين."
-              : "عيّن رمزاً مؤقتاً من 4 إلى 6 أرقام (مثل 8888) — يُكتب من اليسار لليمين. عند أول دخول يجب على الموظف تغييره قبل العمل."}
+            عند التعديل: املأ الرمز + التأكيد معاً لتغييره. الأرقام تُكتب من
+            اليسار لليمين (مثال: 1234).
           </p>
           <label className="label cursor-pointer justify-start gap-3 rounded-xl border border-base-300/70 px-3 py-2.5">
             <input

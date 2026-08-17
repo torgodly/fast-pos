@@ -101,7 +101,7 @@ describe("PinPad", () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       json: async () => ({
         ok: true,
-        redirectTo: "/pin/cafe/change-pin",
+        redirectTo: "/cashier/cafe",
       }),
     } as Response);
 
@@ -117,7 +117,7 @@ describe("PinPad", () => {
     });
 
     await waitFor(() => {
-      expect(window.location.href).toBe("/pin/cafe/change-pin");
+      expect(window.location.href).toBe("/cashier/cafe");
     });
   });
 });
