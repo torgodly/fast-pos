@@ -2,13 +2,19 @@ import net from "net";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const WRITE_CHUNK_BYTES = 4096;
-const CONNECT_SETTLE_MS = 80;
-const POST_END_GRACE_MS = 60;
-const RETRY_DELAY_MS = 250;
+const CONNECT_SETTLE_MS = 120;
+const POST_END_GRACE_MS = 100;
+const AFTER_WAKE_MS = 200;
+const RETRY_DELAY_MS = 300;
 const MAX_ATTEMPTS = 3;
 
-/** ESC @ — re-init printer (same wake-up effect as a quick nc probe). */
-const WAKE_BYTES = Buffer.from([0x1b, 0x40, 0x0a, 0x0a]);
+/**
+ * Same idea as a quick `nc` open+write on :9100.
+ * Visible test text is omitted so wake does not waste paper; ESC @ + LF is enough.
+ * Cheap ESC/POS units often accept TCP (UI shows success) while asleep and ignore
+ * the job until a short raw connection wakes them. Ping can still succeed.
+ */
+const WAKE_BYTES = Buffer.from([0x0a, 0x0a, 0x1b, 0x40, 0x0a, 0x0a]);
 
 function timeoutForPayload(byteLength: number) {
   return DEFAULT_TIMEOUT_MS + Math.ceil(byteLength / WRITE_CHUNK_BYTES) * 1500;
@@ -60,24 +66,27 @@ function writeBuffer(socket: net.Socket, buffer: Buffer): Promise<void> {
 
 function endSocket(socket: net.Socket): Promise<void> {
   return new Promise((resolve) => {
-    socket.end(() => resolve());
-    // Some firmwares never ACK FIN cleanly — don't hang forever.
-    setTimeout(resolve, 1500);
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    socket.end(finish);
+    setTimeout(finish, 1500);
   });
 }
 
-async function printOnce({
+async function sendRaw({
   host,
   port,
   buffer,
   timeoutMs,
-  wakeFirst,
 }: {
   host: string;
   port: number;
   buffer: Buffer;
   timeoutMs: number;
-  wakeFirst: boolean;
 }): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const socket = new net.Socket();
@@ -88,7 +97,7 @@ async function printOnce({
       settled = true;
       try {
         socket.removeAllListeners();
-        socket.destroy();
+        if (!socket.destroyed) socket.destroy();
       } catch {
         // ignore
       }
@@ -98,7 +107,7 @@ async function printOnce({
 
     socket.setTimeout(timeoutMs);
     socket.setNoDelay(true);
-    socket.setKeepAlive(true, 1000);
+    socket.setKeepAlive(false);
 
     socket.once("timeout", () => {
       finish(
@@ -117,12 +126,7 @@ async function printOnce({
     socket.once("connect", () => {
       void (async () => {
         try {
-          // Give sleepy thermal printers a moment after TCP accept.
           await sleep(CONNECT_SETTLE_MS);
-          if (wakeFirst) {
-            await writeBuffer(socket, WAKE_BYTES);
-            await sleep(CONNECT_SETTLE_MS);
-          }
           await writeBuffer(socket, buffer);
           await endSocket(socket);
           await sleep(POST_END_GRACE_MS);
@@ -149,6 +153,17 @@ async function printOnce({
   });
 }
 
+/** Dedicated short connection — mirrors the manual `nc` wake that fixes idle printers. */
+async function wakePrinter(host: string, port: number): Promise<void> {
+  await sendRaw({
+    host,
+    port,
+    buffer: WAKE_BYTES,
+    timeoutMs: 5_000,
+  });
+  await sleep(AFTER_WAKE_MS);
+}
+
 export async function printToPrinter({
   host,
   port,
@@ -165,20 +180,28 @@ export async function printToPrinter({
     throw new Error("عنوان الطابعة غير صالح");
   }
 
-  const buffer = Buffer.from(data);
+  const job = Buffer.from(data);
+  // Prepend ESC @ so the real job also re-inits after wake.
+  const buffer = Buffer.concat([Buffer.from([0x1b, 0x40, 0x0a]), job]);
   const effectiveTimeout = timeoutMs ?? timeoutForPayload(buffer.length);
 
   let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      await printOnce({
+      // Always wake first: ping can work while port 9100 is "asleep"
+      // and Node still gets TCP write success with no paper out.
+      try {
+        await wakePrinter(cleanedHost, port);
+      } catch {
+        // Fall through — main job may still succeed if printer just woke.
+      }
+
+      await sendRaw({
         host: cleanedHost,
         port,
         buffer,
         timeoutMs: effectiveTimeout,
-        // First try: send job as-is. Retries: wake probe (like your nc test).
-        wakeFirst: attempt > 1,
       });
       return;
     } catch (error) {
