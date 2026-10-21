@@ -5,30 +5,45 @@ import { restorePrinterTextMode } from "./encoding";
 
 const MAX_WIDTH = 384;
 const PRINT_MAX_WIDTH = 320;
-const LOGO_PATH = path.join(process.cwd(), "public", "receipt-logo.png");
+const LOGO_PATHS = [
+  path.join(process.cwd(), "data", "receipt-logo.png"),
+  path.join(process.cwd(), "public", "receipt-logo.png"),
+];
 
 let cachedLogo: Uint8Array | null | undefined;
 let cachedPrintDataUrl: string | null | undefined;
+let cachedEscPosLogoKey: string | undefined;
+let cachedPrintLogoKey: string | undefined;
+
+function getLogoCacheKey(): string {
+  for (const logoPath of LOGO_PATHS) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ logoPath)) continue;
+    const stats = fs.statSync(/*turbopackIgnore: true*/ logoPath);
+    return `${logoPath}:${stats.mtimeMs}:${stats.size}`;
+  }
+  return "missing";
+}
 
 function readLogoPixels(): PNG | null {
-  if (!fs.existsSync(LOGO_PATH)) return null;
-
-  const buffer = fs.readFileSync(LOGO_PATH);
-  if (buffer.length < 8) return null;
-
-  const isPng =
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47;
-
-  if (!isPng) return null;
-
-  try {
-    return PNG.sync.read(buffer);
-  } catch {
-    return null;
+  for (const logoPath of LOGO_PATHS) {
+    if (!fs.existsSync(/*turbopackIgnore: true*/ logoPath)) continue;
+    const buffer = fs.readFileSync(/*turbopackIgnore: true*/ logoPath);
+    if (
+      buffer.length < 8 ||
+      buffer[0] !== 0x89 ||
+      buffer[1] !== 0x50 ||
+      buffer[2] !== 0x4e ||
+      buffer[3] !== 0x47
+    ) {
+      continue;
+    }
+    try {
+      return PNG.sync.read(buffer);
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 function lumAt(png: PNG, x: number, y: number) {
@@ -77,10 +92,16 @@ function isInkPixel(
 export function clearReceiptLogoCache() {
   cachedLogo = undefined;
   cachedPrintDataUrl = undefined;
+  cachedEscPosLogoKey = undefined;
+  cachedPrintLogoKey = undefined;
 }
 
 export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
-  if (cachedLogo !== undefined) return cachedLogo;
+  const logoKey = getLogoCacheKey();
+  if (cachedLogo !== undefined && cachedEscPosLogoKey === logoKey) {
+    return cachedLogo;
+  }
+  cachedEscPosLogoKey = logoKey;
 
   try {
     const png = readLogoPixels();
@@ -100,7 +121,11 @@ export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
 export function getReceiptLogoPrintDataUrl(
   maxWidth = PRINT_MAX_WIDTH,
 ): string | null {
-  if (cachedPrintDataUrl !== undefined) return cachedPrintDataUrl;
+  const logoKey = getLogoCacheKey();
+  if (cachedPrintDataUrl !== undefined && cachedPrintLogoKey === logoKey) {
+    return cachedPrintDataUrl;
+  }
+  cachedPrintLogoKey = logoKey;
 
   try {
     const png = readLogoPixels();

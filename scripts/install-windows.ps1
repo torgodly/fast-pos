@@ -1,21 +1,39 @@
-# Fast POS — Windows install (Node 22 portable, no reboot)
+# Fast POS - Windows install (Node 22.13+ or 24, no reboot)
 # Run as Administrator in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File C:\fast-pos\scripts\install-windows.ps1
 
 $ErrorActionPreference = "Stop"
-$NodeDir = "C:\nodejs22"
 $Project = Split-Path $PSScriptRoot -Parent
 
-if (-not (Test-Path "$NodeDir\node.exe")) {
-  Write-Host "Missing $NodeDir\node.exe — extract node-v22-win-x64.zip there first."
+$NodeCommand = Get-Command node.exe -ErrorAction SilentlyContinue
+if ($NodeCommand) {
+  $NodeExe = $NodeCommand.Source
+  $NodeDir = Split-Path $NodeExe -Parent
+} else {
+  $NodeDir = "C:\nodejs24"
+  if (-not (Test-Path "$NodeDir\node.exe")) {
+    $NodeDir = "C:\nodejs22"
+  }
+  $NodeExe = Join-Path $NodeDir "node.exe"
+}
+
+$NodeVersionText = & $NodeExe -p 'process.versions.node'
+$NodeVersion = [version]$NodeVersionText
+$SupportedNode = ($NodeVersion.Major -eq 22 -and $NodeVersion -ge [version]"22.13.0") -or $NodeVersion.Major -eq 24
+if (-not $SupportedNode) {
+  Write-Host "Unsupported Node.js version $NodeVersion. Use Node 22.13+ or Node 24."
   exit 1
 }
 
-# Node 22 first (not Program Files\nodejs v26)
-$env:Path = "$NodeDir;" + ($env:Path -split ';' | Where-Object { $_ -notmatch 'Program Files\\nodejs' }) -join ';'
+$env:Path = "$NodeDir;" + ($env:Path -split ';' | Where-Object { $_ -ne $NodeDir }) -join ';'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-Write-Host "node: $(node -v) — $(Get-Command node | Select-Object -ExpandProperty Source)"
+Write-Host "node: $NodeVersion - $NodeExe"
+$NpmCmd = Join-Path $NodeDir "npm.cmd"
+if (-not (Test-Path $NpmCmd)) {
+  Write-Host "Missing $NpmCmd - install npm with Node.js or use a standard Node.js distribution."
+  exit 1
+}
 
 # Stop service so sharp/sqlite files are not locked (EBUSY)
 $nssm = Get-Command nssm -ErrorAction SilentlyContinue
@@ -38,25 +56,25 @@ try {
   Invoke-WebRequest -Uri "https://github.com" -UseBasicParsing -TimeoutSec 15 | Out-Null
   Write-Host "GitHub OK"
 } catch {
-  Write-Host "WARNING: Cannot reach GitHub — npm may try to compile and need Python."
+  Write-Host "WARNING: Cannot reach GitHub - npm may try to compile and need Python."
   Write-Host $_.Exception.Message
 }
 
 $env:npm_config_build_from_source = "false"
 Write-Host "Running npm install (use npm.cmd to avoid PowerShell signing)..."
-& "$NodeDir\npm.cmd" install
+& $NpmCmd install
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
   Write-Host "INSTALL FAILED."
-  Write-Host "If log says 'find Python': install Python 3.12 (Add to PATH) OR fix GitHub access."
+  Write-Host "If better-sqlite3 needs to compile, install Python 3 and Visual Studio Build Tools (Desktop development with C++)."
   Write-Host "Then run this script again."
   exit $LASTEXITCODE
 }
 
-& "$NodeDir\npm.cmd" run build
+& $NpmCmd run build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
 Write-Host "SUCCESS."
-Write-Host 'nssm set FastPOS Application "C:\nodejs22\node.exe"'
+Write-Host ('nssm set FastPOS Application "' + $NodeExe + '"')
 Write-Host "nssm restart FastPOS"

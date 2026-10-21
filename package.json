@@ -3,21 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": ">=20 <=22"
+    "node": "^22.13.0 || ^24.0.0"
   },
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
-    "prebuild": "node scripts/clean-next.mjs",
+    "prebuild": "node scripts/prepare-activation-key.mjs && node scripts/clean-next.mjs",
     "build": "next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "license": "node scripts/license.mjs",
+    "license:gui": "python desktop/license-generator/license_generator.py",
+    "license:gui:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-license-gui.ps1"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.3",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.2",
+    "better-sqlite3": "^12.4.1",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "iconv-lite": "^0.7.3",

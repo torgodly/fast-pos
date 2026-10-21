@@ -11,9 +11,11 @@ import {
 } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
 import { getSession } from "@/lib/auth/session";
+import { getActivationStatus } from "@/lib/activation/service";
 import { VENUES } from "@/lib/venues";
 
 export default async function HomePage() {
+  const activation = getActivationStatus();
   const session = await getSession();
   if (session?.role === "admin") {
     redirect("/admin");
@@ -73,6 +75,21 @@ export default async function HomePage() {
         </header>
 
         <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center py-6 sm:py-8 lg:py-10">
+          {!activation.canOperate ? (
+            <div className="alert alert-warning mb-6">
+              <LockKeyhole className="size-5 shrink-0" />
+              <div>
+                <p className="font-bold">يلزم تفعيل النظام</p>
+                <p className="text-sm">
+                  انتهت الفترة التجريبية أو صلاحية الترخيص. سجّل الدخول كمدير
+                  لإدخال رمز التفعيل.
+                </p>
+              </div>
+              <Link href="/admin/login" className="btn btn-warning btn-sm">
+                دخول الإدارة
+              </Link>
+            </div>
+          ) : null}
           <div className="mb-5 text-center sm:mb-7">
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
               اختر مساحة العمل
@@ -84,8 +101,9 @@ export default async function HomePage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5">
-            {VENUES.map((venue, index) => {
+          {activation.canOperate ? (
+            <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5">
+              {VENUES.map((venue, index) => {
               const Icon = venue.id === "restaurant" ? ChefHat : Coffee;
               const venueHref =
                 session?.role === "waiter"
@@ -130,8 +148,9 @@ export default async function HomePage() {
                   </div>
                 </Link>
               );
-            })}
-          </div>
+              })}
+            </div>
+          ) : null}
 
           {session ? (
             <div className="mt-5 sm:mt-6">

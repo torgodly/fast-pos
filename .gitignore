@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+*/node_modules
+*.pyc
+*/license-generator
 /.pnp
 .pnp.*
 .yarn/*
@@ -19,6 +22,7 @@
 
 # production
 /build
+/release
 
 # misc
 .DS_Store

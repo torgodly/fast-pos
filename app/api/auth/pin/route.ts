@@ -6,8 +6,16 @@ import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
+import { getActivationStatus } from "@/lib/activation/service";
 
 export async function POST(request: Request) {
+  if (!getActivationStatus().canOperate) {
+    return NextResponse.json(
+      { error: "النظام غير مفعّل. يرجى التواصل مع المدير." },
+      { status: 423 },
+    );
+  }
+
   let body: { venueId?: string; pin?: string; userId?: number };
   try {
     body = await request.json();

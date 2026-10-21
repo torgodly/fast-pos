@@ -12,6 +12,7 @@ import {
   LogOut,
   Printer,
   ReceiptText,
+  ShieldCheck,
   Settings2,
   Sparkles,
   TableProperties,
@@ -31,6 +32,7 @@ const links = [
   { href: "/admin/cancelled-items", label: "الأصناف الملغاة", icon: Ban },
   { href: "/admin/audit", label: "التدقيق", icon: ClipboardList },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings2 },
+  { href: "/admin/activation", label: "التفعيل", icon: ShieldCheck },
 ];
 
 export function AdminNav({ name }: { name: string }) {

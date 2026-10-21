@@ -1,6 +1,6 @@
-import Image from "next/image";
 import { Clock3, KeyRound, Receipt, Settings2 } from "lucide-react";
 import { ChangeAdminPasswordForm } from "@/components/admin/ChangeAdminPasswordForm";
+import { ReceiptLogoSettings } from "@/components/admin/ReceiptLogoSettings";
 import { ReceiptSettingsForm } from "@/components/admin/ReceiptSettingsForm";
 import { SettingsDangerZone } from "@/components/admin/SettingsDangerZone";
 import { ZWindowSettingsForm } from "@/components/admin/ZWindowSettingsForm";
@@ -93,15 +93,7 @@ export default async function AdminSettingsPage() {
               </p>
             </div>
           </div>
-          <div className="flex justify-center rounded-2xl bg-neutral p-6">
-            <Image
-              src="/receipt-logo.png"
-              alt="Maison Kayser Tripoli"
-              width={280}
-              height={120}
-              className="h-auto max-h-28 w-auto object-contain"
-            />
-          </div>
+          <ReceiptLogoSettings />
         </div>
       </section>
 

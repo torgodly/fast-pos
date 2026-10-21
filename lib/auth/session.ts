@@ -7,6 +7,7 @@ import {
   verifyToken,
   type SessionPayload,
 } from "./token";
+import { getActivationStatus } from "@/lib/activation/service";
 
 export type { SessionPayload };
 export { COOKIE_NAME, verifyToken };
@@ -30,6 +31,12 @@ export async function getSession(): Promise<AppSession | null> {
     .get();
 
   if (!user || !user.active || user.role !== payload.role) {
+    return null;
+  }
+  if (
+    user.role !== "admin" &&
+    !getActivationStatus().canOperate
+  ) {
     return null;
   }
 
