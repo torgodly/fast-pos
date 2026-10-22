@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ChefHat, Coffee } from "lucide-react";
 import type { VenueId } from "@/lib/types";
-import { VENUES } from "@/lib/venues";
+import { activeVenues } from "@/lib/venues";
+import { getDeploymentMode } from "@/lib/deployment";
 
 export function VenueTabs({
   basePath,
@@ -13,6 +14,9 @@ export function VenueTabs({
   /** Extra query params to keep when switching venue (e.g. report filters). */
   keepParams?: Record<string, string | undefined | null>;
 }) {
+  const venues = activeVenues(getDeploymentMode());
+  if (venues.length <= 1) return null;
+
   function hrefFor(nextVenue: VenueId) {
     const params = new URLSearchParams();
     params.set("venue", nextVenue);
@@ -35,7 +39,7 @@ export function VenueTabs({
         role="tablist"
         className="inline-flex min-w-max gap-1 rounded-2xl border border-base-300/70 bg-base-100 p-1.5 shadow-sm"
       >
-        {VENUES.map((v) => {
+        {venues.map((v) => {
           const Icon = v.id === "restaurant" ? ChefHat : Coffee;
           return (
             <Link

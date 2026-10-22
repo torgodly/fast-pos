@@ -9,6 +9,7 @@ import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
 import { formatMoney, isVenueId } from "@/lib/venues";
+import { isCounterMode } from "@/lib/deployment";
 
 export default async function CashierHomePage({
   params,
@@ -21,6 +22,7 @@ export default async function CashierHomePage({
   const waiter = alias(users, "waiter");
   const me = db.select().from(users).where(eq(users.id, session.userId)).get();
   const isMainCashier = !!me?.isMainCashier;
+  const counterMode = isCounterMode();
 
   const stationCtx = await getCashierStationContext(venue);
   const hasCheckout = !("error" in stationCtx);
@@ -84,6 +86,7 @@ export default async function CashierHomePage({
                   <Boxes className="size-4" />
                   الأصناف
                 </Link>
+                {counterMode ? null : (
                 <Link
                   href={`/cashier/${venue}/tables`}
                   className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
@@ -91,6 +94,7 @@ export default async function CashierHomePage({
                   <TableProperties className="size-4" />
                   الطاولات
                 </Link>
+                )}
                 <Link
                   href={`/cashier/${venue}/shift`}
                   className="btn btn-ghost btn-sm gap-1.5 rounded-lg"

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { count, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type Database from "better-sqlite3";
 import * as schema from "./schema";
 import {
   cashierStations,
@@ -14,6 +15,14 @@ import {
   venues,
 } from "./schema";
 import { floorTableNames } from "./floor-tables";
+import {
+  FACTORY_CASHIER_PIN,
+  readDeploymentFileMode,
+  SETTING_DEPLOYMENT_MODE,
+  type DeploymentMode,
+} from "../deployment-mode";
+import { getVenueName } from "../venues";
+import type { VenueId } from "../types";
 
 function pin(value: string) {
   return bcrypt.hashSync(value, 10);
@@ -41,20 +50,39 @@ type MenuLine = {
 };
 
 type SeedOptions = {
-  demoStaff: boolean;
-  sampleOrders: boolean;
+  mode: DeploymentMode;
+  demo: boolean;
 };
+
+function persistDeploymentMode(
+  db: BetterSQLite3Database<typeof schema>,
+  mode: DeploymentMode,
+) {
+  const sqlite = (db as BetterSQLite3Database<typeof schema> & {
+    $client: Database.Database;
+  }).$client;
+  sqlite
+    .prepare(
+      `INSERT INTO app_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    )
+    .run(SETTING_DEPLOYMENT_MODE, mode);
+}
 
 export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
   const [{ value }] = db.select({ value: count() }).from(venues).all();
   if (value > 0) return;
 
-  runSeed(db, { demoStaff: true, sampleOrders: true });
+  const fileMode = readDeploymentFileMode();
+  runSeed(db, { mode: fileMode ?? "full", demo: fileMode == null });
 }
 
 /** Fresh starter data: admin only, full menu, no sales. */
-export function seedFactoryDatabase(db: BetterSQLite3Database<typeof schema>) {
-  runSeed(db, { demoStaff: false, sampleOrders: false });
+export function seedFactoryDatabase(
+  db: BetterSQLite3Database<typeof schema>,
+  mode: "full" | "counter" = "full",
+) {
+  runSeed(db, { mode, demo: false });
 }
 
 function runSeed(
@@ -62,77 +90,52 @@ function runSeed(
   opts: SeedOptions,
 ) {
   const adminPass = bcrypt.hashSync("admin123", 10);
+  const isCounter = opts.mode === "counter";
+  const venueIds: VenueId[] = isCounter ? ["restaurant"] : ["restaurant", "cafe"];
 
   db.insert(venues)
-    .values([
-      { id: "restaurant", name: "مطعم" },
-      { id: "cafe", name: "كافيه" },
-    ])
+    .values(venueIds.map((id) => ({ id, name: getVenueName(id) })))
     .run();
 
-  const staffValues = opts.demoStaff
-    ? [
-        {
-          name: "المدير",
-          role: "admin" as const,
-          username: "admin",
-          passwordHash: adminPass,
-          active: true,
-        },
-        {
-          name: "أحمد",
-          role: "waiter" as const,
-          venueId: null,
-          pinHash: pin("1111"),
-          active: true,
-        },
-        {
-          name: "يوسف",
-          role: "waiter" as const,
-          venueId: null,
-          pinHash: pin("3333"),
-          active: true,
-        },
-        {
-          name: "مريم",
-          role: "waiter" as const,
-          venueId: null,
-          pinHash: pin("4444"),
-          active: true,
-        },
-        {
-          name: "سارة",
-          role: "cashier" as const,
-          venueId: null,
-          pinHash: pin("2222"),
-          isMainCashier: true,
-          active: true,
-        },
-        {
-          name: "خالد",
-          role: "cashier" as const,
-          venueId: null,
-          pinHash: pin("5555"),
-          isMainCashier: false,
-          active: true,
-        },
-        {
-          name: "ليلى",
-          role: "waiter" as const,
-          venueId: null,
-          pinHash: pin("6666"),
-          active: false,
-        },
-      ]
-    : [
-        {
-          name: "المدير",
-          role: "admin" as const,
-          username: "admin",
-          passwordHash: adminPass,
-          active: true,
-        },
-      ];
+  const staffValues: Array<{
+    name: string;
+    role: "admin" | "waiter" | "cashier";
+    username?: string;
+    passwordHash?: string;
+    venueId: string | null;
+    pinHash?: string;
+    isMainCashier?: boolean;
+    active: boolean;
+  }> = [
+    {
+      name: "المدير",
+      role: "admin",
+      username: "admin",
+      passwordHash: adminPass,
+      venueId: null,
+      active: true,
+    },
+  ];
+
+  if (opts.demo) {
+    staffValues.push(
+      { name: "أحمد", role: "waiter", venueId: null, pinHash: pin("1111"), active: true },
+      { name: "يوسف", role: "waiter", venueId: null, pinHash: pin("3333"), active: true },
+      { name: "مريم", role: "waiter", venueId: null, pinHash: pin("4444"), active: true },
+      { name: "سارة", role: "cashier", venueId: null, pinHash: pin("2222"), isMainCashier: true, active: true },
+      { name: "خالد", role: "cashier", venueId: null, pinHash: pin("5555"), isMainCashier: false, active: true },
+      { name: "ليلى", role: "waiter", venueId: null, pinHash: pin("6666"), active: false },
+    );
+  } else {
+    staffValues.push({
+      name: "كاشير",
+      role: "cashier",
+      venueId: null,
+      pinHash: pin(FACTORY_CASHIER_PIN),
+      isMainCashier: true,
+      active: true,
+    });
+  }
 
   const staff = db.insert(users).values(staffValues).returning().all();
 
@@ -142,84 +145,61 @@ function runSeed(
   const cashierSara = staff.find((u) => u.name === "سارة");
   const cashierKhaled = staff.find((u) => u.name === "خالد");
 
+  const printerValues: Array<{
+    venueId: string | null;
+    name: string;
+    role: "kitchen" | "checkout";
+    host: string;
+    port: number;
+    active: boolean;
+  }> = [
+    { venueId: null, name: "مطبخ المطعم", role: "kitchen", host: "192.168.1.40", port: 9100, active: true },
+    { venueId: null, name: "مشروبات المطعم", role: "kitchen", host: "192.168.1.41", port: 9100, active: true },
+    { venueId: "restaurant", name: "كاشير المطعم", role: "checkout", host: "192.168.1.50", port: 9100, active: true },
+  ];
+  if (!isCounter) {
+    printerValues.push(
+      { venueId: null, name: "مطبخ الكافيه", role: "kitchen", host: "192.168.1.60", port: 9100, active: true },
+      { venueId: null, name: "مشروبات الكافيه", role: "kitchen", host: "192.168.1.61", port: 9100, active: true },
+      { venueId: "cafe", name: "كاشير الكافيه", role: "checkout", host: "192.168.1.70", port: 9100, active: true },
+    );
+  }
+
   const seededPrinters = db
     .insert(printers)
-    .values([
-      {
-        venueId: null,
-        name: "مطبخ المطعم",
-        role: "kitchen",
-        host: "192.168.1.40",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: null,
-        name: "مشروبات المطعم",
-        role: "kitchen",
-        host: "192.168.1.41",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: "restaurant",
-        name: "كاشير المطعم",
-        role: "checkout",
-        host: "192.168.1.50",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: null,
-        name: "مطبخ الكافيه",
-        role: "kitchen",
-        host: "192.168.1.60",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: null,
-        name: "مشروبات الكافيه",
-        role: "kitchen",
-        host: "192.168.1.61",
-        port: 9100,
-        active: true,
-      },
-      {
-        venueId: "cafe",
-        name: "كاشير الكافيه",
-        role: "checkout",
-        host: "192.168.1.70",
-        port: 9100,
-        active: true,
-      },
-    ])
+    .values(printerValues)
     .returning()
     .all();
 
   const restKitchen = seededPrinters.find((p) => p.name === "مطبخ المطعم")!;
   const restDrinksPrn = seededPrinters.find((p) => p.name === "مشروبات المطعم")!;
   const restCheckout = seededPrinters.find((p) => p.name === "كاشير المطعم")!;
-  const cafeKitchen = seededPrinters.find((p) => p.name === "مطبخ الكافيه")!;
-  const cafeDrinksPrn = seededPrinters.find((p) => p.name === "مشروبات الكافيه")!;
-  const cafeCheckout = seededPrinters.find((p) => p.name === "كاشير الكافيه")!;
+  let cafeKitchen: typeof restKitchen;
+  let cafeDrinksPrn: typeof restDrinksPrn;
+  let cafeCheckout: typeof restCheckout;
+  if (!isCounter) {
+    cafeKitchen = seededPrinters.find((p) => p.name === "مطبخ الكافيه")!;
+    cafeDrinksPrn = seededPrinters.find((p) => p.name === "مشروبات الكافيه")!;
+    cafeCheckout = seededPrinters.find((p) => p.name === "كاشير الكافيه")!;
+  }
 
-  db.insert(cashierStations)
-    .values([
-      {
-        venueId: "restaurant",
-        name: "كاشير المطعم",
-        printerId: restCheckout.id,
-        active: true,
-      },
-      {
-        venueId: "cafe",
-        name: "كاشير الكافيه",
-        printerId: cafeCheckout.id,
-        active: true,
-      },
-    ])
-    .run();
+  const stationValues: Array<{
+    venueId: "restaurant" | "cafe";
+    name: string;
+    printerId: number;
+    active: boolean;
+  }> = [
+    { venueId: "restaurant", name: "كاشير المطعم", printerId: restCheckout.id, active: true },
+  ];
+  if (!isCounter) {
+    stationValues.push({
+      venueId: "cafe",
+      name: "كاشير الكافيه",
+      printerId: cafeCheckout!.id,
+      active: true,
+    });
+  }
+  db.insert(cashierStations).values(stationValues).run();
 
   const cafeMenu: Array<{ category: string; sortOrder: number; items: MenuLine[] }> = [
     {
@@ -421,26 +401,37 @@ function runSeed(
     return createdItems;
   }
 
-  const cafeItems = seedVenueMenu("cafe", cafeKitchen.id, cafeDrinksPrn.id);
   const restItems = seedVenueMenu(
     "restaurant",
     restKitchen.id,
     restDrinksPrn.id,
   );
+  let cafeItems: typeof restItems;
+  let cafeItem: (name: string) => typeof restItems[number];
+  if (!isCounter) {
+    cafeItems = seedVenueMenu("cafe", cafeKitchen!.id, cafeDrinksPrn!.id);
+    cafeItem = (name: string) => cafeItems.find((i) => i.name === name)!;
+  } else {
+    cafeItems = [];
+    cafeItem = () => {
+      throw new Error("cafe menu not available in counter mode");
+    };
+  }
 
-  const cafeItem = (name: string) => cafeItems.find((i) => i.name === name)!;
   const restItem = (name: string) => restItems.find((i) => i.name === name)!;
 
-  for (const venueId of ["restaurant", "cafe"] as const) {
-    db.insert(tables)
-      .values(
-        floorTableNames(venueId).map((name) => ({
-          venueId,
-          name,
-          active: true,
-        })),
-      )
-      .run();
+  if (!isCounter) {
+    for (const venueId of ["restaurant", "cafe"] as const) {
+      db.insert(tables)
+        .values(
+          floorTableNames(venueId).map((name) => ({
+            venueId,
+            name,
+            active: true,
+          })),
+        )
+        .run();
+    }
   }
 
   const restTables = db
@@ -448,16 +439,24 @@ function runSeed(
     .from(tables)
     .where(eq(tables.venueId, "restaurant"))
     .all();
-  const cafeTables = db
-    .select()
-    .from(tables)
-    .where(eq(tables.venueId, "cafe"))
-    .all();
+  let cafeTables: typeof restTables;
+  if (!isCounter) {
+    cafeTables = db
+      .select()
+      .from(tables)
+      .where(eq(tables.venueId, "cafe"))
+      .all();
+  } else {
+    cafeTables = [];
+  }
 
   const tableOf = (list: typeof restTables, name: string) =>
     list.find((row) => row.name === name)!;
 
-  if (!opts.sampleOrders || !waiterAhmed || !waiterYousef || !waiterMaryam || !cashierSara || !cashierKhaled) {
+  persistDeploymentMode(db, opts.mode);
+
+  if (!opts.demo) return;
+  if (!waiterAhmed || !waiterYousef || !waiterMaryam || !cashierSara || !cashierKhaled) {
     return;
   }
 

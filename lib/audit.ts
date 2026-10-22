@@ -13,6 +13,8 @@ export const AUDIT_KINDS = [
   "test",
   "invoice_edit",
   "item_cancel",
+  "purchase",
+  "inventory",
 ] as const;
 
 export type AuditKind = (typeof AUDIT_KINDS)[number];
@@ -28,6 +30,8 @@ export const AUDIT_KIND_LABELS: Record<AuditKind, string> = {
   test: "اختبار طابعة",
   invoice_edit: "تعديل فاتورة",
   item_cancel: "إلغاء صنف",
+  purchase: "فاتورة مشتريات",
+  inventory: "مخزون",
 };
 
 export function isAuditKind(value: string): value is AuditKind {

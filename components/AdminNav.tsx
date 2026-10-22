@@ -14,9 +14,12 @@ import {
   ReceiptText,
   ShieldCheck,
   Settings2,
+  ShoppingCart,
   Sparkles,
   TableProperties,
+  Truck,
   UsersRound,
+  Warehouse,
 } from "lucide-react";
 import { LogoutButton, LogoutIconButton } from "@/components/LogoutButton";
 
@@ -26,6 +29,9 @@ const links = [
   { href: "/admin/tables", label: "الطاولات", icon: TableProperties },
   { href: "/admin/staff", label: "الموظفون", icon: UsersRound },
   { href: "/admin/printers", label: "الطابعات", icon: Printer },
+  { href: "/admin/inventory", label: "المخزون", icon: Warehouse },
+  { href: "/admin/suppliers", label: "الموردون", icon: Truck },
+  { href: "/admin/purchases", label: "فواتير المشتريات", icon: ShoppingCart },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
   { href: "/admin/z-reports", label: "تقارير Z", icon: FileBarChart },
   { href: "/admin/invoices", label: "الفواتير", icon: ReceiptText },
@@ -35,8 +41,15 @@ const links = [
   { href: "/admin/activation", label: "التفعيل", icon: ShieldCheck },
 ];
 
-export function AdminNav({ name }: { name: string }) {
+export function AdminNav({
+  name,
+  counterMode = false,
+}: { name: string; counterMode?: boolean }) {
   const pathname = usePathname();
+
+  const visibleLinks = counterMode
+    ? links.filter((link) => link.href !== "/admin/tables")
+    : links;
 
   return (
     <aside className="z-30 flex w-full shrink-0 flex-col border-b border-base-300/60 bg-base-100/90 p-3 backdrop-blur-xl lg:sticky lg:top-0 lg:h-dvh lg:w-72 lg:overflow-hidden lg:border-b-0 lg:border-l lg:p-5">
@@ -55,7 +68,7 @@ export function AdminNav({ name }: { name: string }) {
 
       <div className="mobile-scroll-x mt-3 min-h-0 lg:mt-8 lg:flex-1 lg:overflow-y-auto lg:overflow-x-visible">
         <nav className="flex min-w-max gap-1 lg:min-w-0 lg:flex-col lg:gap-1.5">
-          {links.map((link) => {
+          {visibleLinks.map((link) => {
             const active =
               link.href === "/admin"
                 ? pathname === "/admin"

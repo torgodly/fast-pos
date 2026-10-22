@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -9,6 +10,7 @@ import {
   FolderPlus,
   PackagePlus,
   Pencil,
+  Plus,
   Power,
   PowerOff,
   Printer,
@@ -68,6 +70,23 @@ type PrinterOption = {
   role?: string;
 };
 
+type IngredientOption = {
+  id: number;
+  name: string;
+  active: boolean;
+};
+
+type BomRow = {
+  ingredientId: string;
+  gramsPerUnit: string;
+};
+
+type BomEntryRow = {
+  itemId: number;
+  ingredientId: number;
+  gramsPerUnit: number;
+};
+
 /** Same kitchen IP listed twice (cashier dept rows) → one choice for kitchen link. */
 function dedupeKitchenOptions(rows: PrinterOption[]): PrinterOption[] {
   const byHost = new Map<string, PrinterOption>();
@@ -100,12 +119,16 @@ export function ItemsAdmin({
   items: allItems,
   kitchenPrinters,
   allKitchenPrinters,
+  ingredients,
+  bomByItem,
 }: {
   venueId: VenueId;
   categories: CategoryRow[];
   items: ItemRow[];
   kitchenPrinters: PrinterOption[];
   allKitchenPrinters: PrinterOption[];
+  ingredients: IngredientOption[];
+  bomByItem: BomEntryRow[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -151,10 +174,29 @@ export function ItemsAdmin({
     useState<MenuVenueScope>(venueId);
 
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
+  const [bomDraft, setBomDraft] = useState<BomRow[]>([]);
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [bulkConfirm, setBulkConfirm] = useState<
     "enable" | "disable" | "delete" | "move" | null
   >(null);
+
+  useEffect(() => {
+    if (!itemModal) {
+      setBomDraft([]);
+      return;
+    }
+    if (itemModal.mode === "create") {
+      setBomDraft([]);
+      return;
+    }
+    const rows = bomByItem
+      .filter((row) => row.itemId === itemModal.item.id)
+      .map((row) => ({
+        ingredientId: String(row.ingredientId),
+        gramsPerUnit: String(row.gramsPerUnit),
+      }));
+    setBomDraft(rows);
+  }, [itemModal, bomByItem]);
   const [bulkCategoryId, setBulkCategoryId] = useState<number | null>(null);
 
   const editingCategory =
@@ -264,6 +306,20 @@ export function ItemsAdmin({
     });
   }
 
+  function addBomRow() {
+    setBomDraft((rows) => [...rows, { ingredientId: "", gramsPerUnit: "" }]);
+  }
+
+  function updateBomRow(index: number, patch: Partial<BomRow>) {
+    setBomDraft((rows) =>
+      rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function removeBomRow(index: number) {
+    setBomDraft((rows) => rows.filter((_, i) => i !== index));
+  }
+
   function submitCategory(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
@@ -287,6 +343,24 @@ export function ItemsAdmin({
       formData.set("categoryId", String(selected.id));
       formData.set("venueScope", venueIdToScope(selected.venueId));
     }
+
+    const bomRows: { ingredientId: number; gramsPerUnit: number }[] = [];
+    for (const row of bomDraft) {
+      if (!row.ingredientId && !row.gramsPerUnit.trim()) continue;
+      const ingredientId = Number(row.ingredientId);
+      const gramsPerUnit = Math.trunc(Number(row.gramsPerUnit));
+      if (
+        !Number.isInteger(ingredientId) ||
+        ingredientId <= 0 ||
+        !Number.isFinite(gramsPerUnit) ||
+        gramsPerUnit <= 0
+      ) {
+        setError("أكمل بيانات مكونات الصنف أو احذف الصفوف الفارغة");
+        return;
+      }
+      bomRows.push({ ingredientId, gramsPerUnit });
+    }
+    formData.set("ingredientsJson", JSON.stringify(bomRows));
 
     startTransition(async () => {
       setError(null);
@@ -380,6 +454,7 @@ export function ItemsAdmin({
       <div className="grid gap-3 sm:grid-cols-3">
         {[
           {
+            n: "1",
             title: "اختر النطاق",
             desc: "مطعم / كافيه / مشترك",
           },
@@ -1099,6 +1174,128 @@ export function ItemsAdmin({
               required
             />
           </label>
+
+          <div className="rounded-2xl border border-base-300/70 p-3.5">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-black">مكونات الصنف (BOM)</p>
+                <p className="mt-0.5 text-xs text-base-content/45">
+                  غرام لكل وحدة تُباع — تُخصم من المخزون عند الدفع
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs gap-1 rounded-lg"
+                onClick={addBomRow}
+                disabled={
+                  ingredients.length === 0 ||
+                  bomDraft.length >= ingredients.length
+                }
+              >
+                <Plus className="size-3.5" />
+                إضافة مكوّن
+              </button>
+            </div>
+
+            {ingredients.length === 0 ? (
+              <p className="mt-3 rounded-xl bg-base-200/60 px-3 py-2 text-xs text-base-content/55">
+                لا توجد مكونات بعد — أضفها من{" "}
+                <Link
+                  href="/admin/inventory"
+                  className="link link-primary font-bold"
+                >
+                  صفحة المخزون
+                </Link>
+                .
+              </p>
+            ) : bomDraft.length === 0 ? (
+              <p className="mt-3 text-xs text-base-content/45">
+                بدون مكونات — المخزون لن يتأثر عند بيع هذا الصنف.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {bomDraft.map((row, index) => {
+                  const takenElsewhere = new Set(
+                    bomDraft
+                      .filter((_, i) => i !== index)
+                      .map((other) => other.ingredientId)
+                      .filter(Boolean),
+                  );
+                  return (
+                    <div key={index} className="flex items-center gap-2">
+                      <select
+                        className="select select-bordered select-sm w-full"
+                        value={row.ingredientId}
+                        onChange={(event) =>
+                          updateBomRow(index, {
+                            ingredientId: event.target.value,
+                          })
+                        }
+                      >
+                        <option value="">اختر مكوّناً</option>
+                        {ingredients
+                          .filter(
+                            (ingredient) =>
+                              (ingredient.active ||
+                                String(ingredient.id) ===
+                                  row.ingredientId) &&
+                              !takenElsewhere.has(String(ingredient.id)),
+                          )
+                          .map((ingredient) => (
+                            <option key={ingredient.id} value={ingredient.id}>
+                              {ingredient.name}
+                              {ingredient.active ? "" : " (معطّل)"}
+                            </option>
+                          ))}
+                      </select>
+                      <div className="join shrink-0">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={row.gramsPerUnit}
+                          onChange={(event) =>
+                            updateBomRow(index, {
+                              gramsPerUnit: event.target.value,
+                            })
+                          }
+                          placeholder="غرام"
+                          className="input input-bordered input-sm join-item w-24"
+                        />
+                        <span className="btn btn-ghost btn-sm join-item pointer-events-none">
+                          غ
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-square btn-ghost btn-sm text-error"
+                        onClick={() => removeBomRow(index)}
+                        title="حذف المكوّن"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <input
+              type="hidden"
+              name="ingredientsJson"
+              value={JSON.stringify(
+                bomDraft
+                  .filter(
+                    (row) =>
+                      row.ingredientId && Number(row.gramsPerUnit) > 0,
+                  )
+                  .map((row) => ({
+                    ingredientId: Number(row.ingredientId),
+                    gramsPerUnit: Math.trunc(Number(row.gramsPerUnit)),
+                  })),
+              )}
+            />
+          </div>
+
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">
             <button

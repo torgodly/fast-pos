@@ -10,8 +10,60 @@ import { availableAtVenue } from "@/lib/menu/scope";
 import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import type { VenueId } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
+import {
+  adjustForInvoiceEdit,
+  reconsumeForRestoredOrder,
+  returnForCancelledPaidOrder,
+} from "@/lib/inventory/service";
+import {
+  insufficientWarningText,
+  type InsufficientIngredient,
+} from "@/lib/inventory/rules";
 
 type ActionResult = { ok: true } | { error: string };
+
+type AdminSession = { userId: number; name: string; role: string };
+
+function inventoryUser(session: AdminSession) {
+  return { userId: session.userId, name: session.name };
+}
+
+function auditInventoryWarnings(
+  session: AdminSession,
+  venueId: string,
+  orderId: number,
+  warnings: InsufficientIngredient[],
+) {
+  if (warnings.length === 0) return;
+  recordSessionAudit(session, {
+    venueId,
+    kind: "inventory",
+    orderId,
+    success: true,
+    detail: `نقص مخزون: ${insufficientWarningText(warnings)}`,
+  });
+}
+
+function auditInventoryFailure(
+  session: AdminSession,
+  venueId: string,
+  orderId: number,
+  error: unknown,
+) {
+  const detail =
+    error instanceof Error ? error.message : "تعذر تحديث المخزون";
+  try {
+    recordSessionAudit(session, {
+      venueId,
+      kind: "inventory",
+      orderId,
+      success: false,
+      detail,
+    });
+  } catch {
+    /* audit is best-effort */
+  }
+}
 
 async function assertAdmin() {
   const session = await getSession();
@@ -72,6 +124,19 @@ export async function adminAddInvoiceItem(
     .where(and(eq(orderItems.orderId, orderId), eq(orderItems.itemId, itemId)))
     .get();
 
+  if (order.status === "paid") {
+    try {
+      const result = adjustForInvoiceEdit(
+        orderId,
+        [{ itemId, deltaQty: 1 }],
+        inventoryUser(session),
+      );
+      auditInventoryWarnings(session, order.venueId, orderId, result.warnings);
+    } catch (error) {
+      auditInventoryFailure(session, order.venueId, orderId, error);
+    }
+  }
+
   if (existing) {
     const qty = existing.qty + 1;
     db.update(orderItems)
@@ -127,6 +192,24 @@ export async function adminSetInvoiceItemQty(
   }
 
   const nextQty = Math.trunc(qty);
+  if (order.status === "paid" && nextQty !== line.qty) {
+    try {
+      const result = adjustForInvoiceEdit(
+        order.id,
+        [{ itemId: line.itemId, deltaQty: nextQty - line.qty }],
+        inventoryUser(session),
+      );
+      auditInventoryWarnings(
+        session,
+        order.venueId,
+        order.id,
+        result.warnings,
+      );
+    } catch (error) {
+      auditInventoryFailure(session, order.venueId, order.id, error);
+    }
+  }
+
   if (nextQty <= 0) {
     db.delete(orderItems).where(eq(orderItems.id, orderItemId)).run();
   } else {
@@ -168,6 +251,26 @@ export async function adminCancelInvoice(orderId: number): Promise<ActionResult>
     .where(eq(orders.id, orderId))
     .run();
 
+  if (order.status === "paid") {
+    try {
+      const result = returnForCancelledPaidOrder(
+        orderId,
+        inventoryUser(session),
+      );
+      if (result.returned.length > 0) {
+        recordSessionAudit(session, {
+          venueId: order.venueId,
+          kind: "inventory",
+          orderId,
+          success: true,
+          detail: `إرجاع للمخزون بعد إلغاء فاتورة مدفوعة (${result.returned.length} مكوّن)`,
+        });
+      }
+    } catch (error) {
+      auditInventoryFailure(session, order.venueId, orderId, error);
+    }
+  }
+
   recordSessionAudit(session, {
     venueId: order.venueId,
     kind: "invoice_edit",
@@ -190,6 +293,18 @@ export async function adminRestoreInvoice(orderId: number): Promise<ActionResult
     .set({ status: nextStatus })
     .where(eq(orders.id, orderId))
     .run();
+
+  if (nextStatus === "paid") {
+    try {
+      const result = reconsumeForRestoredOrder(
+        orderId,
+        inventoryUser(session),
+      );
+      auditInventoryWarnings(session, order.venueId, orderId, result.warnings);
+    } catch (error) {
+      auditInventoryFailure(session, order.venueId, orderId, error);
+    }
+  }
 
   recordSessionAudit(session, {
     venueId: order.venueId,

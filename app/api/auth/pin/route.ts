@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
 import { getActivationStatus } from "@/lib/activation/service";
+import { isCounterMode, isActiveVenueId, staffLandingPath } from "@/lib/deployment";
 
 export async function POST(request: Request) {
   if (!getActivationStatus().canOperate) {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       ? Number(body.userId)
       : null;
 
-  if (!isVenueId(venueId)) {
+  if (!isVenueId(venueId) || !isActiveVenueId(venueId)) {
     return NextResponse.json({ error: "فرع غير صالح" }, { status: 400 });
   }
   if (!isValidPinFormat(pin)) {
@@ -74,6 +75,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (isCounterMode() && match.role === "waiter") {
+    return NextResponse.json(
+      { error: "وضع الكاونتر للكاشير فقط" },
+      { status: 403 },
+    );
+  }
+
   const token = await signSessionToken({
     userId: match.id,
     name: match.name,
@@ -81,8 +89,10 @@ export async function POST(request: Request) {
     venueId,
   });
 
-  const redirectTo =
-    match.role === "waiter" ? `/waiter/${venueId}` : `/cashier/${venueId}`;
+  const redirectTo = staffLandingPath(
+    match.role === "waiter" ? "waiter" : "cashier",
+    venueId,
+  );
 
   const response = NextResponse.json({ ok: true, redirectTo });
   const session = sessionCookieValue(token);

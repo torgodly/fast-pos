@@ -8,18 +8,20 @@ export function AdminModal({
   onClose,
   children,
   pending = false,
+  wide = false,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
   pending?: boolean;
+  wide?: boolean;
 }) {
   if (!open) return null;
 
   return (
     <dialog className="modal modal-open">
-      <div className="modal-box max-w-lg">
+      <div className={`modal-box ${wide ? "max-w-5xl" : "max-w-lg"}`}>
         <h3 className="text-lg font-black">{title}</h3>
         <div className="mt-4">{children}</div>
         {pending ? (

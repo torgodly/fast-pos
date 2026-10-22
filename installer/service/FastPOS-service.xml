@@ -1,0 +1,21 @@
+<service>
+  <id>FastPOS</id>
+  <name>Fast POS</name>
+  <description>Fast POS local server (Next.js standalone)</description>
+  <executable>%BASE%\node\node.exe</executable>
+  <arguments>server.js</arguments>
+  <workingdirectory>%BASE%\server</workingdirectory>
+  <env name="NODE_ENV" value="production" />
+  <env name="PORT" value="3000" />
+  <env name="HOSTNAME" value="0.0.0.0" />
+  <env name="SESSION_SECRET" value="__SESSION_SECRET__" />
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>false</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="30 sec" />
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>8</keepFiles>
+  </log>
+</service>

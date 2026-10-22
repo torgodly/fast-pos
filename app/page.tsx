@@ -12,11 +12,14 @@ import {
 import { LogoutButton } from "@/components/LogoutButton";
 import { getSession } from "@/lib/auth/session";
 import { getActivationStatus } from "@/lib/activation/service";
-import { VENUES } from "@/lib/venues";
+import { getDeploymentMode, staffLandingPath } from "@/lib/deployment";
+import { activeVenues } from "@/lib/venues";
 
 export default async function HomePage() {
   const activation = getActivationStatus();
   const session = await getSession();
+  const mode = getDeploymentMode();
+  const venueList = activeVenues(mode);
   if (session?.role === "admin") {
     redirect("/admin");
   }
@@ -92,25 +95,27 @@ export default async function HomePage() {
           ) : null}
           <div className="mb-5 text-center sm:mb-7">
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl lg:text-4xl">
-              اختر مساحة العمل
+              {venueList.length === 1 ? "دخول نقطة البيع" : "اختر مساحة العمل"}
             </h1>
             <p className="mt-1.5 text-sm text-base-content/50 sm:text-base">
-              {session
-                ? "اختر الفرع للمتابعة"
-                : "اختر الفرع ثم أدخل رمزك الشخصي"}
+              {venueList.length === 1
+                ? session
+                  ? "ادخل لمتابعة البيع"
+                  : "أدخل رمز الكاشير للمتابعة"
+                : session
+                  ? "اختر الفرع للمتابعة"
+                  : "اختر الفرع ثم أدخل رمزك الشخصي"}
             </p>
           </div>
 
           {activation.canOperate ? (
             <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:gap-5">
-              {VENUES.map((venue, index) => {
+              {venueList.map((venue, index) => {
               const Icon = venue.id === "restaurant" ? ChefHat : Coffee;
               const venueHref =
-                session?.role === "waiter"
-                  ? `/waiter/${venue.id}`
-                  : session?.role === "cashier"
-                    ? `/cashier/${venue.id}`
-                    : `/pin/${venue.id}`;
+                session?.role === "waiter" || session?.role === "cashier"
+                  ? staffLandingPath(session.role, venue.id)
+                  : `/pin/${venue.id}`;
               return (
                 <Link
                   key={venue.id}

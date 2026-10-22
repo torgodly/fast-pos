@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { redirect } from "next/navigation";
 import { AdminNav } from "@/components/AdminNav";
 import { getSession } from "@/lib/auth/session";
+import { isCounterMode } from "@/lib/deployment";
 
 export default async function AdminPanelLayout({
   children,
@@ -16,7 +17,7 @@ export default async function AdminPanelLayout({
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col lg:flex-row">
-      <AdminNav name={session.name} />
+      <AdminNav name={session.name} counterMode={isCounterMode()} />
       <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8 xl:p-10">
         <div className="page-shell">{children}</div>
       </main>

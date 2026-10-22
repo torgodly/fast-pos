@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  outputFileTracingIncludes: {
+    "/*": [
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/@napi-rs/canvas/**/*",
+    ],
+  },
+  outputFileTracingExcludes: {
+    "/*": ["data/**/*"],
+  },
   serverExternalPackages: ["better-sqlite3", "@napi-rs/canvas"],
   async headers() {
     if (process.env.NODE_ENV !== "production") {

@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { PinPad } from "@/components/PinPad";
 import { getSession } from "@/lib/auth/session";
 import { getVenueName, isVenueId } from "@/lib/venues";
+import { isActiveVenueId, isCounterMode, staffLandingPath } from "@/lib/deployment";
 
 export default async function PinPage({
   params,
@@ -11,17 +12,18 @@ export default async function PinPage({
   params: Promise<{ venue: string }>;
 }) {
   const { venue } = await params;
-  if (!isVenueId(venue)) notFound();
+  if (!isVenueId(venue) || !isActiveVenueId(venue)) notFound();
 
   const session = await getSession();
   if (session?.role === "admin") {
     redirect("/admin");
   }
   if (session?.role === "waiter") {
+    if (isCounterMode()) redirect("/");
     redirect(`/waiter/${venue}`);
   }
   if (session?.role === "cashier") {
-    redirect(`/cashier/${venue}`);
+    redirect(staffLandingPath("cashier", venue));
   }
 
   const VenueIcon = venue === "restaurant" ? ChefHat : Coffee;
@@ -61,8 +63,9 @@ export default async function PinPage({
               {getVenueName(venue)}
             </h2>
             <p className="mt-4 max-w-md text-base leading-7 text-base-content/55">
-              أدخل رمزك للوصول إلى شاشة السفرادجي أو الكاشير. سيتم تحديد دورك
-              تلقائياً.
+              {isCounterMode()
+                ? "أدخل رمز الكاشير للوصول إلى البيع السريع."
+                : "أدخل رمزك للوصول إلى شاشة السفرادجي أو الكاشير. سيتم تحديد دورك تلقائياً."}
             </p>
           </section>
 

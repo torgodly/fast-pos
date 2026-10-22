@@ -1,9 +1,11 @@
 import { eq } from "drizzle-orm";
 import { TableProperties } from "lucide-react";
+import { redirect } from "next/navigation";
 import { TablesAdmin } from "@/components/admin/TablesAdmin";
 import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
+import { isCounterMode } from "@/lib/deployment";
 import { db } from "@/lib/db";
 import { tables } from "@/lib/db/schema";
 import { compareTableNames } from "@/lib/db/floor-tables";
@@ -15,6 +17,7 @@ export default async function AdminTablesPage({
   searchParams: Promise<{ venue?: string }>;
 }) {
   await requireAdmin();
+  if (isCounterMode()) redirect("/admin");
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
 

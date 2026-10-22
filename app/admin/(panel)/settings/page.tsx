@@ -10,10 +10,12 @@ import {
   getZWindowEnd,
   getZWindowStart,
 } from "@/lib/settings";
+import { DEPLOYMENT_MODE_LABELS, getDeploymentMode } from "@/lib/deployment";
 import { getVenueName } from "@/lib/venues";
 
 export default async function AdminSettingsPage() {
   await requireAdmin();
+  const mode = getDeploymentMode();
   const footerMessage = getReceiptFooterMessage();
 
   return (
@@ -28,6 +30,9 @@ export default async function AdminSettingsPage() {
             <p className="text-sm text-base-content/45">
               كلمة المرور، الفاتورة، نافذة Z، وإعادة الضبط
             </p>
+            <span className="inline-block mt-2 badge badge-outline badge-sm">
+              نوع التثبيت: {DEPLOYMENT_MODE_LABELS[mode]}
+            </span>
           </div>
         </div>
       </div>
@@ -46,20 +51,29 @@ export default async function AdminSettingsPage() {
               </p>
             </div>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
+          {mode === "counter" ? (
             <ZWindowSettingsForm
               venueId="restaurant"
               venueLabel={getVenueName("restaurant")}
               initialStart={getZWindowStart("restaurant")}
               initialEnd={getZWindowEnd("restaurant")}
             />
-            <ZWindowSettingsForm
-              venueId="cafe"
-              venueLabel={getVenueName("cafe")}
-              initialStart={getZWindowStart("cafe")}
-              initialEnd={getZWindowEnd("cafe")}
-            />
-          </div>
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ZWindowSettingsForm
+                venueId="restaurant"
+                venueLabel={getVenueName("restaurant")}
+                initialStart={getZWindowStart("restaurant")}
+                initialEnd={getZWindowEnd("restaurant")}
+              />
+              <ZWindowSettingsForm
+                venueId="cafe"
+                venueLabel={getVenueName("cafe")}
+                initialStart={getZWindowStart("cafe")}
+                initialEnd={getZWindowEnd("cafe")}
+              />
+            </div>
+          )}
         </div>
       </section>
 

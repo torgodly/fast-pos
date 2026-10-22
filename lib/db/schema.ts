@@ -1,5 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  index,
   integer,
   real,
   sqliteTable,
@@ -212,6 +213,111 @@ export const auditEvents = sqliteTable("audit_events", {
   detail: text("detail").notNull(),
 });
 
+export const ingredientMovements = sqliteTable(
+  "ingredient_movements",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    ingredientId: integer("ingredient_id").references(() => ingredients.id),
+    /** Snapshot — survives ingredient deletion attempts (deletes are blocked). */
+    ingredientName: text("ingredient_name").notNull(),
+    /** + in / − out, always grams. */
+    deltaGrams: integer("delta_grams").notNull(),
+    kind: text("kind", {
+      enum: ["purchase", "sale", "adjust", "invoice_edit", "cancel_return"],
+    }).notNull(),
+    orderId: integer("order_id").references(() => orders.id),
+    invoiceId: integer("invoice_id").references(() => purchaseInvoices.id),
+    userId: integer("user_id").references(() => users.id),
+    userName: text("user_name").notNull(),
+    note: text("note"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index("ingredient_movements_ingredient_idx").on(table.ingredientId),
+    index("ingredient_movements_order_idx").on(table.orderId),
+  ],
+);
+
+export const ingredients = sqliteTable(
+  "ingredients",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    /** Base unit is grams; UI displays g/kg. May go negative (D2). */
+    stockGrams: integer("stock_grams").notNull().default(0),
+    lowStockGrams: integer("low_stock_grams").notNull().default(0),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [uniqueIndex("ingredients_name_idx").on(table.name)],
+);
+
+export const suppliers = sqliteTable("suppliers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  notes: text("notes"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+export const purchaseInvoices = sqliteTable("purchase_invoices", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  supplierId: integer("supplier_id").references(() => suppliers.id),
+  invoiceNumber: text("invoice_number"),
+  note: text("note"),
+  totalCost: real("total_cost").notNull().default(0),
+  createdBy: integer("created_by").references(() => users.id),
+  createdByName: text("created_by_name").notNull(),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+export const purchaseInvoiceLines = sqliteTable("purchase_invoice_lines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  invoiceId: integer("invoice_id")
+    .notNull()
+    .references(() => purchaseInvoices.id),
+  ingredientId: integer("ingredient_id").references(() => ingredients.id),
+  /** Snapshot at purchase time. */
+  ingredientName: text("ingredient_name").notNull(),
+  qtyGrams: integer("qty_grams").notNull(),
+  /** Price per entered unit (g or kg). */
+  unitPrice: real("unit_price").notNull(),
+  unitBasis: text("unit_basis", { enum: ["g", "kg"] })
+    .notNull()
+    .default("kg"),
+  lineTotal: real("line_total").notNull(),
+});
+
+export const itemIngredients = sqliteTable(
+  "item_ingredients",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => items.id),
+    ingredientId: integer("ingredient_id")
+      .notNull()
+      .references(() => ingredients.id),
+    /** Grams consumed per one sold unit. */
+    gramsPerUnit: integer("grams_per_unit").notNull(),
+  },
+  (table) => [
+    uniqueIndex("item_ingredients_item_ingredient_idx").on(
+      table.itemId,
+      table.ingredientId,
+    ),
+  ],
+);
+
 export const venuesRelations = relations(venues, ({ many }) => ({
   users: many(users),
   categories: many(categories),
@@ -350,3 +456,79 @@ export const cancelledItemsRelations = relations(cancelledItems, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const ingredientsRelations = relations(ingredients, ({ many }) => ({
+  bomLines: many(itemIngredients),
+  movements: many(ingredientMovements),
+  purchaseLines: many(purchaseInvoiceLines),
+}));
+
+export const suppliersRelations = relations(suppliers, ({ many }) => ({
+  invoices: many(purchaseInvoices),
+}));
+
+export const purchaseInvoicesRelations = relations(
+  purchaseInvoices,
+  ({ one, many }) => ({
+    supplier: one(suppliers, {
+      fields: [purchaseInvoices.supplierId],
+      references: [suppliers.id],
+    }),
+    createdByUser: one(users, {
+      fields: [purchaseInvoices.createdBy],
+      references: [users.id],
+    }),
+    lines: many(purchaseInvoiceLines),
+    movements: many(ingredientMovements),
+  }),
+);
+
+export const purchaseInvoiceLinesRelations = relations(
+  purchaseInvoiceLines,
+  ({ one }) => ({
+    invoice: one(purchaseInvoices, {
+      fields: [purchaseInvoiceLines.invoiceId],
+      references: [purchaseInvoices.id],
+    }),
+    ingredient: one(ingredients, {
+      fields: [purchaseInvoiceLines.ingredientId],
+      references: [ingredients.id],
+    }),
+  }),
+);
+
+export const itemIngredientsRelations = relations(
+  itemIngredients,
+  ({ one }) => ({
+    item: one(items, {
+      fields: [itemIngredients.itemId],
+      references: [items.id],
+    }),
+    ingredient: one(ingredients, {
+      fields: [itemIngredients.ingredientId],
+      references: [ingredients.id],
+    }),
+  }),
+);
+
+export const ingredientMovementsRelations = relations(
+  ingredientMovements,
+  ({ one }) => ({
+    ingredient: one(ingredients, {
+      fields: [ingredientMovements.ingredientId],
+      references: [ingredients.id],
+    }),
+    order: one(orders, {
+      fields: [ingredientMovements.orderId],
+      references: [orders.id],
+    }),
+    invoice: one(purchaseInvoices, {
+      fields: [ingredientMovements.invoiceId],
+      references: [purchaseInvoices.id],
+    }),
+    user: one(users, {
+      fields: [ingredientMovements.userId],
+      references: [users.id],
+    }),
+  }),
+);

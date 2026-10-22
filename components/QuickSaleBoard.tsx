@@ -181,6 +181,9 @@ export function QuickSaleBoard({
           receiptFailed,
         }),
       );
+      if (payResult.inventoryWarning) {
+        showToast("warning", payResult.inventoryWarning);
+      }
       router.refresh();
     });
   }

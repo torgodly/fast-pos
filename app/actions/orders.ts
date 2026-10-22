@@ -33,6 +33,8 @@ import { availableAtVenue } from "@/lib/menu/scope";
 import { getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
 import { categoryNameForItem } from "@/lib/orders/category-snapshot";
+import { consumeForPaidOrder } from "@/lib/inventory/service";
+import { insufficientWarningText } from "@/lib/inventory/rules";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -46,6 +48,52 @@ function recalcOrderTotal(orderId: number) {
     .where(eq(orders.id, orderId))
     .run();
   return total;
+}
+
+/** D2: stock issues must never block or fail a payment. */
+function consumePaidOrderInventory(
+  session: { userId: number; name: string; role: string },
+  venueId: VenueId,
+  orderId: number,
+): { note: string; warning?: string } {
+  try {
+    const result = consumeForPaidOrder(orderId, {
+      userId: session.userId,
+      name: session.name,
+    });
+    if (result.warnings.length === 0) return { note: "" };
+
+    const detail = `نقص مخزون: ${insufficientWarningText(result.warnings)}`;
+    recordSessionAudit(session, {
+      venueId,
+      kind: "inventory",
+      orderId,
+      success: true,
+      detail,
+    });
+    return {
+      note: ` — تحذير مخزون: ${insufficientWarningText(result.warnings)}`,
+      warning: detail,
+    };
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "تعذر خصم المخزون";
+    try {
+      recordSessionAudit(session, {
+        venueId,
+        kind: "inventory",
+        orderId,
+        success: false,
+        detail,
+      });
+    } catch {
+      /* audit is best-effort — payment already succeeded */
+    }
+    return {
+      note: ` — تعذر تحديث المخزون: ${detail}`,
+      warning: `تعذر تحديث المخزون: ${detail}`,
+    };
+  }
 }
 
 /** Waiters may only mutate orders they opened; cashiers can work any open order. */
@@ -948,6 +996,12 @@ export async function payOrder(
     .where(eq(orders.id, orderId))
     .run();
 
+  const inventory = consumePaidOrderInventory(
+    session,
+    order.venueId,
+    orderId,
+  );
+
   const table = order.tableId
     ? db.select().from(tables).where(eq(tables.id, order.tableId)).get()
     : null;
@@ -998,7 +1052,7 @@ export async function payOrder(
       printOk: false,
       browserPrint: true,
       receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع — اختر الطابعة في نافذة Chrome`,
+      message: `تم الدفع — اختر الطابعة في نافذة Chrome${inventory.note}`,
     };
   }
 
@@ -1007,7 +1061,7 @@ export async function payOrder(
       ok: true,
       nextUrl: `/cashier/${order.venueId}`,
       printOk: true,
-      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}`,
+      message: `تم الدفع وطباعة الفاتورة على ${stationCtx.printer.name}${inventory.note}`,
     };
   }
 
@@ -1019,7 +1073,7 @@ export async function payOrder(
     nextUrl: `/cashier/${order.venueId}`,
     printOk: false,
     printError,
-    message: `تم الدفع — فاتورة #${orderId} محفوظة. فشلت طباعة العميل: ${printError}. أعد الطباعة لاحقاً من مبيعاتي`,
+    message: `تم الدفع — فاتورة #${orderId} محفوظة. فشلت طباعة العميل: ${printError}. أعد الطباعة لاحقاً من مبيعاتي${inventory.note}`,
   };
 }
 
@@ -1046,6 +1100,7 @@ export async function payQuickSale(
       orderId: number;
       kitchenFailed: boolean;
       receiptFailed: boolean;
+      inventoryWarning?: string;
     }
 > {
   const session = await getSession();
@@ -1195,6 +1250,8 @@ export async function payQuickSale(
     .where(eq(orders.id, order.id))
     .run();
 
+  const inventory = consumePaidOrderInventory(session, venueId, order.id);
+
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(venueId),
     orderId: order.id,
@@ -1242,6 +1299,7 @@ export async function payQuickSale(
     orderId: order.id,
     kitchenFailed,
     receiptFailed,
+    inventoryWarning: inventory.warning,
   };
 
   if ("browserPrint" in printResult && printResult.browserPrint) {

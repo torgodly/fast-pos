@@ -86,6 +86,7 @@ function createMemoryDb() {
       order_id INTEGER NOT NULL,
       item_id INTEGER,
       item_name TEXT NOT NULL,
+      category_name TEXT,
       unit_price REAL NOT NULL,
       qty INTEGER NOT NULL DEFAULT 1,
       line_total REAL NOT NULL,

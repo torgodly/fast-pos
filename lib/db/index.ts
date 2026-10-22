@@ -336,6 +336,74 @@ function ensureSchema(sqlite: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS cancelled_items_order_idx ON cancelled_items(order_id);
     CREATE INDEX IF NOT EXISTS cancelled_items_created_idx ON cancelled_items(created_at);
+
+    CREATE TABLE IF NOT EXISTS ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      stock_grams INTEGER NOT NULL DEFAULT 0,
+      low_stock_grams INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ingredients_name_idx ON ingredients(name);
+
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      notes TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      supplier_id INTEGER REFERENCES suppliers(id),
+      invoice_number TEXT,
+      note TEXT,
+      total_cost REAL NOT NULL DEFAULT 0,
+      created_by INTEGER REFERENCES users(id),
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS purchase_invoice_lines (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(id),
+      ingredient_id INTEGER REFERENCES ingredients(id),
+      ingredient_name TEXT NOT NULL,
+      qty_grams INTEGER NOT NULL,
+      unit_price REAL NOT NULL,
+      unit_basis TEXT NOT NULL DEFAULT 'kg',
+      line_total REAL NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS item_ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER NOT NULL REFERENCES items(id),
+      ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
+      grams_per_unit INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS item_ingredients_item_ingredient_idx
+      ON item_ingredients(item_id, ingredient_id);
+
+    CREATE TABLE IF NOT EXISTS ingredient_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ingredient_id INTEGER REFERENCES ingredients(id),
+      ingredient_name TEXT NOT NULL,
+      delta_grams INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      order_id INTEGER REFERENCES orders(id),
+      invoice_id INTEGER REFERENCES purchase_invoices(id),
+      user_id INTEGER REFERENCES users(id),
+      user_name TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS ingredient_movements_ingredient_idx
+      ON ingredient_movements(ingredient_id);
+    CREATE INDEX IF NOT EXISTS ingredient_movements_order_idx
+      ON ingredient_movements(order_id);
   `);
 
   // Existing databases created before kitchen receipts

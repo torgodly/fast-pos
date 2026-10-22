@@ -21,6 +21,11 @@ export function isVenueId(value: string): value is VenueId {
   return value === "restaurant" || value === "cafe";
 }
 
+/** VENUES filtered by deployment mode. Counter → restaurant only. */
+export function activeVenues(mode: "full" | "counter"): typeof VENUES {
+  return mode === "counter" ? VENUES.filter((v) => v.id === "restaurant") : [...VENUES];
+}
+
 export function getVenueName(id: VenueId): string {
   return VENUES.find((v) => v.id === id)?.name ?? id;
 }

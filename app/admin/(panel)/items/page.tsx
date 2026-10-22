@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { Boxes } from "lucide-react";
 import { ItemsAdmin } from "@/components/admin/ItemsAdmin";
 import { MenuExcelBar } from "@/components/admin/MenuExcelBar";
@@ -6,7 +6,13 @@ import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
-import { categories, items, printers } from "@/lib/db/schema";
+import {
+  categories,
+  ingredients,
+  itemIngredients,
+  items,
+  printers,
+} from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
 import type { VenueId } from "@/lib/types";
@@ -47,6 +53,22 @@ export default async function AdminItemsPage({
     .where(kitchenPrinterRolesFilter)
     .orderBy(asc(printers.name))
     .all();
+
+  const allIngredients = db
+    .select()
+    .from(ingredients)
+    .orderBy(asc(ingredients.name))
+    .all();
+
+  const itemIds = allItems.map((item) => item.id);
+  const bomRows =
+    itemIds.length > 0
+      ? db
+          .select()
+          .from(itemIngredients)
+          .where(inArray(itemIngredients.itemId, itemIds))
+          .all()
+      : [];
 
   return (
     <div className="space-y-7">
@@ -108,6 +130,16 @@ export default async function AdminItemsPage({
           host: p.host,
           port: p.port,
           role: p.role,
+        }))}
+        ingredients={allIngredients.map((ingredient) => ({
+          id: ingredient.id,
+          name: ingredient.name,
+          active: ingredient.active,
+        }))}
+        bomByItem={bomRows.map((row) => ({
+          itemId: row.itemId,
+          ingredientId: row.ingredientId,
+          gramsPerUnit: row.gramsPerUnit,
         }))}
       />
     </div>

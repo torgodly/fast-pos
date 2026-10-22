@@ -7,6 +7,7 @@ export type ResetOptions = {
   menu: boolean;
   tables: boolean;
   receiptSettings: boolean;
+  inventory: boolean;
 };
 
 /** Clears sales, printers/stations, and staff. Keeps items, categories, tables, venues, admin users. */
@@ -18,6 +19,7 @@ export function resetSalesPrintersAndUsers() {
     menu: false,
     tables: false,
     receiptSettings: false,
+    inventory: false,
   });
 }
 
@@ -69,8 +71,18 @@ export function applyPartialReset(options: ResetOptions) {
   }
 
   if (options.menu) {
+    sqlite.exec("DELETE FROM item_ingredients");
     sqlite.exec("DELETE FROM items");
     sqlite.exec("DELETE FROM categories");
+  }
+
+  if (options.inventory) {
+    sqlite.exec("DELETE FROM item_ingredients");
+    sqlite.exec("DELETE FROM ingredient_movements");
+    sqlite.exec("DELETE FROM purchase_invoice_lines");
+    sqlite.exec("DELETE FROM purchase_invoices");
+    sqlite.exec("DELETE FROM ingredients");
+    sqlite.exec("DELETE FROM suppliers");
   }
 
   if (options.tables) {

@@ -16,6 +16,7 @@ import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
+import { isCounterMode, staffLandingPath } from "@/lib/deployment";
 
 export async function requireSession() {
   const session = await getSession();
@@ -30,6 +31,9 @@ export async function requireAdmin() {
 }
 
 export async function requireWaiter(venueId: string) {
+  if (isCounterMode()) {
+    redirect(`/pin/${venueId}`);
+  }
   const session = await getSession();
   if (!session || session.role !== "waiter") {
     redirect(`/pin/${venueId}`);
@@ -127,10 +131,10 @@ export async function changeStaffPin(formData: FormData): Promise<
   const cookieStore = await cookies();
   cookieStore.set(cookie.name, cookie.value, cookie.options);
 
-  const redirectTo =
-    session.role === "waiter"
-      ? `/waiter/${venueId}`
-      : `/cashier/${venueId}`;
+  const redirectTo = staffLandingPath(
+    session.role === "waiter" ? "waiter" : "cashier",
+    venueId,
+  );
 
   return { ok: true, redirectTo };
 }

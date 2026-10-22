@@ -3,9 +3,11 @@ import { StaffAdmin } from "@/components/admin/StaffAdmin";
 import { requireAdmin } from "@/app/actions/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
+import { isCounterMode } from "@/lib/deployment";
 
 export default async function AdminStaffPage() {
   await requireAdmin();
+  const counterMode = isCounterMode();
 
   const staff = db
     .select()
@@ -38,6 +40,7 @@ export default async function AdminStaffPage() {
           isMainCashier: person.isMainCashier,
           mustChangePin: person.mustChangePin,
         }))}
+        counterMode={counterMode}
       />
     </div>
   );

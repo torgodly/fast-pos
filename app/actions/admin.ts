@@ -11,12 +11,15 @@ import {
   normalizePinDigits,
 } from "@/lib/auth/pin";
 import { db } from "@/lib/db";
+import { isCounterMode } from "@/lib/deployment";
 import { applyPartialReset, type ResetOptions } from "@/lib/db/reset";
 
 export type FactoryResetOptions = ResetOptions;
 import {
   cashierStations,
   categories,
+  ingredients,
+  itemIngredients,
   items,
   orderItems,
   orders,
@@ -341,6 +344,21 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     .get();
   if (!category) return { error: "التصنيف غير موجود" };
 
+  const bom = parseBomJson(formData.get("ingredientsJson"));
+  if (bom && "error" in bom) return { error: bom.error };
+
+  if (bom && bom.rows.length > 0) {
+    const ids = bom.rows.map((row) => row.ingredientId);
+    const existing = db
+      .select({ id: ingredients.id })
+      .from(ingredients)
+      .where(inArray(ingredients.id, ids))
+      .all();
+    if (existing.length !== ids.length) {
+      return { error: "أحد المكونات غير موجود" };
+    }
+  }
+
   const values = {
     venueId: category.venueId,
     categoryId,
@@ -349,14 +367,85 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     kitchenPrinterId: null as number | null,
   };
 
-  if (id) {
-    db.update(items).set(values).where(eq(items.id, id)).run();
-  } else {
-    db.insert(items).values({ ...values, active: true }).run();
-  }
+  db.transaction(() => {
+    let itemId = id;
+    if (id) {
+      db.update(items).set(values).where(eq(items.id, id)).run();
+    } else {
+      const created = db
+        .insert(items)
+        .values({ ...values, active: true })
+        .returning()
+        .get();
+      itemId = created.id;
+    }
+
+    if (bom && itemId) {
+      db.delete(itemIngredients)
+        .where(eq(itemIngredients.itemId, itemId))
+        .run();
+      if (bom.rows.length > 0) {
+        db.insert(itemIngredients)
+          .values(
+            bom.rows.map((row) => ({
+              itemId: itemId!,
+              ingredientId: row.ingredientId,
+              gramsPerUnit: row.gramsPerUnit,
+            })),
+          )
+          .run();
+      }
+    }
+  });
 
   revalidatePath("/admin/items");
+  revalidatePath("/admin/inventory");
   return { ok: true };
+}
+
+type BomRowInput = { ingredientId: number; gramsPerUnit: number };
+
+function parseBomJson(
+  raw: FormDataEntryValue | null,
+): { rows: BomRowInput[] } | { error: string } | null {
+  if (raw == null) return null;
+  const text = String(raw).trim();
+  if (!text) return { rows: [] };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { error: "بيانات مكونات الصنف غير صالحة" };
+  }
+  if (!Array.isArray(parsed)) {
+    return { error: "بيانات مكونات الصنف غير صالحة" };
+  }
+
+  const rows: BomRowInput[] = [];
+  const seen = new Set<number>();
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== "object") {
+      return { error: "بيانات مكونات الصنف غير صالحة" };
+    }
+    const value = entry as Record<string, unknown>;
+    const ingredientId = Number(value.ingredientId);
+    const gramsPerUnit = Math.trunc(Number(value.gramsPerUnit));
+    if (!Number.isInteger(ingredientId) || ingredientId <= 0) {
+      return { error: "مكوّن غير صالح في قائمة المكونات" };
+    }
+    if (
+      !Number.isFinite(gramsPerUnit) ||
+      gramsPerUnit <= 0 ||
+      gramsPerUnit > 1_000_000
+    ) {
+      return { error: "كمية المكوّن يجب أن تكون أكبر من صفر" };
+    }
+    if (seen.has(ingredientId)) continue;
+    seen.add(ingredientId);
+    rows.push({ ingredientId, gramsPerUnit });
+  }
+  return { rows };
 }
 
 export async function setItemActive(id: number, active: boolean) {
@@ -369,12 +458,18 @@ export async function setItemActive(id: number, active: boolean) {
 
 export async function deleteItem(id: number): Promise<ActionResult> {
   await assertAdmin();
-  db.update(orderItems)
-    .set({ itemId: null })
-    .where(eq(orderItems.itemId, id))
-    .run();
-  db.delete(items).where(eq(items.id, id)).run();
+  db.transaction(() => {
+    db.delete(itemIngredients)
+      .where(eq(itemIngredients.itemId, id))
+      .run();
+    db.update(orderItems)
+      .set({ itemId: null })
+      .where(eq(orderItems.itemId, id))
+      .run();
+    db.delete(items).where(eq(items.id, id)).run();
+  });
   revalidatePath("/admin/items");
+  revalidatePath("/admin/inventory");
   return { ok: true };
 }
 
@@ -396,13 +491,19 @@ export async function deleteItems(ids: number[]): Promise<ActionResult> {
   const unique = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))];
   if (unique.length === 0) return { error: "لم يُحدَّد أي صنف" };
 
-  db.update(orderItems)
-    .set({ itemId: null })
-    .where(inArray(orderItems.itemId, unique))
-    .run();
-  db.delete(items).where(inArray(items.id, unique)).run();
+  db.transaction(() => {
+    db.delete(itemIngredients)
+      .where(inArray(itemIngredients.itemId, unique))
+      .run();
+    db.update(orderItems)
+      .set({ itemId: null })
+      .where(inArray(orderItems.itemId, unique))
+      .run();
+    db.delete(items).where(inArray(items.id, unique)).run();
+  });
   revalidateFloorMenu();
   revalidatePath("/admin/items");
+  revalidatePath("/admin/inventory");
   return { ok: true };
 }
 
@@ -490,6 +591,9 @@ export async function upsertStaff(formData: FormData): Promise<ActionResult> {
 
   if (!name || (role !== "waiter" && role !== "cashier")) {
     return { error: "بيانات الموظف غير مكتملة" };
+  }
+  if (isCounterMode() && role === "waiter") {
+    return { error: "وضع الكاونتر لا يدعم دور السفرادجي" };
   }
 
   if (!id && !isValidPinFormat(pin)) {

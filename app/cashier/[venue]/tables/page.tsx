@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { ArrowRight, TableProperties } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireMainCashier } from "@/app/actions/auth";
 import { TablesAdmin } from "@/components/admin/TablesAdmin";
 import { PosHeader } from "@/components/PosHeader";
@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { tables } from "@/lib/db/schema";
 import { compareTableNames } from "@/lib/db/floor-tables";
 import { isVenueId } from "@/lib/venues";
+import { isCounterMode, staffLandingPath } from "@/lib/deployment";
 
 export default async function CashierTablesPage({
   params,
@@ -17,6 +18,7 @@ export default async function CashierTablesPage({
 }) {
   const { venue } = await params;
   if (!isVenueId(venue)) notFound();
+  if (isCounterMode()) redirect(staffLandingPath("cashier", venue));
   const session = await requireMainCashier(venue);
 
   const rows = db

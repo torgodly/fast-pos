@@ -15,6 +15,7 @@ const salesOnlyOptions: FactoryResetOptions = {
   menu: false,
   tables: false,
   receiptSettings: false,
+  inventory: false,
 };
 
 const fullResetOptions: FactoryResetOptions = {
@@ -24,6 +25,7 @@ const fullResetOptions: FactoryResetOptions = {
   menu: false,
   tables: false,
   receiptSettings: false,
+  inventory: false,
 };
 
 const resetChoices: {
@@ -55,6 +57,11 @@ const resetChoices: {
     key: "tables",
     label: "الطاولات",
     hint: "أسماء وترقيم الطاولات",
+  },
+  {
+    key: "inventory",
+    label: "المخزون والمشتريات",
+    hint: "المكونات والموردون وفواتير المشتريات — ويمسح مكونات الأصناف",
   },
   {
     key: "receiptSettings",

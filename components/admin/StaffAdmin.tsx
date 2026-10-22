@@ -28,7 +28,10 @@ type StaffRow = {
   mustChangePin: boolean;
 };
 
-export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
+export function StaffAdmin({
+  staff,
+  counterMode = false,
+}: { staff: StaffRow[]; counterMode?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -214,10 +217,14 @@ export function StaffAdmin({ staff }: { staff: StaffRow[] }) {
             <select
               name="role"
               className="select select-bordered w-full"
-              defaultValue={editing?.role ?? "waiter"}
+              defaultValue={
+                counterMode || editing?.role === "cashier" ? "cashier" : "waiter"
+              }
               required
             >
-              <option value="waiter">سفرادجي</option>
+              {!counterMode && (
+                <option value="waiter">سفرادجي</option>
+              )}
               <option value="cashier">كاشير</option>
             </select>
           </label>
