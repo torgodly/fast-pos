@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "@/components/ToastProvider";
+import { getSystemPrinters } from "@/app/actions/admin";
 import { ItemsAdmin } from "./ItemsAdmin";
 
 vi.mock("next/navigation", () => ({
@@ -11,6 +12,7 @@ vi.mock("@/app/actions/admin", () => ({
   deleteCategory: vi.fn(),
   deleteItem: vi.fn(),
   deleteItems: vi.fn(),
+  getSystemPrinters: vi.fn().mockResolvedValue({ printers: [] }),
   moveItemsToCategory: vi.fn(),
   setCategoryActive: vi.fn(),
   setItemActive: vi.fn(),
@@ -85,5 +87,41 @@ describe("ItemsAdmin counter mode", () => {
     expect(screen.getByText("أين يظهر هذا التصنيف؟")).toBeInTheDocument();
     expect(screen.getByText("كافيه فقط")).toBeInTheDocument();
     expect(screen.getAllByText("مشترك").length).toBeGreaterThan(0);
+  });
+
+  it("offers network system printers but disables USB ones in the category modal", async () => {
+    vi.mocked(getSystemPrinters).mockResolvedValueOnce({
+      printers: [
+        {
+          name: "مطبخ الشبكة",
+          driver: "",
+          portName: "192.168.1.40",
+          isDefault: false,
+          host: "192.168.1.40",
+          port: 9100,
+        },
+        {
+          name: "USB Printer",
+          driver: "",
+          portName: "USB001",
+          isDefault: false,
+          host: null,
+          port: null,
+        },
+      ],
+    });
+
+    renderAdmin(true, []);
+    fireEvent.click(screen.getByRole("button", { name: /تصنيف جديد/ }));
+
+    const networkOption = (
+      await screen.findByText(/مطبخ الشبكة/)
+    ).closest("option");
+    expect(networkOption).not.toBeNull();
+    expect((networkOption as HTMLOptionElement).value).toMatch(/^sys:/);
+
+    const usbOption = screen.getByText(/USB Printer/).closest("option");
+    expect(usbOption).not.toBeNull();
+    expect(usbOption).toBeDisabled();
   });
 });

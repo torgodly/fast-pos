@@ -8,6 +8,7 @@ import {
   FolderInput,
   FolderOpen,
   FolderPlus,
+  LoaderCircle,
   PackagePlus,
   Pencil,
   Plus,
@@ -21,6 +22,7 @@ import {
   deleteCategory,
   deleteItem,
   deleteItems,
+  getSystemPrinters,
   moveItemsToCategory,
   setCategoryActive,
   setItemActive,
@@ -32,7 +34,8 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { DeleteConfirmButton } from "@/components/admin/DeleteConfirmButton";
 import { ToggleActiveButton } from "@/components/admin/ToggleActiveButton";
 import { ActionFeedback } from "@/components/ActionFeedback";
-import type { VenueId } from "@/lib/types";
+import { encodeSystemPrinterRef } from "@/lib/print/system-printer-ref";
+import type { SystemPrinter, VenueId } from "@/lib/types";
 import {
   menuScopeLabel,
   venueIdToScope,
@@ -226,6 +229,13 @@ export function ItemsAdmin({
   >(null);
   const [categoryScopeDraft, setCategoryScopeDraft] =
     useState<MenuVenueScope>(venueId);
+  const [systemPrinters, setSystemPrinters] = useState<SystemPrinter[]>([]);
+  const [systemPrintersStatus, setSystemPrintersStatus] = useState<
+    "loading" | "ready" | "error"
+  >("loading");
+  const [systemPrintersError, setSystemPrintersError] = useState<string | null>(
+    null,
+  );
 
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
   const [bomDraft, setBomDraft] = useState<BomRow[]>([]);
@@ -278,16 +288,36 @@ export function ItemsAdmin({
     categoryModal?.mode === "edit" ? categoryModal.category : null;
   const editingItem = itemModal?.mode === "edit" ? itemModal.item : null;
 
+  async function loadSystemPrinters() {
+    setSystemPrintersStatus("loading");
+    setSystemPrintersError(null);
+    try {
+      const result = await getSystemPrinters();
+      if ("error" in result) {
+        setSystemPrintersStatus("error");
+        setSystemPrintersError(result.error);
+        return;
+      }
+      setSystemPrinters(result.printers);
+      setSystemPrintersStatus("ready");
+    } catch {
+      setSystemPrintersStatus("error");
+      setSystemPrintersError("تعذر قراءة طابعات النظام");
+    }
+  }
+
   function openCategoryCreate() {
     setError(null);
     setCategoryScopeDraft(venueId);
     setCategoryModal({ mode: "create" });
+    void loadSystemPrinters();
   }
 
   function openCategoryEdit(category: CategoryRow) {
     setError(null);
     setCategoryScopeDraft(venueIdToScope(category.venueId));
     setCategoryModal({ mode: "edit", category });
+    void loadSystemPrinters();
   }
 
   function openItemCreate() {
@@ -317,6 +347,96 @@ export function ItemsAdmin({
   }
 
   const kitchenPrinterChoices = dedupeKitchenOptions(kitchenPrinters);
+
+  const existingKitchenHostPorts = useMemo(
+    () =>
+      new Set(
+        allKitchenPrinters.map(
+          (printer) => `${printer.host}:${printer.port}`,
+        ),
+      ),
+    [allKitchenPrinters],
+  );
+
+  const systemPrinterChoices = useMemo(
+    () =>
+      systemPrinters.filter((printer) => {
+        if (!printer.host) return true;
+        return !existingKitchenHostPorts.has(
+          `${printer.host}:${printer.port ?? 9100}`,
+        );
+      }),
+    [systemPrinters, existingKitchenHostPorts],
+  );
+
+  function renderSystemPrinterOptions() {
+    if (systemPrintersStatus !== "ready" || systemPrinterChoices.length === 0) {
+      return null;
+    }
+
+    return (
+      <optgroup label="طابعات النظام (Windows)">
+        {systemPrinterChoices.map((printer) => {
+          const value = encodeSystemPrinterRef(printer);
+          if (!value) {
+            return (
+              <option
+                key={printer.name}
+                value={`local:${printer.name}`}
+                disabled
+              >
+                {printer.name} · USB — غير مدعومة لطباعة المطبخ
+              </option>
+            );
+          }
+          return (
+            <option key={printer.name} value={value}>
+              {printer.name} · {printer.host}:{printer.port ?? 9100}
+            </option>
+          );
+        })}
+      </optgroup>
+    );
+  }
+
+  function renderSystemPrinterHint() {
+    if (systemPrintersStatus === "loading") {
+      return (
+        <p className="flex items-center gap-2 text-xs text-base-content/45">
+          <LoaderCircle className="size-3.5 animate-spin" />
+          جارٍ قراءة الطابعات المثبتة على السيرفر...
+        </p>
+      );
+    }
+    if (systemPrintersStatus === "error") {
+      return (
+        <p className="text-xs text-warning">
+          {systemPrintersError ?? "تعذر قراءة طابعات النظام"} — يمكنك اختيار
+          طابعة مضافة.
+        </p>
+      );
+    }
+    if (systemPrinters.filter((printer) => printer.host).length === 0) {
+      return (
+        <p className="text-xs text-base-content/45">
+          لا توجد طابعات شبكة مثبتة على السيرفر — طابعات USB لا تصلح لطباعة
+          المطبخ.
+        </p>
+      );
+    }
+    if (systemPrinterChoices.filter((printer) => printer.host).length === 0) {
+      return (
+        <p className="text-xs text-base-content/45">
+          كل طابعات الشبكة المثبتة مضافة مسبقاً.
+        </p>
+      );
+    }
+    return (
+      <p className="text-xs text-base-content/45">
+        اختيار طابعة شبكة من النظام يضيفها ويربطها بالتصنيف عند الحفظ.
+      </p>
+    );
+  }
 
   function sharedPrinterSummary(cat: CategoryRow) {
     const restaurant = printerName(cat.restaurantKitchenPrinterId);
@@ -1072,7 +1192,9 @@ export function ItemsAdmin({
                       {p.role === "both" ? " · مطبخ+فاتورة" : ""}
                       {!p.active ? " (معطّلة)" : ""}
                     </option>
-                  ))}                </select>
+                  ))}
+                  {renderSystemPrinterOptions()}
+                </select>
               </label>
             )}
           </div>
@@ -1104,7 +1226,9 @@ export function ItemsAdmin({
                           {!p.active ? " (معطّلة)" : ""}
                         </option>
                       ),
-                    )}                  </select>
+                    )}
+                    {renderSystemPrinterOptions()}
+                  </select>
                 </label>
                 <label className="form-control w-full">
                   <span className="label-text mb-2 font-bold">
@@ -1123,11 +1247,14 @@ export function ItemsAdmin({
                         {p.role === "both" ? " · مطبخ+فاتورة" : ""}
                         {!p.active ? " (معطّلة)" : ""}
                       </option>
-                    ))}                  </select>
+                    ))}
+                    {renderSystemPrinterOptions()}
+                  </select>
                 </label>
               </div>
             </div>
           ) : null}
+          {renderSystemPrinterHint()}
           {counterMode ? null : editingCategory ? (
             <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
               تغيير النطاق إلى <strong>مشترك</strong> يجعل كل أصناف هذا التصنيف

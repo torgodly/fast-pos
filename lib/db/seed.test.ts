@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import { FACTORY_CASHIER_PIN, SETTING_DEPLOYMENT_MODE } from "../deployment-mode";
 import * as schema from "./schema";
-import { seedFactoryDatabase } from "./seed";
+import { seedFactoryDatabase, upgradeLegacyAdminPassword } from "./seed";
 
 function createMemoryDb() {
   const sqlite = new Database(":memory:");
@@ -126,15 +126,22 @@ describe("factory seed", () => {
     expect(venues.map((v) => v.id)).toEqual(["restaurant"]);
 
     const users = sqlite
-      .prepare("SELECT name, role, pin_hash, is_main_cashier FROM users")
+      .prepare(
+        "SELECT name, role, username, password_hash, pin_hash, is_main_cashier FROM users",
+      )
       .all() as Array<{
       name: string;
       role: string;
+      username: string | null;
+      password_hash: string | null;
       pin_hash: string | null;
       is_main_cashier: number;
     }>;
     expect(users.map((u) => u.role).sort()).toEqual(["admin", "cashier"]);
     expect(users.some((u) => u.role === "waiter")).toBe(false);
+    const admin = users.find((u) => u.role === "admin");
+    expect(admin?.username).toBe("admin");
+    expect(bcrypt.compareSync("123", admin!.password_hash!)).toBe(true);
     const cashier = users.find((u) => u.role === "cashier");
     expect(cashier?.name).toBe("كاشير");
     expect(cashier?.is_main_cashier).toBe(1);
@@ -167,9 +174,11 @@ describe("factory seed", () => {
     expect(venues.map((v) => v.id)).toEqual(["cafe", "restaurant"]);
 
     const users = sqlite
-      .prepare("SELECT role FROM users ORDER BY role")
-      .all() as { role: string }[];
+      .prepare("SELECT role, password_hash FROM users ORDER BY role")
+      .all() as { role: string; password_hash: string | null }[];
     expect(users.map((u) => u.role)).toEqual(["admin", "cashier"]);
+    const admin = users.find((u) => u.role === "admin");
+    expect(bcrypt.compareSync("123", admin!.password_hash!)).toBe(true);
 
     expect(countRows("printers")).toBe(0);
     expect(countRows("cashier_stations")).toBe(0);
@@ -182,5 +191,26 @@ describe("factory seed", () => {
       .prepare("SELECT value FROM app_settings WHERE key = ?")
       .get(SETTING_DEPLOYMENT_MODE) as { value: string };
     expect(mode.value).toBe("full");
+  });
+
+  it("upgrades the legacy admin123 hash to 123 without touching custom passwords", () => {
+    const created = createMemoryDb();
+    sqlite = created.sqlite;
+    const insert = sqlite.prepare(
+      "INSERT INTO users (name, role, username, password_hash, active) VALUES (?, 'admin', ?, ?, 1)",
+    );
+    insert.run("المدير", "admin", bcrypt.hashSync("admin123", 4));
+    insert.run("Owner", "owner", bcrypt.hashSync("custom-pass", 4));
+
+    upgradeLegacyAdminPassword(created.db);
+
+    const rows = sqlite
+      .prepare("SELECT username, password_hash FROM users ORDER BY username")
+      .all() as Array<{ username: string; password_hash: string }>;
+    const admin = rows.find((row) => row.username === "admin")!;
+    const owner = rows.find((row) => row.username === "owner")!;
+    expect(bcrypt.compareSync("123", admin.password_hash)).toBe(true);
+    expect(bcrypt.compareSync("admin123", admin.password_hash)).toBe(false);
+    expect(bcrypt.compareSync("custom-pass", owner.password_hash)).toBe(true);
   });
 });

@@ -80,10 +80,13 @@ for cheese slices / soda cans). Two further requested updates will follow after 
 - Next two requested updates are still undisclosed; units work is finished and ready.
 - Optional hardening: add a guard if an item has tracking history and the low threshold unit changes.
 
-## Paused unrelated task
+## Paused unrelated task — resolved 2026-10-24
 
-Uninstaller leaves `C:\Program Files\Fast POS` after uninstall even though data was
-deleted. Evidence: folder CreationTime 10:32 on 2026-10-24, uninstall ~10:55,
+Resolved: the uninstaller now deletes runtime data before Inno's directory cleanup and
+removes the whole folder. See `2026-10-24-uninstaller-folder-cleanup.md`.
+
+Original evidence: uninstaller left `C:\Program Files\Fast POS` after uninstall even
+though data was deleted. Evidence: folder CreationTime 10:32 on 2026-10-24, uninstall ~10:55,
 reinstall 10:56; data files all recreated after reinstall; uninstaller hash matches
 current build. Inno removes an empty app dir in a disposable lab, but `dirifempty
 {app}` cannot succeed while `unins000.exe/.dat` exist. Likely final empty-dir cleanup

@@ -64,7 +64,6 @@ Filename: "{app}\bin\fast-pos-install-service.cmd"; Flags: runhidden waituntilte
 Filename: "notepad.exe"; Parameters: """{app}\README-FIRST.txt"""; Description: "عرض بيانات الدخول وتعليمات التشغيل"; Flags: postinstall nowait skipifsilent unchecked
 
 [UninstallRun]
-Filename: "{app}\bin\fast-pos-stop.cmd"; RunOnceId: "StopFastPosService"; Flags: runhidden waituntilterminated
 Filename: "{app}\FastPOS-service.exe"; Parameters: "uninstall"; RunOnceId: "RemoveFastPosService"; Flags: runhidden waituntilterminated
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Fast POS"""; RunOnceId: "RemoveFastPosFirewall"; Flags: runhidden waituntilterminated
 
@@ -124,14 +123,53 @@ begin
   Result := Pos(';' + Uppercase(Param) + ';', ';' + Uppercase(PathValue) + ';') = 0;
 end;
 
+procedure StopFastPosService;
+var
+  ResultCode: Integer;
+  ServiceExe: String;
+begin
+  ServiceExe := ExpandConstant('{app}\FastPOS-service.exe');
+  if FileExists(ServiceExe) then
+    Exec(ServiceExe, 'stop', ExpandConstant('{app}'), SW_HIDE,
+      ewWaitUntilTerminated, ResultCode);
+end;
+
+function DeleteRuntimeData: Boolean;
+var
+  Attempt: Integer;
+  DataDir: String;
+begin
+  DataDir := ExpandConstant('{app}\server\data');
+  for Attempt := 1 to 10 do
+  begin
+    if DirExists(DataDir) then
+      DelTree(DataDir, True, True, True);
+    if not DirExists(DataDir) then
+    begin
+      Result := True;
+      exit;
+    end;
+    Sleep(500);
+  end;
+  Result := False;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   PathValue: string;
   BinDir: string;
-  DataDir: string;
   P: Integer;
 begin
-  if CurUninstallStep = usPostUninstall then
+  if CurUninstallStep = usUninstall then
+  begin
+    { Stop before touching data: the service keeps the SQLite files open. }
+    StopFastPosService;
+    { Delete now, before the uninstall log runs, so Inno can remove the
+      emptied server and application directories afterwards. }
+    if DeleteData then
+      DeleteRuntimeData;
+  end
+  else if CurUninstallStep = usPostUninstall then
   begin
     BinDir := ExpandConstant('{app}\bin');
     if RegQueryStringValue(HKEY_LOCAL_MACHINE,
@@ -151,10 +189,9 @@ begin
 
     if DeleteData then
     begin
-      DataDir := ExpandConstant('{app}\server\data');
-      if DirExists(DataDir) then
-        DelTree(DataDir, True, True, True);
+      DeleteRuntimeData;
       RemoveDir(ExpandConstant('{app}\server'));
+      RemoveDir(ExpandConstant('{app}'));
     end;
   end;
 end;

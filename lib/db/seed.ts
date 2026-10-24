@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { count, eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import type Database from "better-sqlite3";
 import * as schema from "./schema";
@@ -69,7 +69,27 @@ function persistDeploymentMode(
     .run(SETTING_DEPLOYMENT_MODE, mode);
 }
 
+/** Installs created before the default changed still hash admin123. */
+export function upgradeLegacyAdminPassword(
+  db: BetterSQLite3Database<typeof schema>,
+) {
+  const admin = db
+    .select({ id: users.id, passwordHash: users.passwordHash })
+    .from(users)
+    .where(and(eq(users.role, "admin"), eq(users.username, "admin")))
+    .get();
+  if (!admin?.passwordHash) return;
+  if (!bcrypt.compareSync("admin123", admin.passwordHash)) return;
+
+  db.update(users)
+    .set({ passwordHash: bcrypt.hashSync("123", 10) })
+    .where(eq(users.id, admin.id))
+    .run();
+}
+
 export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
+  upgradeLegacyAdminPassword(db);
+
   const [{ value }] = db.select({ value: count() }).from(venues).all();
   if (value > 0) return;
 

@@ -39,9 +39,12 @@ import {
   setZWindow,
 } from "@/lib/settings";
 import { printToPrinter } from "@/lib/print/network";
+import { parseSystemPrinterRef } from "@/lib/print/system-printer-ref";
+import { listSystemPrinters } from "@/lib/print/system";
 import { recordSessionAudit } from "@/lib/audit";
 import type {
   PrinterConnectionType,
+  SystemPrinter,
   VenueId,
 } from "@/lib/types";
 import { isVenueId } from "@/lib/venues";
@@ -214,21 +217,79 @@ function kitchenPrinterById(printerId: number, allowInactive: boolean) {
   return printer;
 }
 
+/**
+ * Category printer fields accept a saved printer id or a `sys:` ref to a
+ * Windows network printer. The ref is reused by host:port or created as a
+ * shared network kitchen printer so the category can print immediately.
+ */
+function resolveCategoryPrinterRef(
+  raw: FormDataEntryValue | null,
+  label: string,
+  allowInactive: boolean,
+): { id: number | null; createdPrinter: boolean } | { error: string } {
+  const value = String(raw ?? "").trim();
+  if (!value) return { id: null, createdPrinter: false };
+
+  const systemRef = parseSystemPrinterRef(value);
+  if (systemRef) {
+    const existing = db
+      .select()
+      .from(printers)
+      .where(
+        and(
+          eq(printers.host, systemRef.host),
+          eq(printers.port, systemRef.port),
+        ),
+      )
+      .get();
+
+    if (existing) {
+      if (!supportsKitchen(existing.role)) {
+        return {
+          error: `${label}: الطابعة «${existing.name}» مضافة كفاتورة كاشير فقط — اجعل نوعها «مطبخ + فاتورة» من صفحة الطابعات`,
+        };
+      }
+      if (!existing.active && !allowInactive) {
+        return {
+          error: `${label}: الطابعة «${existing.name}» معطّلة — فعّلها من صفحة الطابعات`,
+        };
+      }
+      return { id: existing.id, createdPrinter: false };
+    }
+
+    const created = db
+      .insert(printers)
+      .values({
+        venueId: null,
+        name: systemRef.name,
+        role: "kitchen",
+        host: systemRef.host,
+        port: systemRef.port,
+        connectionType: "network",
+        active: true,
+      })
+      .returning({ id: printers.id })
+      .get();
+
+    if (!created) {
+      return { error: `${label}: تعذر إضافة طابعة النظام` };
+    }
+    return { id: created.id, createdPrinter: true };
+  }
+
+  const printerId = parseOptionalPrinterId(value);
+  if (!printerId || !kitchenPrinterById(printerId, allowInactive)) {
+    return { error: `${label} غير صالحة` };
+  }
+  return { id: printerId, createdPrinter: false };
+}
+
 export async function upsertCategory(formData: FormData): Promise<ActionResult> {
   await assertAdmin();
   const id = formData.get("id") ? Number(formData.get("id")) : null;
   const scope = parseMenuVenueScope(String(formData.get("venueScope") ?? ""));
   const name = String(formData.get("name") ?? "").trim();
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
-  const kitchenPrinterId = parseOptionalPrinterId(
-    formData.get("kitchenPrinterId"),
-  );
-  const restaurantKitchenPrinterId = parseOptionalPrinterId(
-    formData.get("restaurantKitchenPrinterId"),
-  );
-  const cafeKitchenPrinterId = parseOptionalPrinterId(
-    formData.get("cafeKitchenPrinterId"),
-  );
 
   if (!scope || !name) {
     return { error: "بيانات التصنيف غير مكتملة" };
@@ -237,24 +298,36 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
   const venueId = scopeToVenueId(scope);
   const allowInactive = Boolean(id);
 
+  let kitchenPrinterId: number | null = null;
+  let restaurantKitchenPrinterId: number | null = null;
+  let cafeKitchenPrinterId: number | null = null;
+  let createdPrinter = false;
+
   if (scope === "shared") {
-    if (
-      restaurantKitchenPrinterId &&
-      !kitchenPrinterById(restaurantKitchenPrinterId, allowInactive)
-    ) {
-      return { error: "طابعة مطبخ المطعم غير صالحة" };
-    }
-    if (
-      cafeKitchenPrinterId &&
-      !kitchenPrinterById(cafeKitchenPrinterId, allowInactive)
-    ) {
-      return { error: "طابعة مطبخ الكافيه غير صالحة" };
-    }
-  } else if (
-    kitchenPrinterId &&
-    !kitchenPrinterById(kitchenPrinterId, allowInactive)
-  ) {
-    return { error: "طابعة المطبخ غير صالحة" };
+    const restaurant = resolveCategoryPrinterRef(
+      formData.get("restaurantKitchenPrinterId"),
+      "طابعة مطبخ المطعم",
+      allowInactive,
+    );
+    if ("error" in restaurant) return restaurant;
+    const cafe = resolveCategoryPrinterRef(
+      formData.get("cafeKitchenPrinterId"),
+      "طابعة مطبخ الكافيه",
+      allowInactive,
+    );
+    if ("error" in cafe) return cafe;
+    restaurantKitchenPrinterId = restaurant.id;
+    cafeKitchenPrinterId = cafe.id;
+    createdPrinter = restaurant.createdPrinter || cafe.createdPrinter;
+  } else {
+    const resolved = resolveCategoryPrinterRef(
+      formData.get("kitchenPrinterId"),
+      "طابعة المطبخ",
+      allowInactive,
+    );
+    if ("error" in resolved) return resolved;
+    kitchenPrinterId = resolved.id;
+    createdPrinter = resolved.createdPrinter;
   }
 
   const values = {
@@ -306,6 +379,7 @@ export async function upsertCategory(formData: FormData): Promise<ActionResult> 
   }
 
   revalidatePath("/admin/items");
+  if (createdPrinter) revalidatePath("/admin/printers");
   return { ok: true };
 }
 
@@ -804,6 +878,22 @@ export async function deleteStaff(id: number): Promise<ActionResult> {
   return { ok: true };
 }
 
+export async function getSystemPrinters(): Promise<
+  { printers: SystemPrinter[] } | { error: string }
+> {
+  try {
+    await assertAdmin();
+    return { printers: await listSystemPrinters() };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error
+          ? error.message
+          : "تعذر قراءة طابعات النظام",
+    };
+  }
+}
+
 export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
   try {
     await assertAdmin();
@@ -821,15 +911,17 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
       return { error: "نوع الطابعة غير صالح" };
     }
 
-    if (role === "both" && connectionType === "local") {
+    if (connectionType !== "network" && connectionType !== "local") {
+      return { error: "طريقة اتصال الطابعة غير صالحة" };
+    }
+
+    if (supportsKitchen(role) && connectionType === "local") {
       return {
-        error: "الطابعة المشتركة (مطبخ + فاتورة) تتطلب اتصال شبكة",
+        error: "طابعة المطبخ تتطلب اتصال شبكة — استخدم IP أو طابعة شبكة من النظام",
       };
     }
 
-    const resolvedConnection: PrinterConnectionType = supportsKitchen(role)
-      ? "network"
-      : connectionType;
+    const resolvedConnection: PrinterConnectionType = connectionType;
 
     if (!name) {
       return { error: "بيانات الطابعة غير مكتملة" };
