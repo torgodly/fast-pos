@@ -60,7 +60,7 @@ Guards: `requireSession/requireAdmin/requireWaiter/requireCashier/requireMainCas
 - `auth/pin` POST — staff login; duplicate-PIN → `needUserPick` candidates list; 423 when not activated.
 - `auth/admin` POST — admin login. `auth/logout` POST — clears cookie.
 - `settings/receipt-logo` GET/POST/DELETE — logo upload (PNG/JPG/WebP/GIF ≤5MB → `data/receipt-logo.png`, canvas-normalized).
-- `admin/menu/export` / `import` — ExcelJS workbook of menu.
+- `admin/menu/export` / `import` / `template` — ExcelJS workbook of menu; template is the import-ready header sheet with scope/active dropdowns.
 
 ## lib/ map
 
@@ -106,7 +106,7 @@ Checkout receipt: `printer.connectionType` — `network` → ESC/POS bytes; `loc
 ## Deployment modes & installer
 
 - Mode lives in `data/deployment.json` and is mirrored in `app_settings.deployment_mode`; resolved by `lib/deployment.ts` (cached, file bootstraps DB). `full` = restaurant + cafe + tables/waiters; `counter` = restaurant only, cashier-only quick sales, no tables/waiters/cafe. Changing mode requires reinstall.
-- Factory seed (`lib/db/seed.ts`): when `data/deployment.json` exists (installed systems), seeds clean production data — admin/admin123, full menu, placeholder printers + checkout station, main cashier `كاشير` PIN `2580`, no demo staff/orders. Without the file, dev falls back to full mode with the rich demo seed. Login PINs 1111…6666 are dev-only.
+- Factory seed (`lib/db/seed.ts`): when `data/deployment.json` exists (installed systems), seeds only venues + users — admin/123 and main cashier `كاشير` PIN `2580`; no menu, printers, stations, tables, demo staff, or orders. Admin configures menu/printers from the panel. Without the file, dev falls back to full mode with the rich demo seed. Login PINs 1111…6666 are dev-only.
 - Installer assets: `installer/fast-pos.iss` (Inno Setup 6+ script, Arabic wizard, mode page, upgrade detection), `scripts/build-installer.ps1` (standalone build + payload assembly + ISCC), `installer/service/FastPOS-service.xml` (WinSW), `installer/vendor/winsw/FastPOS-service.exe`, `installer/bin/*.cmd` (start/stop/restart/status/console/open/install-service), `installer/README-FIRST.txt`.
 - Payload layout: `{app}\server` (standalone `server.js`, `.next`, static, public), `{app}\node` (portable Node 24 x64), `{app}\bin`, `{app}\service`, `{app}\fast-pos.env`, license public key only. WinSW runs `{app}\node\node.exe server.js` with cwd `{app}\server` (DB at `{app}\server\data\pos.db`), PORT 3000, logs in `{app}\logs`. Installer adds `{app}\bin` to HKLM PATH, opens firewall TCP 3000, installs/starts the service. Upgrades skip the mode page and preserve `data\`.
 - Build: `npm run installer:build` (options `-ISCCPath`, `-NodeDir`, `-NodeVersion`, `-SkipNpm`). Output `release\installer\Fast-POS-Setup-<version>.exe`. `.next/standalone` tracing excludes `data/**` (`next.config.ts`). Verified on Windows 10 with Inno Setup 7 (2026-10-22): compile, silent install (full mode), WinSW service startup, admin/PIN login, upgrade preserving `data/`, and uninstall cleanup. Run a final smoke test in a clean VM before shipping.
@@ -140,7 +140,7 @@ Checkout receipt: `printer.connectionType` — `network` → ESC/POS bytes; `loc
 - Report group names are hardcoded in `lib/reports/groups.ts` (cafe vs restaurant lists).
 - `upsertCategory` merges same-named shared categories (moves items, remaps historical `order_items.itemId`).
 - `payQuickSale` kitchen failure → order stays paid, warning surfaced; reprint from sales page.
-- Seed/demo logins: admin/admin123, staff PINs 1111…6666 (dev only; factory seed uses PIN 2580 for the main cashier).
+- Seed/demo logins: admin/123, staff PINs 1111…6666 (dev only; factory seed uses PIN 2580 for the main cashier).
 - Factory reset `ResetOptions` now includes `inventory`; resetting inventory also clears `item_ingredients` (BOM) even when menu is kept.
 - Inventory insufficiency is warning-only by design (D2). `consumeForPaidOrder` is idempotent via the ledger net per order; invoice-edit hooks call it before mutating lines so legacy unconsumed paid orders get a correct baseline.
 - Tests: vitest + jsdom — `lib/**/*.test.ts(x)` (including `lib/inventory/rules.test.ts`, `lib/inventory/core.test.ts`) + `components/PinPad.test.tsx`.

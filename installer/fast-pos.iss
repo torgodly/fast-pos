@@ -32,7 +32,8 @@ RestartApplications=no
 SetupLogging=yes
 WizardStyle=modern
 ShowLanguageDialog=no
-UninstallDisplayIcon={app}\FastPOS-service.exe
+SetupIconFile=app_icon.ico
+UninstallDisplayIcon={app}\FastPOS.ico
 VersionInfoVersion=0.1.0.0
 
 [Languages]
@@ -43,12 +44,16 @@ Name: "desktopicon"; Description: "إنشاء أيقونة على سطح الم�
 
 [Files]
 Source: "{#PayloadRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "app_icon.ico"; DestDir: "{app}"; DestName: "FastPOS.ico"; Flags: ignoreversion
+
+[InstallDelete]
+Type: files; Name: "{app}\app_icon.ico"
 
 [Icons]
-Name: "{group}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"
-Name: "{group}\Fast POS Console"; Filename: "{app}\bin\fast-pos-console.cmd"; WorkingDir: "{app}"
+Name: "{group}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"
+Name: "{group}\Fast POS Console"; Filename: "{app}\bin\fast-pos-console.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"
 Name: "{group}\Fast POS README"; Filename: "{app}\README-FIRST.txt"
-Name: "{autodesktop}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"; Tasks: desktopicon
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\bin"; Check: NeedsAddPath('{app}\bin'); Flags: preservestringtype
@@ -65,11 +70,45 @@ Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Fast
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\logs"
+Type: dirifempty; Name: "{app}\server"
+Type: dirifempty; Name: "{app}"
 
 [Code]
 var
   ModePage: TInputOptionWizardPage;
   ExistingInstall: Boolean;
+  DeleteData: Boolean;
+
+function WantsDataDeletion: Boolean;
+var
+  I: Integer;
+  Param: String;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    Param := Uppercase(ParamStr(I));
+    if (Param = '/DELETEUSERDATA') or (Param = '/DELETEUSERDATA=1') or
+       (Param = '/DELETEUSERDATA=YES') then
+    begin
+      Result := True;
+      exit;
+    end;
+  end;
+end;
+
+function InitializeUninstall: Boolean;
+begin
+  Result := True;
+  DeleteData := WantsDataDeletion;
+  if not DeleteData and not UninstallSilent then
+    DeleteData := MsgBox(
+      'هل تريد أيضاً حذف بيانات النظام؟' + #13#10 +
+      'سيتم حذف قاعدة البيانات والإعدادات نهائياً ولا يمكن استعادتها.' + #13#10#13#10 +
+      'Also delete the database and settings?' + #13#10 +
+      'This permanently removes all saved data and cannot be undone.',
+      mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+end;
 
 function NeedsAddPath(Param: string): Boolean;
 var
@@ -89,6 +128,7 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   PathValue: string;
   BinDir: string;
+  DataDir: string;
   P: Integer;
 begin
   if CurUninstallStep = usPostUninstall then
@@ -107,6 +147,14 @@ begin
       RegWriteExpandStringValue(HKEY_LOCAL_MACHINE,
         'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
         'Path', PathValue);
+    end;
+
+    if DeleteData then
+    begin
+      DataDir := ExpandConstant('{app}\server\data');
+      if DirExists(DataDir) then
+        DelTree(DataDir, True, True, True);
+      RemoveDir(ExpandConstant('{app}\server'));
     end;
   end;
 end;
@@ -185,7 +233,7 @@ begin
   begin
     WizardForm.FinishedLabel.Caption :=
       'تم تثبيت Fast POS بنجاح.' + #13#10#13#10 +
-      'لوحة الإدارة: admin / admin123 — غيّر كلمة المرور فوراً.' + #13#10 +
+      'لوحة الإدارة: admin / 123 — غيّر كلمة المرور فوراً.' + #13#10 +
       'رمز الكاشير: 2580' + #13#10 +
       'من أي جهاز على الشبكة: http://<IP-الخادم>:3000';
   end;

@@ -74,12 +74,203 @@ function createDb() {
 
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
+  migrateUnits(sqlite);
   migratePrinterVenueNullable(sqlite);
   migrateDeduplicateKitchenPrinters(sqlite);
   migrateNullableMenuVenue(sqlite);
   migrateSharedStaff(sqlite);
   runSeedSafely(db);
   return db;
+}
+
+function tableColumns(sqlite: Database.Database, table: string) {
+  return sqlite.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+    name: string;
+  }>;
+}
+
+function hasColumn(sqlite: Database.Database, table: string, column: string) {
+  return tableColumns(sqlite, table).some((col) => col.name === column);
+}
+
+function renameColumnIfNeeded(
+  sqlite: Database.Database,
+  table: string,
+  from: string,
+  to: string,
+) {
+  if (!hasColumn(sqlite, table, from) || hasColumn(sqlite, table, to)) return;
+  sqlite.exec(`ALTER TABLE ${table} RENAME COLUMN ${from} TO ${to}`);
+}
+
+function addColumnIfMissing(
+  sqlite: Database.Database,
+  table: string,
+  column: string,
+  definition: string,
+) {
+  if (hasColumn(sqlite, table, column)) return;
+  sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+/**
+ * Units v1: canonical stock quantities are base units (gram / piece).
+ * Legacy databases store grams only; rename those columns in place so data
+ * keeps working, then fill unit snapshots for old purchase lines.
+ */
+function migrateUnits(sqlite: Database.Database) {
+  renameColumnIfNeeded(sqlite, "ingredients", "stock_grams", "stock_base");
+  renameColumnIfNeeded(
+    sqlite,
+    "ingredients",
+    "low_stock_grams",
+    "low_stock_base",
+  );
+  renameColumnIfNeeded(
+    sqlite,
+    "ingredient_movements",
+    "delta_grams",
+    "delta_base",
+  );
+  renameColumnIfNeeded(
+    sqlite,
+    "item_ingredients",
+    "grams_per_unit",
+    "qty_base",
+  );
+  renameColumnIfNeeded(
+    sqlite,
+    "purchase_invoice_lines",
+    "qty_grams",
+    "qty_base",
+  );
+  renameColumnIfNeeded(
+    sqlite,
+    "purchase_invoice_lines",
+    "ingredient_name",
+    "target_name",
+  );
+
+  addColumnIfMissing(
+    sqlite,
+    "ingredients",
+    "preferred_unit_id",
+    "INTEGER REFERENCES units(id)",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "items",
+    "unit_id",
+    "INTEGER REFERENCES units(id)",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "items",
+    "track_stock",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "items",
+    "stock_base",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "items",
+    "low_stock_base",
+    "INTEGER NOT NULL DEFAULT 0",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "purchase_invoice_lines",
+    "item_id",
+    "INTEGER REFERENCES items(id)",
+  );
+  addColumnIfMissing(
+    sqlite,
+    "purchase_invoice_lines",
+    "unit_id",
+    "INTEGER REFERENCES units(id)",
+  );
+  addColumnIfMissing(sqlite, "purchase_invoice_lines", "unit_name", "TEXT");
+  addColumnIfMissing(sqlite, "purchase_invoice_lines", "unit_kind", "TEXT");
+  addColumnIfMissing(
+    sqlite,
+    "purchase_invoice_lines",
+    "factor_to_base",
+    "INTEGER",
+  );
+
+  const builtIns: Array<[string, "weight" | "count", number]> = [
+    ["غرام", "weight", 1],
+    ["كيلو", "weight", 1000],
+    ["حبة", "count", 1],
+    ["دزينة", "count", 12],
+  ];
+  const insertUnit = sqlite.prepare(
+    `INSERT OR IGNORE INTO units (name, kind, factor_to_base, built_in, active)
+     VALUES (?, ?, ?, 1, 1)`,
+  );
+  for (const [name, kind, factor] of builtIns) {
+    insertUnit.run(name, kind, factor);
+  }
+
+  const marker = sqlite
+    .prepare(`SELECT value FROM app_settings WHERE key = ?`)
+    .get("units_v1") as { value: string } | undefined;
+  if (marker?.value) return;
+
+  const gram = sqlite
+    .prepare(`SELECT id FROM units WHERE name = 'غرام'`)
+    .get() as { id: number } | undefined;
+  const kilo = sqlite
+    .prepare(`SELECT id FROM units WHERE name = 'كيلو'`)
+    .get() as { id: number } | undefined;
+
+  if (gram) {
+    sqlite
+      .prepare(
+        `UPDATE ingredients SET preferred_unit_id = ? WHERE preferred_unit_id IS NULL`,
+      )
+      .run(gram.id);
+  }
+
+  if (hasColumn(sqlite, "purchase_invoice_lines", "unit_basis")) {
+    sqlite
+      .prepare(
+        `UPDATE purchase_invoice_lines
+         SET unit_name = CASE WHEN unit_basis = 'kg' THEN 'كيلو' ELSE 'غرام' END,
+             unit_kind = 'weight',
+             factor_to_base = CASE WHEN unit_basis = 'kg' THEN 1000 ELSE 1 END
+         WHERE unit_name IS NULL`,
+      )
+      .run();
+    sqlite
+      .prepare(
+        `UPDATE purchase_invoice_lines
+         SET unit_id = CASE WHEN unit_basis = 'kg' THEN ? ELSE ? END
+         WHERE unit_id IS NULL`,
+      )
+      .run(kilo?.id ?? null, gram?.id ?? null);
+  } else {
+    sqlite
+      .prepare(
+        `UPDATE purchase_invoice_lines
+         SET unit_name = COALESCE(unit_name, 'غرام'),
+             unit_kind = COALESCE(unit_kind, 'weight'),
+             factor_to_base = COALESCE(factor_to_base, 1)
+         WHERE unit_name IS NULL OR unit_kind IS NULL OR factor_to_base IS NULL`,
+      )
+      .run();
+  }
+
+  sqlite
+    .prepare(
+      `INSERT INTO app_settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    )
+    .run("units_v1", "1");
 }
 
 /**
@@ -192,6 +383,17 @@ function ensureSchema(sqlite: Database.Database) {
       name TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      factor_to_base INTEGER NOT NULL,
+      built_in INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS units_name_idx ON units(name);
+
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -240,6 +442,10 @@ function ensureSchema(sqlite: Database.Database) {
       name TEXT NOT NULL,
       price REAL NOT NULL,
       kitchen_printer_id INTEGER REFERENCES printers(id),
+      unit_id INTEGER REFERENCES units(id),
+      track_stock INTEGER NOT NULL DEFAULT 0,
+      stock_base INTEGER NOT NULL DEFAULT 0,
+      low_stock_base INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
     );
 
@@ -265,10 +471,20 @@ function ensureSchema(sqlite: Database.Database) {
     CREATE UNIQUE INDEX IF NOT EXISTS shifts_venue_date_number_idx
       ON shifts(venue_id, work_date, shift_number);
 
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      phone TEXT,
+      notes TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
       table_id INTEGER REFERENCES tables(id),
+      customer_id INTEGER REFERENCES customers(id),
       waiter_id INTEGER REFERENCES users(id),
       cashier_id INTEGER REFERENCES users(id),
       shift_id INTEGER REFERENCES shifts(id),
@@ -340,8 +556,9 @@ function ensureSchema(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
-      stock_grams INTEGER NOT NULL DEFAULT 0,
-      low_stock_grams INTEGER NOT NULL DEFAULT 0,
+      preferred_unit_id INTEGER REFERENCES units(id),
+      stock_base INTEGER NOT NULL DEFAULT 0,
+      low_stock_base INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -371,10 +588,14 @@ function ensureSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       invoice_id INTEGER NOT NULL REFERENCES purchase_invoices(id),
       ingredient_id INTEGER REFERENCES ingredients(id),
-      ingredient_name TEXT NOT NULL,
-      qty_grams INTEGER NOT NULL,
+      item_id INTEGER REFERENCES items(id),
+      target_name TEXT NOT NULL,
+      qty_base INTEGER NOT NULL,
+      unit_id INTEGER REFERENCES units(id),
+      unit_name TEXT,
+      unit_kind TEXT,
+      factor_to_base INTEGER,
       unit_price REAL NOT NULL,
-      unit_basis TEXT NOT NULL DEFAULT 'kg',
       line_total REAL NOT NULL
     );
 
@@ -382,7 +603,7 @@ function ensureSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL REFERENCES items(id),
       ingredient_id INTEGER NOT NULL REFERENCES ingredients(id),
-      grams_per_unit INTEGER NOT NULL
+      qty_base INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS item_ingredients_item_ingredient_idx
       ON item_ingredients(item_id, ingredient_id);
@@ -391,7 +612,7 @@ function ensureSchema(sqlite: Database.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingredient_id INTEGER REFERENCES ingredients(id),
       ingredient_name TEXT NOT NULL,
-      delta_grams INTEGER NOT NULL,
+      delta_base INTEGER NOT NULL,
       kind TEXT NOT NULL,
       order_id INTEGER REFERENCES orders(id),
       invoice_id INTEGER REFERENCES purchase_invoices(id),
@@ -404,6 +625,27 @@ function ensureSchema(sqlite: Database.Database) {
       ON ingredient_movements(ingredient_id);
     CREATE INDEX IF NOT EXISTS ingredient_movements_order_idx
       ON ingredient_movements(order_id);
+
+    CREATE TABLE IF NOT EXISTS item_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER REFERENCES items(id),
+      item_name TEXT NOT NULL,
+      delta_base INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      unit_name TEXT,
+      unit_kind TEXT,
+      factor_to_base INTEGER,
+      order_id INTEGER REFERENCES orders(id),
+      invoice_id INTEGER REFERENCES purchase_invoices(id),
+      user_id INTEGER REFERENCES users(id),
+      user_name TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS item_movements_item_idx
+      ON item_movements(item_id);
+    CREATE INDEX IF NOT EXISTS item_movements_order_idx
+      ON item_movements(order_id);
   `);
 
   // Existing databases created before kitchen receipts
@@ -490,6 +732,14 @@ function ensureSchema(sqlite: Database.Database) {
   try {
     sqlite.exec(
       `ALTER TABLE orders ADD COLUMN shift_id INTEGER REFERENCES shifts(id)`,
+    );
+  } catch {
+    // column already exists
+  }
+
+  try {
+    sqlite.exec(
+      `ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)`,
     );
   } catch {
     // column already exists

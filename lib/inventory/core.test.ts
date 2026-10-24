@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import * as schema from "@/lib/db/schema";
 import {
   adjustForInvoiceEdit,
+  adjustItemStock,
   adjustStock,
   consumeForPaidOrder,
   receivePurchaseInvoice,
@@ -16,13 +17,36 @@ import {
 function createMemoryDb() {
   const sqlite = new Database(":memory:");
   sqlite.exec(`
+    CREATE TABLE units (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL,
+      factor_to_base INTEGER NOT NULL,
+      built_in INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
-      stock_grams INTEGER NOT NULL DEFAULT 0,
-      low_stock_grams INTEGER NOT NULL DEFAULT 0,
+      preferred_unit_id INTEGER,
+      stock_base INTEGER NOT NULL DEFAULT 0,
+      low_stock_base INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      venue_id TEXT,
+      category_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      price REAL NOT NULL,
+      kitchen_printer_id INTEGER,
+      unit_id INTEGER,
+      track_stock INTEGER NOT NULL DEFAULT 0,
+      stock_base INTEGER NOT NULL DEFAULT 0,
+      low_stock_base INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE suppliers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,25 +70,45 @@ function createMemoryDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       invoice_id INTEGER NOT NULL,
       ingredient_id INTEGER,
-      ingredient_name TEXT NOT NULL,
-      qty_grams INTEGER NOT NULL,
+      item_id INTEGER,
+      target_name TEXT NOT NULL,
+      qty_base INTEGER NOT NULL,
+      unit_id INTEGER,
+      unit_name TEXT,
+      unit_kind TEXT,
+      factor_to_base INTEGER,
       unit_price REAL NOT NULL,
-      unit_basis TEXT NOT NULL DEFAULT 'kg',
       line_total REAL NOT NULL
     );
     CREATE TABLE item_ingredients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       item_id INTEGER NOT NULL,
       ingredient_id INTEGER NOT NULL,
-      grams_per_unit INTEGER NOT NULL,
+      qty_base INTEGER NOT NULL,
       UNIQUE(item_id, ingredient_id)
     );
     CREATE TABLE ingredient_movements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       ingredient_id INTEGER,
       ingredient_name TEXT NOT NULL,
-      delta_grams INTEGER NOT NULL,
+      delta_base INTEGER NOT NULL,
       kind TEXT NOT NULL,
+      order_id INTEGER,
+      invoice_id INTEGER,
+      user_id INTEGER,
+      user_name TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE item_movements (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER,
+      item_name TEXT NOT NULL,
+      delta_base INTEGER NOT NULL,
+      kind TEXT NOT NULL,
+      unit_name TEXT,
+      unit_kind TEXT,
+      factor_to_base INTEGER,
       order_id INTEGER,
       invoice_id INTEGER,
       user_id INTEGER,
@@ -96,15 +140,44 @@ describe("inventory core (memory db)", () => {
   let sqlite: Database.Database;
   let db: ReturnType<typeof createMemoryDb>["db"];
   let ingredientId: number;
+  let kiloId: number;
+  let pieceId: number;
+  let dozenId: number;
 
   beforeEach(() => {
     ({ sqlite, db } = createMemoryDb());
+    const gram = db
+      .insert(schema.units)
+      .values({ name: "غرام", kind: "weight", factorToBase: 1, active: true })
+      .returning()
+      .get();
+    const kilo = db
+      .insert(schema.units)
+      .values({ name: "كيلو", kind: "weight", factorToBase: 1000, active: true })
+      .returning()
+      .get();
+    const piece = db
+      .insert(schema.units)
+      .values({ name: "حبة", kind: "count", factorToBase: 1, active: true })
+      .returning()
+      .get();
+    const dozen = db
+      .insert(schema.units)
+      .values({ name: "دزينة", kind: "count", factorToBase: 12, active: true })
+      .returning()
+      .get();
+    kiloId = kilo.id;
+    pieceId = piece.id;
+    dozenId = dozen.id;
+    expect(gram.id).toBeGreaterThan(0);
+
     const ingredient = db
       .insert(schema.ingredients)
       .values({
         name: "لحم",
-        stockGrams: 10_000,
-        lowStockGrams: 2_000,
+        preferredUnitId: kiloId,
+        stockBase: 10_000,
+        lowStockBase: 2_000,
         active: true,
       })
       .returning()
@@ -112,7 +185,7 @@ describe("inventory core (memory db)", () => {
     ingredientId = ingredient.id;
 
     db.insert(schema.itemIngredients)
-      .values({ itemId: 10, ingredientId, gramsPerUnit: 200 })
+      .values({ itemId: 10, ingredientId, qtyBase: 200 })
       .run();
 
     db.insert(schema.orderItems)
@@ -132,12 +205,12 @@ describe("inventory core (memory db)", () => {
     sqlite.close();
   });
 
-  function stockGrams() {
+  function ingredientStockBase() {
     return db
-      .select({ stockGrams: schema.ingredients.stockGrams })
+      .select({ stockBase: schema.ingredients.stockBase })
       .from(schema.ingredients)
       .where(eq(schema.ingredients.id, ingredientId))
-      .get()!.stockGrams;
+      .get()!.stockBase;
   }
 
   function movementsFor(orderId: number) {
@@ -163,9 +236,10 @@ describe("inventory core (memory db)", () => {
         note: null,
         lines: [
           {
-            ingredientId,
+            targetType: "ingredient",
+            targetId: ingredientId,
             qty: 2,
-            unitBasis: "kg",
+            unitId: kiloId,
             unitPrice: 30,
           },
         ],
@@ -174,7 +248,7 @@ describe("inventory core (memory db)", () => {
     );
 
     expect(result.totalCost).toBe(60);
-    expect(stockGrams()).toBe(12_000);
+    expect(ingredientStockBase()).toBe(12_000);
 
     const lines = db
       .select()
@@ -182,8 +256,11 @@ describe("inventory core (memory db)", () => {
       .where(eq(schema.purchaseInvoiceLines.invoiceId, result.invoiceId))
       .all();
     expect(lines).toHaveLength(1);
-    expect(lines[0]!.qtyGrams).toBe(2_000);
-    expect(lines[0]!.unitBasis).toBe("kg");
+    expect(lines[0]!.qtyBase).toBe(2_000);
+    expect(lines[0]!.targetName).toBe("لحم");
+    expect(lines[0]!.unitName).toBe("كيلو");
+    expect(lines[0]!.factorToBase).toBe(1000);
+    expect(lines[0]!.itemId).toBeNull();
 
     const movements = db
       .select()
@@ -192,43 +269,59 @@ describe("inventory core (memory db)", () => {
       .all();
     expect(movements).toHaveLength(1);
     expect(movements[0]!.kind).toBe("purchase");
-    expect(movements[0]!.deltaGrams).toBe(2_000);
+    expect(movements[0]!.deltaBase).toBe(2_000);
   });
 
   it("consumes stock on payment and is idempotent", () => {
     const first = consumeForPaidOrder({ db, sqlite }, 1, user);
     expect(first.skipped).toBe(false);
     expect(first.consumed).toEqual([
-      { ingredientId, name: "لحم", grams: 400 },
+      {
+        targetType: "ingredient",
+        targetId: ingredientId,
+        name: "لحم",
+        baseQty: 400,
+        unitName: "كيلو",
+        unitKind: "weight",
+        factorToBase: 1000,
+      },
     ]);
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const second = consumeForPaidOrder({ db, sqlite }, 1, user);
     expect(second.skipped).toBe(true);
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const movements = movementsFor(1);
     expect(movements).toHaveLength(1);
     expect(movements[0]!.kind).toBe("sale");
-    expect(movements[0]!.deltaGrams).toBe(-400);
+    expect(movements[0]!.deltaBase).toBe(-400);
   });
 
   it("allows negative stock and returns insufficiency warnings", () => {
     db.update(schema.ingredients)
-      .set({ stockGrams: 100 })
+      .set({ stockBase: 100 })
       .where(eq(schema.ingredients.id, ingredientId))
       .run();
 
     const result = consumeForPaidOrder({ db, sqlite }, 1, user);
     expect(result.warnings).toEqual([
-      { ingredientId, name: "لحم", deficit: 300 },
+      {
+        targetId: ingredientId,
+        targetType: "ingredient",
+        name: "لحم",
+        deficitBase: 300,
+        unitName: "كيلو",
+        unitKind: "weight",
+        factorToBase: 1000,
+      },
     ]);
-    expect(stockGrams()).toBe(-300);
+    expect(ingredientStockBase()).toBe(-300);
   });
 
   it("applies invoice quantity deltas to paid orders", () => {
     consumeForPaidOrder({ db, sqlite }, 1, user);
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const add = adjustForInvoiceEdit(
       { db, sqlite },
@@ -237,7 +330,7 @@ describe("inventory core (memory db)", () => {
       user,
     );
     expect(add.warnings).toEqual([]);
-    expect(stockGrams()).toBe(9_400);
+    expect(ingredientStockBase()).toBe(9_400);
 
     adjustForInvoiceEdit(
       { db, sqlite },
@@ -245,10 +338,10 @@ describe("inventory core (memory db)", () => {
       [{ itemId: 10, deltaQty: -1 }],
       user,
     );
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const edits = movementsFor(1).filter((m) => m.kind === "invoice_edit");
-    expect(edits.map((m) => m.deltaGrams)).toEqual([-200, 200]);
+    expect(edits.map((m) => m.deltaBase)).toEqual([-200, 200]);
   });
 
   it("consumes the pre-edit baseline for a legacy unpaid-consumed order", () => {
@@ -260,21 +353,31 @@ describe("inventory core (memory db)", () => {
     );
     expect(result.warnings).toEqual([]);
     // Baseline qty 2 (−400) plus the added unit (−200).
-    expect(stockGrams()).toBe(9_400);
+    expect(ingredientStockBase()).toBe(9_400);
     expect(movementsFor(1)).toHaveLength(2);
   });
 
   it("returns stock when a paid invoice is cancelled and re-consumes on restore", () => {
     consumeForPaidOrder({ db, sqlite }, 1, user);
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const returned = returnForCancelledPaidOrder({ db, sqlite }, 1, user);
-    expect(returned.returned).toEqual([{ name: "لحم", grams: 400 }]);
-    expect(stockGrams()).toBe(10_000);
+    expect(returned.returned).toEqual([
+      {
+        targetType: "ingredient",
+        targetId: ingredientId,
+        name: "لحم",
+        baseQty: 400,
+        unitName: "كيلو",
+        unitKind: "weight",
+        factorToBase: 1000,
+      },
+    ]);
+    expect(ingredientStockBase()).toBe(10_000);
 
     const restored = reconsumeForRestoredOrder({ db, sqlite }, 1, user);
     expect(restored.skipped).toBe(false);
-    expect(stockGrams()).toBe(9_600);
+    expect(ingredientStockBase()).toBe(9_600);
 
     const kinds = movementsFor(1).map((m) => m.kind);
     expect(kinds).toEqual(["sale", "cancel_return", "sale"]);
@@ -285,17 +388,115 @@ describe("inventory core (memory db)", () => {
       { db, sqlite },
       {
         ingredientId,
-        deltaGrams: -1_500,
+        delta: -1.5,
+        unitId: kiloId,
         note: "جرد",
         user,
       },
     );
-    expect(result.stockGrams).toBe(8_500);
+    expect(result.stockBase).toBe(8_500);
 
     const movements = db.select().from(schema.ingredientMovements).all();
     expect(movements).toHaveLength(1);
     expect(movements[0]!.kind).toBe("adjust");
-    expect(movements[0]!.deltaGrams).toBe(-1_500);
+    expect(movements[0]!.deltaBase).toBe(-1_500);
     expect(movements[0]!.userName).toBe("مدير");
+  });
+
+  it("tracks resale item stock on purchase, adjustment and payment", () => {
+    const cola = db
+      .insert(schema.items)
+      .values({
+        name: "كولا",
+        price: 2,
+        categoryId: 1,
+        unitId: pieceId,
+        trackStock: true,
+        stockBase: 10,
+        lowStockBase: 0,
+        active: true,
+      })
+      .returning()
+      .get();
+
+    const itemStockBase = () =>
+      db
+        .select({ stockBase: schema.items.stockBase })
+        .from(schema.items)
+        .where(eq(schema.items.id, cola.id))
+        .get()!.stockBase;
+
+    receivePurchaseInvoice(
+      { db, sqlite },
+      {
+        supplierId: null,
+        invoiceNumber: "INV-2",
+        note: null,
+        lines: [
+          {
+            targetType: "item",
+            targetId: cola.id,
+            qty: 2,
+            unitId: dozenId,
+            unitPrice: 20,
+          },
+        ],
+        user,
+      },
+    );
+    expect(itemStockBase()).toBe(34);
+
+    const purchaseLine = db
+      .select()
+      .from(schema.purchaseInvoiceLines)
+      .where(eq(schema.purchaseInvoiceLines.itemId, cola.id))
+      .get();
+    expect(purchaseLine?.qtyBase).toBe(24);
+    expect(purchaseLine?.unitName).toBe("دزينة");
+    expect(purchaseLine?.ingredientId).toBeNull();
+
+    const adjusted = adjustItemStock(
+      { db, sqlite },
+      { itemId: cola.id, delta: -2, unitId: pieceId, note: "تالف", user },
+    );
+    expect(adjusted.stockBase).toBe(32);
+
+    db.insert(schema.orderItems)
+      .values({
+        orderId: 2,
+        itemId: cola.id,
+        itemName: "كولا",
+        unitPrice: 2,
+        qty: 3,
+        lineTotal: 6,
+        kitchenSentQty: 0,
+      })
+      .run();
+
+    const result = consumeForPaidOrder({ db, sqlite }, 2, user);
+    expect(result.skipped).toBe(false);
+    expect(result.warnings).toEqual([]);
+    expect(result.consumed).toEqual([
+      {
+        targetType: "item",
+        targetId: cola.id,
+        name: "كولا",
+        baseQty: 3,
+        unitName: "حبة",
+        unitKind: "count",
+        factorToBase: 1,
+      },
+    ]);
+    expect(itemStockBase()).toBe(29);
+
+    const movements = db
+      .select()
+      .from(schema.itemMovements)
+      .where(eq(schema.itemMovements.orderId, 2))
+      .all();
+    expect(movements).toHaveLength(1);
+    expect(movements[0]!.kind).toBe("sale");
+    expect(movements[0]!.deltaBase).toBe(-3);
+    expect(movements[0]!.unitName).toBe("حبة");
   });
 });

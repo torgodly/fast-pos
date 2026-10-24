@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowDownUp, Pencil, Plus, Warehouse } from "lucide-react";
+import { ArrowDownUp, Package, Pencil, Plus, Warehouse } from "lucide-react";
 import {
   adjustIngredientStock,
+  adjustTrackedItemStock,
   deleteIngredient,
   setIngredientActive,
   upsertIngredient,
@@ -16,30 +17,60 @@ import { ToggleActiveButton } from "@/components/admin/ToggleActiveButton";
 import { ActionFeedback } from "@/components/ActionFeedback";
 import { useToast } from "@/components/ToastProvider";
 import {
-  gramsFromQuantity,
-  gramsToDisplay,
+  baseToQuantity,
+  formatQuantity,
   isLowStock,
   MOVEMENT_KIND_LABELS,
+  UNIT_KIND_LABELS,
   type MovementKind,
-  type QuantityBasis,
+  type UnitKind,
 } from "@/lib/inventory/rules";
+
+export type UnitOption = {
+  id: number;
+  name: string;
+  kind: UnitKind;
+  factorToBase: number;
+  active: boolean;
+};
 
 export type IngredientRow = {
   id: number;
   name: string;
-  stockGrams: number;
-  lowStockGrams: number;
+  stockBase: number;
+  lowStockBase: number;
   active: boolean;
+  unitId: number | null;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
 };
 
-export type MovementRow = {
+export type TrackedItemRow = {
   id: number;
-  ingredientName: string;
-  deltaGrams: number;
+  name: string;
+  stockBase: number;
+  lowStockBase: number;
+  active: boolean;
+  unitId: number | null;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+  categoryName: string | null;
+};
+
+export type StockMovementRow = {
+  key: string;
+  targetType: "ingredient" | "item";
+  targetName: string;
+  deltaBase: number;
   kind: string;
   userName: string;
   note: string | null;
   createdAt: string;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
 };
 
 type IngredientModal =
@@ -47,14 +78,48 @@ type IngredientModal =
   | { mode: "edit"; ingredient: IngredientRow }
   | null;
 
+type AdjustTarget = {
+  targetType: "ingredient" | "item";
+  id: number;
+  name: string;
+  stockBase: number;
+  unitId: number | null;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+};
+
+function unitOf(row: {
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+}) {
+  return {
+    name: row.unitName,
+    kind: row.unitKind,
+    factorToBase: row.factorToBase,
+  };
+}
+
+function inputNumber(value: number) {
+  if (!Number.isFinite(value)) return "0";
+  return Number.isInteger(value)
+    ? String(value)
+    : String(Number(value.toFixed(3)));
+}
+
 export function IngredientsAdmin({
   ingredients,
+  trackedItems,
   movements,
+  units,
   from,
   to,
 }: {
   ingredients: IngredientRow[];
-  movements: MovementRow[];
+  trackedItems: TrackedItemRow[];
+  movements: StockMovementRow[];
+  units: UnitOption[];
   from: string;
   to: string;
 }) {
@@ -63,7 +128,8 @@ export function IngredientsAdmin({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<IngredientModal>(null);
-  const [adjustTarget, setAdjustTarget] = useState<IngredientRow | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<AdjustTarget | null>(null);
+  const [ingredientUnitId, setIngredientUnitId] = useState("");
 
   const editing = modal?.mode === "edit" ? modal.ingredient : null;
 
@@ -72,6 +138,23 @@ export function IngredientsAdmin({
     setModal(null);
     setAdjustTarget(null);
     setError(null);
+  }
+
+  function compatibleUnits(kind: UnitKind, currentId: number | null) {
+    return units.filter(
+      (unit) => unit.kind === kind && (unit.active || unit.id === currentId),
+    );
+  }
+
+  function defaultUnitId(kind: UnitKind, currentId: number | null) {
+    return (
+      currentId ??
+      units.find(
+        (unit) => unit.kind === kind && unit.active && unit.factorToBase === 1,
+      )?.id ??
+      units.find((unit) => unit.kind === kind && unit.active)?.id ??
+      ""
+    );
   }
 
   function submitIngredient(event: React.FormEvent<HTMLFormElement>) {
@@ -95,23 +178,35 @@ export function IngredientsAdmin({
     const formData = new FormData(event.currentTarget);
     const direction = String(formData.get("direction") ?? "in");
     const amount = Number(formData.get("amount"));
-    const basis: QuantityBasis =
-      String(formData.get("basis") ?? "g") === "kg" ? "kg" : "g";
+    const unitId = Number(formData.get("unitId"));
     const note = String(formData.get("note") ?? "").trim();
-    const grams = gramsFromQuantity(amount, basis);
-    if (!Number.isFinite(grams) || grams <= 0) {
+    const unit = units.find((row) => row.id === unitId);
+    if (!Number.isFinite(amount) || amount <= 0) {
       setError("أدخل كمية أكبر من صفر");
       return;
     }
-    const delta = direction === "out" ? -grams : grams;
+    if (!unit || unit.kind !== adjustTarget.unitKind) {
+      setError("اختر وحدة قياس متوافقة");
+      return;
+    }
+    const delta = direction === "out" ? -amount : amount;
 
     startTransition(async () => {
       setError(null);
-      const result = await adjustIngredientStock(
-        adjustTarget.id,
-        delta,
-        note || null,
-      );
+      const result =
+        adjustTarget.targetType === "ingredient"
+          ? await adjustIngredientStock(
+              adjustTarget.id,
+              delta,
+              unitId,
+              note || null,
+            )
+          : await adjustTrackedItemStock(
+              adjustTarget.id,
+              delta,
+              unitId,
+              note || null,
+            );
       if (result && "error" in result) {
         setError(result.error);
         return;
@@ -119,8 +214,8 @@ export function IngredientsAdmin({
       showToast(
         "success",
         `تم تعديل مخزون «${adjustTarget.name}» — الرصيد: ${
-          result && "stockGrams" in result && result.stockGrams != null
-            ? gramsToDisplay(result.stockGrams)
+          result && "stockBase" in result && result.stockBase != null
+            ? formatQuantity(result.stockBase, unit)
             : "—"
         }`,
       );
@@ -144,6 +239,21 @@ export function IngredientsAdmin({
     );
   }
 
+  function statusBadges(stockBase: number, lowStockBase: number) {
+    const low = isLowStock(stockBase, lowStockBase);
+    return (
+      <div className="flex flex-wrap gap-1">
+        {stockBase < 0 ? (
+          <span className="badge badge-error badge-soft badge-sm">سالب</span>
+        ) : low ? (
+          <span className="badge badge-warning badge-soft badge-sm">منخفض</span>
+        ) : (
+          <span className="badge badge-success badge-soft badge-sm">جيد</span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <>
       <section className="premium-card card">
@@ -156,7 +266,7 @@ export function IngredientsAdmin({
               <div>
                 <h3 className="font-black">المكونات والمخزون</h3>
                 <p className="text-xs text-base-content/45">
-                  الرصيد بالغرام — يُعرض بالغرام أو الكيلوغرام
+                  الأرصدة تُخزَّن بالغرام أو الحبة وتُعرض بوحدة كل مكوّن
                 </p>
               </div>
             </div>
@@ -165,6 +275,9 @@ export function IngredientsAdmin({
               className="btn btn-primary gap-2"
               onClick={() => {
                 setError(null);
+                setIngredientUnitId(
+                  String(defaultUnitId("weight", null) || ""),
+                );
                 setModal({ mode: "create" });
               }}
             >
@@ -178,6 +291,7 @@ export function IngredientsAdmin({
               <thead>
                 <tr>
                   <th>المكوّن</th>
+                  <th>الوحدة</th>
                   <th>الرصيد</th>
                   <th>حد التنبيه</th>
                   <th>الحالة</th>
@@ -185,102 +299,227 @@ export function IngredientsAdmin({
                 </tr>
               </thead>
               <tbody>
-                {ingredients.map((ingredient) => {
-                  const low = isLowStock(
-                    ingredient.stockGrams,
-                    ingredient.lowStockGrams,
-                  );
-                  const negative = ingredient.stockGrams < 0;
-                  return (
-                    <tr
-                      key={ingredient.id}
-                      className={!ingredient.active ? "opacity-50" : ""}
+                {ingredients.map((ingredient) => (
+                  <tr
+                    key={ingredient.id}
+                    className={!ingredient.active ? "opacity-50" : ""}
+                  >
+                    <td className="font-bold">{ingredient.name}</td>
+                    <td>
+                      <span className="badge badge-ghost badge-sm">
+                        {ingredient.unitName}
+                      </span>
+                    </td>
+                    <td
+                      className={`font-mono font-bold ${
+                        ingredient.stockBase < 0
+                          ? "text-error"
+                          : isLowStock(
+                                ingredient.stockBase,
+                                ingredient.lowStockBase,
+                              )
+                            ? "text-warning"
+                            : "text-base-content"
+                      }`}
                     >
-                      <td className="font-bold">{ingredient.name}</td>
-                      <td
-                        className={`font-mono font-bold ${
-                          negative
-                            ? "text-error"
-                            : low
-                              ? "text-warning"
-                              : "text-base-content"
-                        }`}
-                      >
-                        {gramsToDisplay(ingredient.stockGrams)}
-                      </td>
-                      <td className="text-base-content/60">
-                        {ingredient.lowStockGrams > 0
-                          ? gramsToDisplay(ingredient.lowStockGrams)
-                          : "—"}
-                      </td>
-                      <td>
-                        <div className="flex flex-wrap gap-1">
-                          {negative ? (
-                            <span className="badge badge-error badge-soft badge-sm">
-                              سالب
-                            </span>
-                          ) : low ? (
-                            <span className="badge badge-warning badge-soft badge-sm">
-                              منخفض
-                            </span>
-                          ) : (
-                            <span className="badge badge-success badge-soft badge-sm">
-                              جيد
-                            </span>
-                          )}
-                          {!ingredient.active ? (
-                            <span className="badge badge-ghost badge-sm">
-                              معطّل
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="btn btn-square btn-ghost btn-sm"
-                            title="تعديل يدوي للمخزون"
-                            onClick={() => {
-                              setError(null);
-                              setAdjustTarget(ingredient);
-                            }}
-                          >
-                            <ArrowDownUp className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-square btn-ghost btn-sm"
-                            title="تعديل"
-                            onClick={() => {
-                              setError(null);
-                              setModal({ mode: "edit", ingredient });
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </button>
-                          <ToggleActiveButton
-                            active={ingredient.active}
-                            onToggle={async () => {
-                              await setIngredientActive(
-                                ingredient.id,
-                                !ingredient.active,
-                              );
-                            }}
-                          />
-                          <DeleteConfirmButton
-                            itemName={ingredient.name}
-                            onDelete={() => deleteIngredient(ingredient.id)}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                      {formatQuantity(ingredient.stockBase, unitOf(ingredient))}
+                    </td>
+                    <td className="text-base-content/60">
+                      {ingredient.lowStockBase > 0
+                        ? formatQuantity(
+                            ingredient.lowStockBase,
+                            unitOf(ingredient),
+                          )
+                        : "—"}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {statusBadges(
+                          ingredient.stockBase,
+                          ingredient.lowStockBase,
+                        )}
+                        {!ingredient.active ? (
+                          <span className="badge badge-ghost badge-sm">
+                            معطّل
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-square btn-ghost btn-sm"
+                          title="تعديل يدوي للمخزون"
+                          onClick={() => {
+                            setError(null);
+                            setAdjustTarget({
+                              targetType: "ingredient",
+                              id: ingredient.id,
+                              name: ingredient.name,
+                              stockBase: ingredient.stockBase,
+                              unitId: ingredient.unitId,
+                              unitName: ingredient.unitName,
+                              unitKind: ingredient.unitKind,
+                              factorToBase: ingredient.factorToBase,
+                            });
+                          }}
+                        >
+                          <ArrowDownUp className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-square btn-ghost btn-sm"
+                          title="تعديل"
+                          onClick={() => {
+                            setError(null);
+                            setIngredientUnitId(
+                              String(
+                                ingredient.unitId ??
+                                  defaultUnitId(
+                                    ingredient.unitKind,
+                                    null,
+                                  ) ??
+                                  "",
+                              ),
+                            );
+                            setModal({ mode: "edit", ingredient });
+                          }}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <ToggleActiveButton
+                          active={ingredient.active}
+                          onToggle={async () => {
+                            await setIngredientActive(
+                              ingredient.id,
+                              !ingredient.active,
+                            );
+                          }}
+                        />
+                        <DeleteConfirmButton
+                          itemName={ingredient.name}
+                          onDelete={() => deleteIngredient(ingredient.id)}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
                 {ingredients.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="text-center opacity-60">
+                    <td colSpan={6} className="text-center opacity-60">
                       لا توجد مكونات بعد — أضف مكوّناً أو سجّل فاتورة مشتريات.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="premium-card card">
+        <div className="card-body gap-5 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-xl bg-secondary/10 text-secondary">
+                <Package className="size-5" />
+              </span>
+              <div>
+                <h3 className="font-black">أصناف متتبعة المخزون</h3>
+                <p className="text-xs text-base-content/45">
+                  أصناف بيع تُخصم كميتها من مخزونها الخاص عند الدفع — بلا مكونات
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/admin/items"
+              className="btn btn-ghost btn-sm rounded-xl"
+              prefetch={false}
+            >
+              إدارة الأصناف
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-base-300/60">
+            <table className="table table-zebra">
+              <thead>
+                <tr>
+                  <th>الصنف</th>
+                  <th>التصنيف</th>
+                  <th>الوحدة</th>
+                  <th>الرصيد</th>
+                  <th>حد التنبيه</th>
+                  <th>الحالة</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {trackedItems.map((item) => (
+                  <tr key={item.id} className={!item.active ? "opacity-50" : ""}>
+                    <td className="font-bold">{item.name}</td>
+                    <td className="text-sm text-base-content/60">
+                      {item.categoryName ?? "—"}
+                    </td>
+                    <td>
+                      <span className="badge badge-ghost badge-sm">
+                        {item.unitName}
+                      </span>
+                    </td>
+                    <td
+                      className={`font-mono font-bold ${
+                        item.stockBase < 0
+                          ? "text-error"
+                          : isLowStock(item.stockBase, item.lowStockBase)
+                            ? "text-warning"
+                            : "text-base-content"
+                      }`}
+                    >
+                      {formatQuantity(item.stockBase, unitOf(item))}
+                    </td>
+                    <td className="text-base-content/60">
+                      {item.lowStockBase > 0
+                        ? formatQuantity(item.lowStockBase, unitOf(item))
+                        : "—"}
+                    </td>
+                    <td>
+                      <div className="flex flex-wrap gap-1">
+                        {statusBadges(item.stockBase, item.lowStockBase)}
+                        {!item.active ? (
+                          <span className="badge badge-ghost badge-sm">
+                            معطّل
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="btn btn-square btn-ghost btn-sm"
+                        title="تعديل يدوي للمخزون"
+                        onClick={() => {
+                          setError(null);
+                          setAdjustTarget({
+                            targetType: "item",
+                            id: item.id,
+                            name: item.name,
+                            stockBase: item.stockBase,
+                            unitId: item.unitId,
+                            unitName: item.unitName,
+                            unitKind: item.unitKind,
+                            factorToBase: item.factorToBase,
+                          });
+                        }}
+                      >
+                        <ArrowDownUp className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {trackedItems.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="text-center opacity-60">
+                      لا أصناف متتبعة بعد — فعّل «تتبع المخزون» من صفحة الأصناف.
                     </td>
                   </tr>
                 )}
@@ -296,7 +535,7 @@ export function IngredientsAdmin({
             <div>
               <h3 className="font-black">حركات المخزون</h3>
               <p className="text-xs text-base-content/45">
-                شراء، بيع، تعديل يدوي، وتعديلات الفواتير
+                شراء، بيع، تعديل يدوي، وتعديلات الفواتير — للمكونات والأصناف
               </p>
             </div>
             <form
@@ -339,7 +578,7 @@ export function IngredientsAdmin({
               <thead>
                 <tr>
                   <th>التاريخ</th>
-                  <th>المكوّن</th>
+                  <th>العنصر</th>
                   <th>النوع</th>
                   <th>التغيير</th>
                   <th>الموظف</th>
@@ -348,11 +587,18 @@ export function IngredientsAdmin({
               </thead>
               <tbody>
                 {movements.map((movement) => (
-                  <tr key={movement.id}>
+                  <tr key={movement.key}>
                     <td className="whitespace-nowrap font-mono text-xs">
                       {movement.createdAt}
                     </td>
-                    <td className="font-bold">{movement.ingredientName}</td>
+                    <td>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">{movement.targetName}</span>
+                        <span className="badge badge-ghost badge-sm">
+                          {movement.targetType === "item" ? "صنف" : "مكوّن"}
+                        </span>
+                      </div>
+                    </td>
                     <td>
                       <span className="badge badge-ghost badge-sm">
                         {MOVEMENT_KIND_LABELS[
@@ -362,11 +608,15 @@ export function IngredientsAdmin({
                     </td>
                     <td
                       className={`whitespace-nowrap font-mono font-bold ${
-                        movement.deltaGrams < 0 ? "text-error" : "text-success"
+                        movement.deltaBase < 0 ? "text-error" : "text-success"
                       }`}
                     >
-                      {movement.deltaGrams > 0 ? "+" : ""}
-                      {gramsToDisplay(movement.deltaGrams)}
+                      {movement.deltaBase > 0 ? "+" : ""}
+                      {formatQuantity(movement.deltaBase, {
+                        name: movement.unitName,
+                        kind: movement.unitKind,
+                        factorToBase: movement.factorToBase,
+                      })}
                     </td>
                     <td className="text-sm">{movement.userName}</td>
                     <td className="max-w-[16rem] truncate text-sm text-base-content/60">
@@ -409,30 +659,62 @@ export function IngredientsAdmin({
               required
             />
           </label>
-          <div className="flex gap-2">
-            <label className="form-control flex-1">
-              <span className="label-text mb-2 font-bold">حد التنبيه</span>
-              <input
-                name="lowStockValue"
-                type="number"
-                min="0"
-                step="0.01"
-                defaultValue={editing?.lowStockGrams ?? 0}
-                className="input input-bordered w-full"
-              />
-            </label>
-            <label className="form-control w-28">
-              <span className="label-text mb-2 font-bold">الوحدة</span>
-              <select
-                name="lowStockBasis"
-                className="select select-bordered w-full"
-                defaultValue="g"
-              >
-                <option value="g">غرام</option>
-                <option value="kg">كغ</option>
-              </select>
-            </label>
-          </div>
+          <label className="form-control w-full">
+            <span className="label-text mb-2 font-bold">وحدة القياس</span>
+            <select
+              name="unitId"
+              className="select select-bordered w-full"
+              value={ingredientUnitId}
+              onChange={(event) =>
+                setIngredientUnitId(event.target.value)
+              }
+              required
+            >
+              {units
+                .filter(
+                  (unit) =>
+                    unit.active ||
+                    unit.id === editing?.unitId ||
+                    String(unit.id) === ingredientUnitId,
+                )
+                .map((unit) => (
+                  <option key={unit.id} value={unit.id}>
+                    {unit.name} · {UNIT_KIND_LABELS[unit.kind]}
+                    {unit.active ? "" : " (معطّلة)"}
+                  </option>
+                ))}
+            </select>
+            <span className="label-text mt-1 text-xs text-base-content/45">
+              تحدد الوحدة كيفية عرض الرصيد وإدخال الكميات — لا يمكن تغيير نوعها
+              بعد وجود رصيد أو حركات.
+            </span>
+          </label>
+          <label className="form-control w-full">
+            <span className="label-text mb-2 font-bold">
+              حد التنبيه (بالوحدة المختارة)
+            </span>
+            <input
+              key={`ingredient-low-${ingredientUnitId}`}
+              name="lowStockValue"
+              type="number"
+              min="0"
+              step="0.001"
+              defaultValue={
+                editing
+                  ? inputNumber(
+                      baseToQuantity(
+                        editing.lowStockBase,
+                        units.find(
+                          (unit) =>
+                            String(unit.id) === ingredientUnitId,
+                        )?.factorToBase ?? editing.factorToBase,
+                      ),
+                    )
+                  : 0
+              }
+              className="input input-bordered w-full"
+            />
+          </label>
           <p className="text-xs text-base-content/45">
             يظهر تنبيه «منخفض» عندما يصل الرصيد إلى هذا الحد أو أقل. صفر = بدون
             تنبيه. الرصيد الفعلي يُضاف من فاتورة مشتريات أو تعديل يدوي.
@@ -466,11 +748,13 @@ export function IngredientsAdmin({
           <div className="rounded-xl bg-base-200/70 px-3 py-2 text-sm">
             الرصيد الحالي:{" "}
             <strong className="font-mono">
-              {adjustTarget ? gramsToDisplay(adjustTarget.stockGrams) : "—"}
+              {adjustTarget
+                ? formatQuantity(adjustTarget.stockBase, unitOf(adjustTarget))
+                : "—"}
             </strong>
           </div>
-          <div className="flex gap-2">
-            <label className="form-control flex-1">
+          <div className="flex flex-wrap gap-2">
+            <label className="form-control min-w-32 flex-1">
               <span className="label-text mb-2 font-bold">العملية</span>
               <select
                 name="direction"
@@ -481,7 +765,7 @@ export function IngredientsAdmin({
                 <option value="out">خصم من المخزون</option>
               </select>
             </label>
-            <label className="form-control flex-1">
+            <label className="form-control min-w-28 flex-1">
               <span className="label-text mb-2 font-bold">الكمية</span>
               <input
                 name="amount"
@@ -492,15 +776,32 @@ export function IngredientsAdmin({
                 required
               />
             </label>
-            <label className="form-control w-28">
+            <label className="form-control min-w-28 flex-1">
               <span className="label-text mb-2 font-bold">الوحدة</span>
               <select
-                name="basis"
+                name="unitId"
                 className="select select-bordered w-full"
-                defaultValue="g"
+                defaultValue={
+                  adjustTarget
+                    ? defaultUnitId(
+                        adjustTarget.unitKind,
+                        adjustTarget.unitId,
+                      )
+                    : ""
+                }
+                required
               >
-                <option value="g">غرام</option>
-                <option value="kg">كغ</option>
+                {adjustTarget
+                  ? compatibleUnits(
+                      adjustTarget.unitKind,
+                      adjustTarget.unitId,
+                    ).map((unit) => (
+                      <option key={unit.id} value={unit.id}>
+                        {unit.name}
+                        {unit.active ? "" : " (معطّلة)"}
+                      </option>
+                    ))
+                  : null}
               </select>
             </label>
           </div>

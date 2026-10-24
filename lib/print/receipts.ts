@@ -69,6 +69,8 @@ export type CheckoutReceiptData = {
   orderId: number;
   tableName: string;
   waiterName: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
   cashierName: string;
   paymentMethod: "cash" | "card" | "preview";
   paidAt: string;
@@ -427,6 +429,8 @@ export function buildCheckoutReceiptHtml(
       ${metaRow("رقم الفاتورة", data.orderId > 0 ? `#${data.orderId}` : "—")}
       ${metaRow("الطاولة", data.tableName)}
       ${data.waiterName ? metaRow("السفرادجي", data.waiterName) : ""}
+      ${data.customerName ? metaRow("العميل", data.customerName) : ""}
+      ${data.customerPhone ? metaRow("الهاتف", data.customerPhone) : ""}
       ${metaRow("طريقة الدفع", method)}
       ${metaRow("الوقت", data.paidAt)}
     </table>

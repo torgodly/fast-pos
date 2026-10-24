@@ -1,6 +1,7 @@
 import { db, getSqlite } from "@/lib/db";
 import {
   adjustForInvoiceEdit as adjustForInvoiceEditCore,
+  adjustItemStock as adjustItemStockCore,
   adjustStock as adjustStockCore,
   consumeForPaidOrder as consumeForPaidOrderCore,
   receivePurchaseInvoice as receivePurchaseInvoiceCore,
@@ -50,9 +51,20 @@ export function adjustForInvoiceEdit(
 
 export function adjustStock(input: {
   ingredientId: number;
-  deltaGrams: number;
+  delta: number;
+  unitId: number;
   note?: string | null;
   user: InventoryUser;
 }) {
   return adjustStockCore(ctx(), input);
+}
+
+export function adjustItemStock(input: {
+  itemId: number;
+  delta: number;
+  unitId: number;
+  note?: string | null;
+  user: InventoryUser;
+}) {
+  return adjustItemStockCore(ctx(), input);
 }

@@ -1,4 +1,10 @@
-export type QuantityBasis = "g" | "kg";
+export type UnitKind = "weight" | "count";
+
+export type UnitLike = {
+  name: string;
+  kind: UnitKind;
+  factorToBase: number;
+};
 
 export type MovementKind =
   | "purchase"
@@ -15,49 +21,90 @@ export const MOVEMENT_KIND_LABELS: Record<MovementKind, string> = {
   cancel_return: "إرجاع إلغاء",
 };
 
-export function isLowStock(stockGrams: number, lowStockGrams: number): boolean {
-  return lowStockGrams > 0 && stockGrams <= lowStockGrams;
-}
-
-export type BomEntry = {
-  ingredientId: number;
-  /** Grams consumed per one sold unit. */
-  gramsPerUnit: number;
+export const UNIT_KIND_LABELS: Record<UnitKind, string> = {
+  weight: "وزن",
+  count: "عدد",
 };
 
-export type IngredientStock = {
-  name: string;
-  stockGrams: number;
-};
-
-export type InsufficientIngredient = {
-  ingredientId: number;
-  name: string;
-  /** Positive grams missing from stock. */
-  deficit: number;
-};
-
-export function kgToGrams(kg: number): number {
-  return Math.round(kg * 1000);
+/** Converts a user-entered quantity to canonical base units (gram / piece). */
+export function quantityToBase(qty: number, factorToBase: number): number {
+  if (!Number.isFinite(qty) || !Number.isFinite(factorToBase) || factorToBase <= 0) {
+    return 0;
+  }
+  return Math.round(qty * factorToBase);
 }
 
-export function gramsFromQuantity(qty: number, basis: QuantityBasis): number {
-  if (!Number.isFinite(qty)) return 0;
-  return basis === "kg" ? kgToGrams(qty) : Math.round(qty);
+export function baseToQuantity(base: number, factorToBase: number): number {
+  if (!Number.isFinite(base) || !Number.isFinite(factorToBase) || factorToBase <= 0) {
+    return 0;
+  }
+  return base / factorToBase;
 }
 
-/** 350 → "350 غ", 2500 → "2.5 كغ", 2000 → "2 كغ". */
+function formatNumber(value: number): string {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(3).replace(/\.?0+$/, "");
+}
+
+/** 350 → "350 غ", 2500 → "2.5 كغ" (weight base only). */
 export function gramsToDisplay(grams: number): string {
   const value = Math.round(grams);
   if (Math.abs(value) >= 1000) {
     const kg = value / 1000;
-    const text = Number.isInteger(kg)
-      ? String(kg)
-      : kg.toFixed(2).replace(/\.?0+$/, "");
-    return `${text} كغ`;
+    return `${formatNumber(kg)} كغ`;
   }
   return `${value} غ`;
 }
+
+export function formatBaseQuantity(base: number, kind: UnitKind): string {
+  if (kind === "count") return `${Math.round(base)} حبة`;
+  return gramsToDisplay(base);
+}
+
+/**
+ * Formats a canonical base quantity using a unit snapshot.
+ * Weight shown in base grams keeps the familiar g/kg shortcut.
+ */
+export function formatQuantity(
+  base: number,
+  unit: UnitLike | null | undefined,
+): string {
+  if (!unit) return formatBaseQuantity(base, "weight");
+  if (unit.kind === "weight" && unit.factorToBase === 1) {
+    return gramsToDisplay(base);
+  }
+  return `${formatNumber(baseToQuantity(base, unit.factorToBase))} ${unit.name}`;
+}
+
+export function isLowStock(stockBase: number, lowStockBase: number): boolean {
+  return lowStockBase > 0 && stockBase <= lowStockBase;
+}
+
+export type BomEntry = {
+  ingredientId: number;
+  /** Base quantity consumed per one sold unit. */
+  qtyBase: number;
+};
+
+export type IngredientStock = {
+  name: string;
+  stockBase: number;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+};
+
+export type InsufficientStock = {
+  targetId: number;
+  targetType: "ingredient" | "item";
+  name: string;
+  /** Positive base quantity missing from stock. */
+  deficitBase: number;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+};
 
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
@@ -69,8 +116,8 @@ export function lineCost(qty: number, unitPrice: number): number {
 }
 
 /**
- * Aggregate grams consumed by a set of sold lines using each item's BOM.
- * Lines without an item id (deleted menu item) or without a BOM are skipped.
+ * Aggregate base quantities consumed by a set of sold lines using each item's
+ * BOM. Lines without an item id (deleted menu item) or without a BOM are skipped.
  */
 export function computeConsumption(
   bomByItem: ReadonlyMap<number, readonly BomEntry[]>,
@@ -84,38 +131,53 @@ export function computeConsumption(
     const qty = Math.max(0, Math.trunc(line.qty));
     if (qty === 0) continue;
     for (const entry of bom) {
-      if (entry.gramsPerUnit <= 0) continue;
+      if (entry.qtyBase <= 0) continue;
       totals.set(
         entry.ingredientId,
-        (totals.get(entry.ingredientId) ?? 0) + entry.gramsPerUnit * qty,
+        (totals.get(entry.ingredientId) ?? 0) + entry.qtyBase * qty,
       );
     }
   }
   return totals;
 }
 
-/** Ingredients whose required consumption exceeds current stock (negative stock included). */
+/** Stocks whose required consumption exceeds current stock (negative included). */
 export function findInsufficient(
   consumption: ReadonlyMap<number, number>,
   stockByIngredient: ReadonlyMap<number, IngredientStock>,
-): InsufficientIngredient[] {
-  const result: InsufficientIngredient[] = [];
-  for (const [ingredientId, grams] of consumption) {
+): InsufficientStock[] {
+  const result: InsufficientStock[] = [];
+  for (const [ingredientId, baseQty] of consumption) {
     const stock = stockByIngredient.get(ingredientId);
-    if (!stock || grams <= 0) continue;
-    const deficit = grams - stock.stockGrams;
+    if (!stock || baseQty <= 0) continue;
+    const deficit = baseQty - stock.stockBase;
     if (deficit > 0) {
-      result.push({ ingredientId, name: stock.name, deficit });
+      result.push({
+        targetId: ingredientId,
+        targetType: "ingredient",
+        name: stock.name,
+        deficitBase: deficit,
+        unitName: stock.unitName,
+        unitKind: stock.unitKind,
+        factorToBase: stock.factorToBase,
+      });
     }
   }
-  return result.sort((a, b) => b.deficit - a.deficit);
+  return result.sort((a, b) => b.deficitBase - a.deficitBase);
 }
 
 /** Arabic warning text for a payment toast / audit detail. */
 export function insufficientWarningText(
-  warnings: readonly InsufficientIngredient[],
+  warnings: readonly InsufficientStock[],
 ): string {
   return warnings
-    .map((item) => `${item.name} (ناقص ${gramsToDisplay(item.deficit)})`)
+    .map(
+      (item) =>
+        `${item.name} (ناقص ${formatQuantity(item.deficitBase, {
+          name: item.unitName,
+          kind: item.unitKind,
+          factorToBase: item.factorToBase,
+        })})`,
+    )
     .join("، ");
 }

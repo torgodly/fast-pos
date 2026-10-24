@@ -77,7 +77,7 @@ export function seedIfNeeded(db: BetterSQLite3Database<typeof schema>) {
   runSeed(db, { mode: fileMode ?? "full", demo: fileMode == null });
 }
 
-/** Fresh starter data: admin only, full menu, no sales. */
+/** Fresh production data: venues plus admin and main cashier only. */
 export function seedFactoryDatabase(
   db: BetterSQLite3Database<typeof schema>,
   mode: "full" | "counter" = "full",
@@ -89,7 +89,7 @@ function runSeed(
   db: BetterSQLite3Database<typeof schema>,
   opts: SeedOptions,
 ) {
-  const adminPass = bcrypt.hashSync("admin123", 10);
+  const adminPass = bcrypt.hashSync("123", 10);
   const isCounter = opts.mode === "counter";
   const venueIds: VenueId[] = isCounter ? ["restaurant"] : ["restaurant", "cafe"];
 
@@ -138,6 +138,11 @@ function runSeed(
   }
 
   const staff = db.insert(users).values(staffValues).returning().all();
+
+  if (!opts.demo) {
+    persistDeploymentMode(db, opts.mode);
+    return;
+  }
 
   const waiterAhmed = staff.find((u) => u.name === "أحمد");
   const waiterYousef = staff.find((u) => u.name === "يوسف");
@@ -455,7 +460,6 @@ function runSeed(
 
   persistDeploymentMode(db, opts.mode);
 
-  if (!opts.demo) return;
   if (!waiterAhmed || !waiterYousef || !waiterMaryam || !cashierSara || !cashierKhaled) {
     return;
   }

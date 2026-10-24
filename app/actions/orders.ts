@@ -9,6 +9,7 @@ import { db, getSqlite } from "@/lib/db";
 import {
   cancelledItems,
   categories,
+  customers,
   items,
   orderItems,
   orders,
@@ -103,6 +104,55 @@ function waiterOwnsOrder(
 ) {
   if (session.role !== "waiter") return true;
   return order.waiterId === session.userId;
+}
+
+function receiptCustomer(customerId: number | null | undefined) {
+  if (!customerId) return null;
+  return (
+    db
+      .select({ name: customers.name, phone: customers.phone })
+      .from(customers)
+      .where(eq(customers.id, customerId))
+      .get() ?? null
+  );
+}
+
+export async function setOrderCustomer(
+  orderId: number,
+  customerId: number | null,
+): Promise<{ ok: true } | { error: string }> {
+  const session = await getSession();
+  if (!session || session.role !== "cashier") {
+    return { error: "غير مصرح" };
+  }
+
+  const order = db.select().from(orders).where(eq(orders.id, orderId)).get();
+  if (!order || order.status !== "open") {
+    return { error: "الفاتورة غير مفتوحة" };
+  }
+  if (!waiterOwnsOrder(session, order)) {
+    return { error: "هذه الطاولة مع سفرادجي آخر" };
+  }
+
+  if (customerId != null) {
+    const customer = db
+      .select({ id: customers.id, active: customers.active })
+      .from(customers)
+      .where(eq(customers.id, customerId))
+      .get();
+    if (!customer || !customer.active) {
+      return { error: "العميل غير متاح" };
+    }
+  }
+
+  db.update(orders)
+    .set({ customerId })
+    .where(eq(orders.id, orderId))
+    .run();
+
+  revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
+  revalidatePath(`/waiter/${order.venueId}/order/${orderId}`);
+  return { ok: true };
 }
 
 export async function openTableOrder(venueId: string, tableId: number) {
@@ -868,6 +918,7 @@ async function buildCheckoutReceiptForOrder(
   const cashier = order.cashierId
     ? db.select().from(users).where(eq(users.id, order.cashierId)).get()
     : null;
+  const customer = receiptCustomer(order.customerId);
   const isQuickSale = order.tableId === null;
 
   return {
@@ -877,6 +928,8 @@ async function buildCheckoutReceiptForOrder(
       orderId: order.id,
       tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
       waiterName: waiter?.name ?? null,
+      customerName: customer?.name ?? null,
+      customerPhone: customer?.phone ?? null,
       cashierName: cashier?.name ?? "كاشير",
       paymentMethod: order.paymentMethod,
       paidAt: formatDateTime(order.paidAt ?? order.createdAt),
@@ -1008,12 +1061,15 @@ export async function payOrder(
   const waiter = order.waiterId
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
     : null;
+  const customer = receiptCustomer(order.customerId);
 
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(order.venueId),
     orderId: order.id,
     tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
     waiterName: waiter?.name ?? null,
+    customerName: customer?.name ?? null,
+    customerPhone: customer?.phone ?? null,
     cashierName: session.name,
     paymentMethod,
     paidAt: formatDateTime(paidAt),
@@ -1089,6 +1145,7 @@ export async function payQuickSale(
   venueId: string,
   cart: QuickSaleLine[],
   paymentMethod: PaymentMethod,
+  customerId: number | null = null,
 ): Promise<
   | { error: string }
   | {
@@ -1109,6 +1166,11 @@ export async function payQuickSale(
   }
   if (cart.length === 0) {
     return { error: "الفاتورة فارغة" };
+  }
+
+  const customer = receiptCustomer(customerId);
+  if (customerId != null && !customer) {
+    return { error: "العميل غير موجود" };
   }
 
   const stationCtx = await getCashierStationContext(venueId);
@@ -1150,6 +1212,7 @@ export async function payQuickSale(
         .values({
           venueId,
           tableId: null,
+          customerId: customerId ?? null,
           waiterId: null,
           cashierId: session.userId,
           shiftId: null,
@@ -1257,6 +1320,8 @@ export async function payQuickSale(
     orderId: order.id,
     tableName: "بيع سريع",
     waiterName: null,
+    customerName: customer?.name ?? null,
+    customerPhone: customer?.phone ?? null,
     cashierName: session.name,
     paymentMethod,
     paidAt: formatDateTime(paidAt),
@@ -1519,6 +1584,7 @@ export async function printOpenOrderReceipt(
   const waiter = order.waiterId
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
     : null;
+  const customer = receiptCustomer(order.customerId);
 
   return finishPreviewPrint(
     {
@@ -1526,6 +1592,8 @@ export async function printOpenOrderReceipt(
       orderId: order.id,
       tableName: table?.name ?? (order.tableId === null ? "بيع سريع" : "بدون طاولة"),
       waiterName: waiter?.name ?? (session.role === "waiter" ? session.name : null),
+      customerName: customer?.name ?? null,
+      customerPhone: customer?.phone ?? null,
       cashierName: session.role === "cashier" ? session.name : "—",
       paymentMethod: "preview",
       paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
@@ -1545,6 +1613,7 @@ export async function printOpenOrderReceipt(
 export async function printQuickSalePreview(
   venueId: string,
   cart: QuickSaleLine[],
+  customerId: number | null = null,
 ): Promise<PreviewPrintResult> {
   const session = await getSession();
   if (!session || session.role !== "cashier" || !isVenueId(venueId)) {
@@ -1552,6 +1621,11 @@ export async function printQuickSalePreview(
   }
   if (cart.length === 0) {
     return { error: "أضف أصنافاً قبل طباعة الفاتورة" };
+  }
+
+  const customer = receiptCustomer(customerId);
+  if (customerId != null && !customer) {
+    return { error: "العميل غير موجود" };
   }
 
   const priced = cart.map((line) => {
@@ -1586,6 +1660,8 @@ export async function printQuickSalePreview(
       orderId: 0,
       tableName: "بيع سريع",
       waiterName: null,
+      customerName: customer?.name ?? null,
+      customerPhone: customer?.phone ?? null,
       cashierName: session.name,
       paymentMethod: "preview",
       paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),

@@ -9,12 +9,16 @@ import {
   ingredientMovements,
   ingredients,
   itemIngredients,
+  itemMovements,
+  items,
   purchaseInvoiceLines,
   purchaseInvoices,
   suppliers,
+  units,
 } from "@/lib/db/schema";
-import { gramsFromQuantity, type QuantityBasis } from "@/lib/inventory/rules";
+import { quantityToBase } from "@/lib/inventory/rules";
 import {
+  adjustItemStock as adjustItemStockCore,
   adjustStock,
   receivePurchaseInvoice,
 } from "@/lib/inventory/service";
@@ -30,9 +34,10 @@ export type PurchaseInvoicePayload = {
   invoiceNumber?: string | null;
   note?: string | null;
   lines: Array<{
-    ingredientId: number;
+    targetType: "ingredient" | "item";
+    targetId: number;
     qty: number;
-    unitBasis: QuantityBasis;
+    unitId: number;
     unitPrice: number;
   }>;
 };
@@ -53,6 +58,7 @@ function revalidateInventory() {
   revalidatePath("/admin/inventory");
   revalidatePath("/admin/items");
   revalidatePath("/admin/purchases");
+  revalidatePath("/admin/units");
 }
 
 function revalidatePurchases(invoiceId?: number) {
@@ -86,13 +92,22 @@ export async function upsertIngredient(
   if (!name) return { error: "اسم المكوّن مطلوب" };
   if (name.length > 80) return { error: "اسم المكوّن طويل جداً" };
 
+  const unitId = Number(formData.get("unitId"));
+  if (!Number.isInteger(unitId) || unitId <= 0) {
+    return { error: "اختر وحدة القياس" };
+  }
+  const unit = db
+    .select()
+    .from(units)
+    .where(eq(units.id, unitId))
+    .get();
+  if (!unit) return { error: "الوحدة غير موجودة" };
+
   const lowStockValue = Number(formData.get("lowStockValue") ?? 0);
-  const lowStockBasis: QuantityBasis =
-    String(formData.get("lowStockBasis") ?? "g") === "kg" ? "kg" : "g";
   if (!Number.isFinite(lowStockValue) || lowStockValue < 0) {
     return { error: "حد التنبيه غير صالح" };
   }
-  const lowStockGrams = gramsFromQuantity(lowStockValue, lowStockBasis);
+  const lowStockBase = quantityToBase(lowStockValue, unit.factorToBase);
 
   if (ingredientNameTaken(name, id ?? undefined)) {
     return { error: "يوجد مكوّن بهذا الاسم بالفعل" };
@@ -100,18 +115,52 @@ export async function upsertIngredient(
 
   if (id) {
     const existing = db
-      .select({ id: ingredients.id })
+      .select({
+        id: ingredients.id,
+        preferredUnitId: ingredients.preferredUnitId,
+        stockBase: ingredients.stockBase,
+        unitKind: units.kind,
+      })
       .from(ingredients)
+      .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
       .where(eq(ingredients.id, id))
       .get();
     if (!existing) return { error: "المكوّن غير موجود" };
+
+    const kindChanged =
+      existing.unitKind != null && existing.unitKind !== unit.kind;
+    if (kindChanged) {
+      const hasMovements = db
+        .select({ id: ingredientMovements.id })
+        .from(ingredientMovements)
+        .where(eq(ingredientMovements.ingredientId, id))
+        .get();
+      const usedInBom = db
+        .select({ id: itemIngredients.id })
+        .from(itemIngredients)
+        .where(eq(itemIngredients.ingredientId, id))
+        .get();
+      if (existing.stockBase !== 0 || hasMovements || usedInBom) {
+        return {
+          error:
+            "لا يمكن تغيير نوع وحدة مكوّن له رصيد أو حركات أو مكونات أصناف",
+        };
+      }
+    }
+
     db.update(ingredients)
-      .set({ name, lowStockGrams })
+      .set({ name, preferredUnitId: unitId, lowStockBase })
       .where(eq(ingredients.id, id))
       .run();
   } else {
     db.insert(ingredients)
-      .values({ name, lowStockGrams, stockGrams: 0, active: true })
+      .values({
+        name,
+        preferredUnitId: unitId,
+        lowStockBase,
+        stockBase: 0,
+        active: true,
+      })
       .run();
   }
 
@@ -178,27 +227,58 @@ export async function deleteIngredient(id: number): Promise<ActionResult> {
 
 export async function adjustIngredientStock(
   id: number,
-  deltaGrams: number,
+  delta: number,
+  unitId: number,
   note?: string | null,
-): Promise<ActionResult & { stockGrams?: number }> {
+): Promise<ActionResult & { stockBase?: number }> {
   const session = await assertAdmin();
   try {
     const result = adjustStock({
       ingredientId: id,
-      deltaGrams,
+      delta,
+      unitId,
       note: note ?? null,
       user: inventoryUser(session),
     });
     recordSessionAudit(session, {
       kind: "inventory",
       success: true,
-      detail: `تعديل يدوي #${id}: ${deltaGrams > 0 ? "+" : ""}${deltaGrams} غرام`,
+      detail: `تعديل يدوي #${id}: ${delta > 0 ? "+" : ""}${delta}`,
     });
     revalidateInventory();
-    return { ok: true, stockGrams: result.stockGrams };
+    return { ok: true, stockBase: result.stockBase };
   } catch (error) {
     const detail =
       error instanceof Error ? error.message : "تعذر تعديل المخزون";
+    return { error: detail };
+  }
+}
+
+export async function adjustTrackedItemStock(
+  id: number,
+  delta: number,
+  unitId: number,
+  note?: string | null,
+): Promise<ActionResult & { stockBase?: number }> {
+  const session = await assertAdmin();
+  try {
+    const result = adjustItemStockCore({
+      itemId: id,
+      delta,
+      unitId,
+      note: note ?? null,
+      user: inventoryUser(session),
+    });
+    recordSessionAudit(session, {
+      kind: "inventory",
+      success: true,
+      detail: `تعديل يدوي لصنف #${id}: ${delta > 0 ? "+" : ""}${delta}`,
+    });
+    revalidateInventory();
+    return { ok: true, stockBase: result.stockBase };
+  } catch (error) {
+    const detail =
+      error instanceof Error ? error.message : "تعذر تعديل مخزون الصنف";
     return { error: detail };
   }
 }

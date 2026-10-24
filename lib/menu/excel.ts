@@ -8,16 +8,10 @@ import {
   venueIdToScope,
   type MenuVenueScope,
 } from "@/lib/menu/scope";
-
-const HEADERS = [
-  "التصنيف",
-  "النطاق",
-  "ترتيب التصنيف",
-  "التصنيف نشط",
-  "الصنف",
-  "السعر",
-  "الصنف نشط",
-] as const;
+import {
+  MENU_EXCEL_HEADERS as HEADERS,
+  MENU_EXCEL_SHEET_NAME,
+} from "./excel-format";
 
 function scopeLabel(scope: MenuVenueScope) {
   if (scope === "shared") return "مشترك";
@@ -51,7 +45,7 @@ function parseBool(value: unknown, fallback = true) {
 export async function buildMenuWorkbook() {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "فاست بوس";
-  const sheet = workbook.addWorksheet("القائمة", {
+  const sheet = workbook.addWorksheet(MENU_EXCEL_SHEET_NAME, {
     views: [{ rightToLeft: true }],
   });
   sheet.columns = [

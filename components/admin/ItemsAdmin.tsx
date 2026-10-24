@@ -39,6 +39,13 @@ import {
   type MenuVenueScope,
 } from "@/lib/menu/scope";
 import { formatMoney } from "@/lib/venues";
+import {
+  baseToQuantity,
+  formatQuantity,
+  isLowStock,
+  UNIT_KIND_LABELS,
+  type UnitKind,
+} from "@/lib/inventory/rules";
 
 type CategoryRow = {
   id: number;
@@ -58,6 +65,13 @@ type ItemRow = {
   price: number;
   active: boolean;
   venueId: string | null;
+  trackStock: boolean;
+  unitId: number | null;
+  stockBase: number;
+  lowStockBase: number;
+  unitName: string | null;
+  unitKind: UnitKind | null;
+  factorToBase: number | null;
 };
 
 type PrinterOption = {
@@ -74,18 +88,54 @@ type IngredientOption = {
   id: number;
   name: string;
   active: boolean;
+  unitId: number | null;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+};
+
+type UnitOption = {
+  id: number;
+  name: string;
+  kind: UnitKind;
+  factorToBase: number;
+  active: boolean;
 };
 
 type BomRow = {
   ingredientId: string;
-  gramsPerUnit: string;
+  qty: string;
+  unitId: string;
 };
 
 type BomEntryRow = {
   itemId: number;
   ingredientId: number;
-  gramsPerUnit: number;
+  qtyBase: number;
 };
+
+function inputNumber(value: number) {
+  if (!Number.isFinite(value)) return "0";
+  return Number.isInteger(value)
+    ? String(value)
+    : String(Number(value.toFixed(3)));
+}
+
+function itemUnit(row: {
+  unitName: string | null;
+  unitKind: UnitKind | null;
+  factorToBase: number | null;
+}) {
+  const kind: UnitKind = row.unitKind ?? "count";
+  return {
+    name: row.unitName ?? (kind === "count" ? "حبة" : "غرام"),
+    kind,
+    factorToBase:
+      typeof row.factorToBase === "number" && row.factorToBase > 0
+        ? row.factorToBase
+        : 1,
+  };
+}
 
 /** Same kitchen IP listed twice (cashier dept rows) → one choice for kitchen link. */
 function dedupeKitchenOptions(rows: PrinterOption[]): PrinterOption[] {
@@ -120,7 +170,9 @@ export function ItemsAdmin({
   kitchenPrinters,
   allKitchenPrinters,
   ingredients,
+  units,
   bomByItem,
+  counterMode,
 }: {
   venueId: VenueId;
   categories: CategoryRow[];
@@ -128,7 +180,9 @@ export function ItemsAdmin({
   kitchenPrinters: PrinterOption[];
   allKitchenPrinters: PrinterOption[];
   ingredients: IngredientOption[];
+  units: UnitOption[];
   bomByItem: BomEntryRow[];
+  counterMode: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -175,10 +229,21 @@ export function ItemsAdmin({
 
   const [itemModal, setItemModal] = useState<ItemModalState>(null);
   const [bomDraft, setBomDraft] = useState<BomRow[]>([]);
+  const [trackStock, setTrackStock] = useState(false);
+  const [stockUnitId, setStockUnitId] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [bulkConfirm, setBulkConfirm] = useState<
     "enable" | "disable" | "delete" | "move" | null
   >(null);
+
+  const defaultStockUnitId = useMemo(() => {
+    const preferred =
+      units.find(
+        (unit) =>
+          unit.kind === "count" && unit.factorToBase === 1 && unit.active,
+      ) ?? units.find((unit) => unit.active);
+    return preferred ? String(preferred.id) : "";
+  }, [units]);
 
   useEffect(() => {
     if (!itemModal) {
@@ -191,12 +256,22 @@ export function ItemsAdmin({
     }
     const rows = bomByItem
       .filter((row) => row.itemId === itemModal.item.id)
-      .map((row) => ({
-        ingredientId: String(row.ingredientId),
-        gramsPerUnit: String(row.gramsPerUnit),
-      }));
+      .map((row) => {
+        const ingredient = ingredients.find(
+          (entry) => entry.id === row.ingredientId,
+        );
+        return {
+          ingredientId: String(row.ingredientId),
+          qty: inputNumber(
+            baseToQuantity(row.qtyBase, ingredient?.factorToBase ?? 1),
+          ),
+          unitId: ingredient?.unitId
+            ? String(ingredient.unitId)
+            : defaultStockUnitId,
+        };
+      });
     setBomDraft(rows);
-  }, [itemModal, bomByItem]);
+  }, [itemModal, bomByItem, ingredients, defaultStockUnitId]);
   const [bulkCategoryId, setBulkCategoryId] = useState<number | null>(null);
 
   const editingCategory =
@@ -213,6 +288,20 @@ export function ItemsAdmin({
     setError(null);
     setCategoryScopeDraft(venueIdToScope(category.venueId));
     setCategoryModal({ mode: "edit", category });
+  }
+
+  function openItemCreate() {
+    setError(null);
+    setTrackStock(false);
+    setStockUnitId(defaultStockUnitId);
+    setItemModal({ mode: "create" });
+  }
+
+  function openItemEdit(item: ItemRow) {
+    setError(null);
+    setTrackStock(item.trackStock);
+    setStockUnitId(item.unitId ? String(item.unitId) : defaultStockUnitId);
+    setItemModal({ mode: "edit", item });
   }
 
   function printerName(id: number | null) {
@@ -307,12 +396,32 @@ export function ItemsAdmin({
   }
 
   function addBomRow() {
-    setBomDraft((rows) => [...rows, { ingredientId: "", gramsPerUnit: "" }]);
+    setBomDraft((rows) => [
+      ...rows,
+      { ingredientId: "", qty: "", unitId: "" },
+    ]);
   }
 
   function updateBomRow(index: number, patch: Partial<BomRow>) {
     setBomDraft((rows) =>
       rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function updateBomIngredient(index: number, ingredientId: string) {
+    const ingredient = ingredients.find(
+      (entry) => String(entry.id) === ingredientId,
+    );
+    setBomDraft((rows) =>
+      rows.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              ingredientId,
+              unitId: ingredient?.unitId ? String(ingredient.unitId) : "",
+            }
+          : row,
+      ),
     );
   }
 
@@ -344,23 +453,34 @@ export function ItemsAdmin({
       formData.set("venueScope", venueIdToScope(selected.venueId));
     }
 
-    const bomRows: { ingredientId: number; gramsPerUnit: number }[] = [];
-    for (const row of bomDraft) {
-      if (!row.ingredientId && !row.gramsPerUnit.trim()) continue;
-      const ingredientId = Number(row.ingredientId);
-      const gramsPerUnit = Math.trunc(Number(row.gramsPerUnit));
-      if (
-        !Number.isInteger(ingredientId) ||
-        ingredientId <= 0 ||
-        !Number.isFinite(gramsPerUnit) ||
-        gramsPerUnit <= 0
-      ) {
-        setError("أكمل بيانات مكونات الصنف أو احذف الصفوف الفارغة");
-        return;
+    if (trackStock) {
+      formData.set("ingredientsJson", "[]");
+    } else {
+      const bomRows: Array<{
+        ingredientId: number;
+        qty: number;
+        unitId: number;
+      }> = [];
+      for (const row of bomDraft) {
+        if (!row.ingredientId && !row.qty.trim() && !row.unitId) continue;
+        const ingredientId = Number(row.ingredientId);
+        const qty = Number(row.qty);
+        const unitId = Number(row.unitId);
+        if (
+          !Number.isInteger(ingredientId) ||
+          ingredientId <= 0 ||
+          !Number.isFinite(qty) ||
+          qty <= 0 ||
+          !Number.isInteger(unitId) ||
+          unitId <= 0
+        ) {
+          setError("أكمل بيانات مكونات الصنف أو احذف الصفوف الفارغة");
+          return;
+        }
+        bomRows.push({ ingredientId, qty, unitId });
       }
-      bomRows.push({ ingredientId, gramsPerUnit });
+      formData.set("ingredientsJson", JSON.stringify(bomRows));
     }
-    formData.set("ingredientsJson", JSON.stringify(bomRows));
 
     startTransition(async () => {
       setError(null);
@@ -413,6 +533,10 @@ export function ItemsAdmin({
         hint: "مطعم + كافيه معاً",
       },
     ];
+
+    if (counterMode) {
+      return <input type="hidden" name="venueScope" value="restaurant" />;
+    }
 
     return (
       <div className="space-y-2">
@@ -734,10 +858,7 @@ export function ItemsAdmin({
                     type="button"
                     className="btn btn-primary btn-sm gap-1.5 rounded-lg"
                     disabled={!selected.active}
-                    onClick={() => {
-                      setError(null);
-                      setItemModal({ mode: "create" });
-                    }}
+                    onClick={openItemCreate}
                   >
                     <PackagePlus className="size-3.5" />
                     إضافة صنف
@@ -757,7 +878,7 @@ export function ItemsAdmin({
                       type="button"
                       className="btn btn-primary btn-sm mt-4 gap-1.5 rounded-lg"
                       disabled={!selected.active}
-                      onClick={() => setItemModal({ mode: "create" })}
+                      onClick={openItemCreate}
                     >
                       <PackagePlus className="size-3.5" />
                       أضف أول صنف
@@ -779,6 +900,7 @@ export function ItemsAdmin({
                           </th>
                           <th>اسم الصنف</th>
                           <th>السعر</th>
+                          <th className="w-32">المخزون</th>
                           <th className="w-20 text-center">الحالة</th>
                           <th className="w-24"></th>
                         </tr>
@@ -802,6 +924,41 @@ export function ItemsAdmin({
                             <td className="font-bold text-primary">
                               {formatMoney(item.price)}
                             </td>
+                            <td>
+                              {item.trackStock ? (
+                                <div className="flex flex-col items-start gap-1">
+                                  <span
+                                    className={`font-mono text-sm font-bold ${
+                                      item.stockBase < 0
+                                        ? "text-error"
+                                        : isLowStock(
+                                              item.stockBase,
+                                              item.lowStockBase,
+                                            )
+                                          ? "text-warning"
+                                          : ""
+                                    }`}
+                                  >
+                                    {formatQuantity(
+                                      item.stockBase,
+                                      itemUnit(item),
+                                    )}
+                                  </span>
+                                  {isLowStock(
+                                    item.stockBase,
+                                    item.lowStockBase,
+                                  ) ? (
+                                    <span className="badge badge-warning badge-soft badge-xs">
+                                      منخفض
+                                    </span>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-base-content/35">
+                                  غير متتبع
+                                </span>
+                              )}
+                            </td>
                             <td className="text-center">
                               <span
                                 className={`badge badge-sm ${
@@ -819,10 +976,7 @@ export function ItemsAdmin({
                                   type="button"
                                   className="btn btn-square btn-ghost btn-xs"
                                   title="تعديل"
-                                  onClick={() => {
-                                    setError(null);
-                                    setItemModal({ mode: "edit", item });
-                                  }}
+                                  onClick={() => openItemEdit(item)}
                                 >
                                   <Pencil className="size-3.5" />
                                 </button>
@@ -974,7 +1128,7 @@ export function ItemsAdmin({
               </div>
             </div>
           ) : null}
-          {editingCategory ? (
+          {counterMode ? null : editingCategory ? (
             <p className="rounded-lg bg-base-200/80 px-3 py-2 text-xs text-base-content/55">
               تغيير النطاق إلى <strong>مشترك</strong> يجعل كل أصناف هذا التصنيف
               مشتركة أيضاً.
@@ -1109,19 +1263,21 @@ export function ItemsAdmin({
           {!editingItem && selected ? (
             <input type="hidden" name="categoryId" value={selected.id} />
           ) : null}
-          <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
-            النطاق:{" "}
-            <strong>
-              {menuScopeLabel(
-                venueIdToScope(
-                  selected?.venueId ?? editingItem?.venueId ?? venueId,
-                ),
-              )}
-            </strong>
-            <span className="ms-1 text-xs text-base-content/45">
-              (يطابق التصنيف)
-            </span>
-          </div>
+          {counterMode ? null : (
+            <div className="rounded-lg bg-base-200/80 px-3 py-2 text-sm">
+              النطاق:{" "}
+              <strong>
+                {menuScopeLabel(
+                  venueIdToScope(
+                    selected?.venueId ?? editingItem?.venueId ?? venueId,
+                  ),
+                )}
+              </strong>
+              <span className="ms-1 text-xs text-base-content/45">
+                (يطابق التصنيف)
+              </span>
+            </div>
+          )}
           <label className="form-control w-full">
             <span className="label-text mb-2 font-bold">اسم الصنف</span>
             <input
@@ -1176,125 +1332,242 @@ export function ItemsAdmin({
           </label>
 
           <div className="rounded-2xl border border-base-300/70 p-3.5">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-black">مكونات الصنف (BOM)</p>
-                <p className="mt-0.5 text-xs text-base-content/45">
-                  غرام لكل وحدة تُباع — تُخصم من المخزون عند الدفع
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                name="trackStock"
+                className="checkbox checkbox-primary mt-0.5"
+                checked={trackStock}
+                onChange={(event) => setTrackStock(event.target.checked)}
+              />
+              <span>
+                <span className="block text-sm font-black">
+                  تتبع مخزون هذا الصنف
+                </span>
+                <span className="mt-0.5 block text-xs leading-6 text-base-content/45">
+                  للأصناف الجاهزة للبيع (مشروب معلّب، قطعة جبن…). تُخصم الكمية
+                  من رصيد الصنف عند الدفع وتُضاف من فواتير المشتريات.
+                </span>
+              </span>
+            </label>
+
+            {trackStock ? (
+              <div className="mt-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="form-control w-full">
+                    <span className="label-text mb-2 font-bold">
+                      وحدة البيع/المخزون
+                    </span>
+                    <select
+                      name="unitId"
+                      className="select select-bordered w-full"
+                      value={stockUnitId}
+                      onChange={(event) =>
+                        setStockUnitId(event.target.value)
+                      }
+                      required
+                    >
+                      {units
+                        .filter(
+                          (unit) =>
+                            unit.active ||
+                            String(unit.id) === stockUnitId ||
+                            String(unit.id) ===
+                              String(editingItem?.unitId ?? ""),
+                        )
+                        .map((unit) => (
+                          <option key={unit.id} value={unit.id}>
+                            {unit.name} · {UNIT_KIND_LABELS[unit.kind]}
+                            {unit.active ? "" : " (معطّلة)"}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label className="form-control w-full">
+                    <span className="label-text mb-2 font-bold">
+                      حد التنبيه (بالوحدة المختارة)
+                    </span>
+                    <input
+                      key={`low-${stockUnitId}`}
+                      name="lowStockValue"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      defaultValue={
+                        editingItem?.trackStock
+                          ? inputNumber(
+                              baseToQuantity(
+                                editingItem.lowStockBase,
+                                units.find(
+                                  (unit) =>
+                                    String(unit.id) === stockUnitId,
+                                )?.factorToBase ??
+                                  editingItem.factorToBase ??
+                                  1,
+                              ),
+                            )
+                          : 0
+                      }
+                      className="input input-bordered w-full"
+                    />
+                  </label>
+                </div>
+                {editingItem?.trackStock ? (
+                  <div className="rounded-xl bg-base-200/70 px-3 py-2 text-sm">
+                    الرصيد الحالي:{" "}
+                    <strong className="font-mono">
+                      {formatQuantity(
+                        editingItem.stockBase,
+                        itemUnit(editingItem),
+                      )}
+                    </strong>
+                  </div>
+                ) : null}
+                <p className="text-xs text-base-content/45">
+                  تُخصم وحدة بيع واحدة من الرصيد عند كل عملية بيع. لا يمكن
+                  تغيير الوحدة أو إيقاف التتبع بعد وجود رصيد أو حركات مخزون.
                 </p>
               </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs gap-1 rounded-lg"
-                onClick={addBomRow}
-                disabled={
-                  ingredients.length === 0 ||
-                  bomDraft.length >= ingredients.length
-                }
-              >
-                <Plus className="size-3.5" />
-                إضافة مكوّن
-              </button>
-            </div>
+            ) : null}
+          </div>
 
-            {ingredients.length === 0 ? (
-              <p className="mt-3 rounded-xl bg-base-200/60 px-3 py-2 text-xs text-base-content/55">
-                لا توجد مكونات بعد — أضفها من{" "}
-                <Link
-                  href="/admin/inventory"
-                  className="link link-primary font-bold"
+          {trackStock ? (
+            <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 text-sm leading-7 text-base-content/65">
+              هذا الصنف يتتبع رصيده مباشرةً، لذا لا يمكن ربط مكونات (BOM) به.
+              أوقف تتبع المخزون أولاً إذا أردت استخدام المكونات.
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-base-300/70 p-3.5">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-black">مكونات الصنف (BOM)</p>
+                  <p className="mt-0.5 text-xs text-base-content/45">
+                    كمية المكوّن لكل وحدة تُباع — تُخصم من المخزون عند الدفع
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs gap-1 rounded-lg"
+                  onClick={addBomRow}
+                  disabled={
+                    ingredients.length === 0 ||
+                    bomDraft.length >= ingredients.length
+                  }
                 >
-                  صفحة المخزون
-                </Link>
-                .
-              </p>
-            ) : bomDraft.length === 0 ? (
-              <p className="mt-3 text-xs text-base-content/45">
-                بدون مكونات — المخزون لن يتأثر عند بيع هذا الصنف.
-              </p>
-            ) : (
-              <div className="mt-3 space-y-2">
-                {bomDraft.map((row, index) => {
-                  const takenElsewhere = new Set(
-                    bomDraft
-                      .filter((_, i) => i !== index)
-                      .map((other) => other.ingredientId)
-                      .filter(Boolean),
-                  );
-                  return (
-                    <div key={index} className="flex items-center gap-2">
-                      <select
-                        className="select select-bordered select-sm w-full"
-                        value={row.ingredientId}
-                        onChange={(event) =>
-                          updateBomRow(index, {
-                            ingredientId: event.target.value,
-                          })
-                        }
+                  <Plus className="size-3.5" />
+                  إضافة مكوّن
+                </button>
+              </div>
+
+              {ingredients.length === 0 ? (
+                <p className="mt-3 rounded-xl bg-base-200/60 px-3 py-2 text-xs text-base-content/55">
+                  لا توجد مكونات بعد — أضفها من{" "}
+                  <Link
+                    href="/admin/inventory"
+                    className="link link-primary font-bold"
+                  >
+                    صفحة المخزون
+                  </Link>
+                  .
+                </p>
+              ) : bomDraft.length === 0 ? (
+                <p className="mt-3 text-xs text-base-content/45">
+                  بدون مكونات — المخزون لن يتأثر عند بيع هذا الصنف.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  {bomDraft.map((row, index) => {
+                    const takenElsewhere = new Set(
+                      bomDraft
+                        .filter((_, i) => i !== index)
+                        .map((other) => other.ingredientId)
+                        .filter(Boolean),
+                    );
+                    const ingredient = ingredients.find(
+                      (entry) => String(entry.id) === row.ingredientId,
+                    );
+                    const rowUnits = ingredient
+                      ? units.filter(
+                          (unit) =>
+                            unit.kind === ingredient.unitKind &&
+                            (unit.active ||
+                              String(unit.id) === row.unitId),
+                        )
+                      : [];
+                    return (
+                      <div
+                        key={index}
+                        className="grid grid-cols-12 items-center gap-2"
                       >
-                        <option value="">اختر مكوّناً</option>
-                        {ingredients
-                          .filter(
-                            (ingredient) =>
-                              (ingredient.active ||
-                                String(ingredient.id) ===
-                                  row.ingredientId) &&
-                              !takenElsewhere.has(String(ingredient.id)),
-                          )
-                          .map((ingredient) => (
-                            <option key={ingredient.id} value={ingredient.id}>
-                              {ingredient.name}
-                              {ingredient.active ? "" : " (معطّل)"}
-                            </option>
-                          ))}
-                      </select>
-                      <div className="join shrink-0">
+                        <select
+                          className="select select-bordered select-sm col-span-12 sm:col-span-5"
+                          value={row.ingredientId}
+                          onChange={(event) =>
+                            updateBomIngredient(index, event.target.value)
+                          }
+                        >
+                          <option value="">اختر مكوّناً</option>
+                          {ingredients
+                            .filter(
+                              (entry) =>
+                                (entry.active ||
+                                  String(entry.id) === row.ingredientId) &&
+                                !takenElsewhere.has(String(entry.id)),
+                            )
+                            .map((entry) => (
+                              <option key={entry.id} value={entry.id}>
+                                {entry.name}
+                                {entry.active ? "" : " (معطّل)"}
+                              </option>
+                            ))}
+                        </select>
                         <input
                           type="number"
-                          min="1"
-                          step="1"
-                          value={row.gramsPerUnit}
+                          min="0.001"
+                          step="0.001"
+                          value={row.qty}
+                          onChange={(event) =>
+                            updateBomRow(index, { qty: event.target.value })
+                          }
+                          placeholder="الكمية"
+                          className="input input-bordered input-sm col-span-5 sm:col-span-3"
+                        />
+                        <select
+                          className="select select-bordered select-sm col-span-5 sm:col-span-3"
+                          value={row.unitId}
                           onChange={(event) =>
                             updateBomRow(index, {
-                              gramsPerUnit: event.target.value,
+                              unitId: event.target.value,
                             })
                           }
-                          placeholder="غرام"
-                          className="input input-bordered input-sm join-item w-24"
-                        />
-                        <span className="btn btn-ghost btn-sm join-item pointer-events-none">
-                          غ
-                        </span>
+                          disabled={!ingredient}
+                          required
+                        >
+                          {!ingredient ? (
+                            <option value="">الوحدة</option>
+                          ) : null}
+                          {rowUnits.map((unit) => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.name}
+                              {unit.active ? "" : " (معطّلة)"}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-square btn-ghost btn-sm col-span-2 text-error sm:col-span-1"
+                          onClick={() => removeBomRow(index)}
+                          title="حذف المكوّن"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-square btn-ghost btn-sm text-error"
-                        onClick={() => removeBomRow(index)}
-                        title="حذف المكوّن"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            <input
-              type="hidden"
-              name="ingredientsJson"
-              value={JSON.stringify(
-                bomDraft
-                  .filter(
-                    (row) =>
-                      row.ingredientId && Number(row.gramsPerUnit) > 0,
-                  )
-                  .map((row) => ({
-                    ingredientId: Number(row.ingredientId),
-                    gramsPerUnit: Math.trunc(Number(row.gramsPerUnit)),
-                  })),
+                    );
+                  })}
+                </div>
               )}
-            />
-          </div>
+            </div>
+          )}
 
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">

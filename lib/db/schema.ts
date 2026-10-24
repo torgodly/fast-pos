@@ -13,6 +13,24 @@ export const venues = sqliteTable("venues", {
   name: text("name").notNull(),
 });
 
+export const units = sqliteTable(
+  "units",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    /** weight base = gram, count base = piece. */
+    kind: text("kind", { enum: ["weight", "count"] }).notNull(),
+    /** How many base units one of this unit contains (kilo = 1000). */
+    factorToBase: integer("factor_to_base").notNull(),
+    builtIn: integer("built_in", { mode: "boolean" }).notNull().default(false),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [uniqueIndex("units_name_idx").on(table.name)],
+);
+
 export const users = sqliteTable(
   "users",
   {
@@ -91,6 +109,14 @@ export const items = sqliteTable("items", {
   name: text("name").notNull(),
   price: real("price").notNull(),
   kitchenPrinterId: integer("kitchen_printer_id").references(() => printers.id),
+  /** Sale/stock unit for resale items; required when trackStock is on. */
+  unitId: integer("unit_id").references(() => units.id),
+  trackStock: integer("track_stock", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /** Canonical base quantity: grams (weight) or pieces (count). */
+  stockBase: integer("stock_base").notNull().default(0),
+  lowStockBase: integer("low_stock_base").notNull().default(0),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
@@ -132,12 +158,24 @@ export const shifts = sqliteTable(
   ],
 );
 
+export const customers = sqliteTable("customers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  notes: text("notes"),
+  active: integer("active", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   venueId: text("venue_id")
     .notNull()
     .references(() => venues.id),
   tableId: integer("table_id").references(() => tables.id),
+  customerId: integer("customer_id").references(() => customers.id),
   waiterId: integer("waiter_id").references(() => users.id),
   cashierId: integer("cashier_id").references(() => users.id),
   shiftId: integer("shift_id").references(() => shifts.id),
@@ -220,8 +258,8 @@ export const ingredientMovements = sqliteTable(
     ingredientId: integer("ingredient_id").references(() => ingredients.id),
     /** Snapshot — survives ingredient deletion attempts (deletes are blocked). */
     ingredientName: text("ingredient_name").notNull(),
-    /** + in / − out, always grams. */
-    deltaGrams: integer("delta_grams").notNull(),
+    /** + in / − out, canonical base quantity (gram or piece). */
+    deltaBase: integer("delta_base").notNull(),
     kind: text("kind", {
       enum: ["purchase", "sale", "adjust", "invoice_edit", "cancel_return"],
     }).notNull(),
@@ -240,14 +278,46 @@ export const ingredientMovements = sqliteTable(
   ],
 );
 
+export const itemMovements = sqliteTable(
+  "item_movements",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id").references(() => items.id),
+    /** Snapshot — survives item deletion. */
+    itemName: text("item_name").notNull(),
+    deltaBase: integer("delta_base").notNull(),
+    kind: text("kind", {
+      enum: ["purchase", "sale", "adjust", "invoice_edit", "cancel_return"],
+    }).notNull(),
+    /** Snapshot of the unit used for this movement, when available. */
+    unitName: text("unit_name"),
+    unitKind: text("unit_kind", { enum: ["weight", "count"] }),
+    factorToBase: integer("factor_to_base"),
+    orderId: integer("order_id").references(() => orders.id),
+    invoiceId: integer("invoice_id").references(() => purchaseInvoices.id),
+    userId: integer("user_id").references(() => users.id),
+    userName: text("user_name").notNull(),
+    note: text("note"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [
+    index("item_movements_item_idx").on(table.itemId),
+    index("item_movements_order_idx").on(table.orderId),
+  ],
+);
+
 export const ingredients = sqliteTable(
   "ingredients",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
-    /** Base unit is grams; UI displays g/kg. May go negative (D2). */
-    stockGrams: integer("stock_grams").notNull().default(0),
-    lowStockGrams: integer("low_stock_grams").notNull().default(0),
+    /** Display/purchase unit; defines the kind (weight/count). */
+    preferredUnitId: integer("preferred_unit_id").references(() => units.id),
+    /** Canonical base quantity. May go negative (D2). */
+    stockBase: integer("stock_base").notNull().default(0),
+    lowStockBase: integer("low_stock_base").notNull().default(0),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
     createdAt: text("created_at")
       .notNull()
@@ -285,15 +355,20 @@ export const purchaseInvoiceLines = sqliteTable("purchase_invoice_lines", {
   invoiceId: integer("invoice_id")
     .notNull()
     .references(() => purchaseInvoices.id),
+  /** Exactly one of ingredientId / itemId is set. */
   ingredientId: integer("ingredient_id").references(() => ingredients.id),
+  itemId: integer("item_id").references(() => items.id),
   /** Snapshot at purchase time. */
-  ingredientName: text("ingredient_name").notNull(),
-  qtyGrams: integer("qty_grams").notNull(),
-  /** Price per entered unit (g or kg). */
+  targetName: text("target_name").notNull(),
+  /** Canonical base quantity received. */
+  qtyBase: integer("qty_base").notNull(),
+  /** Snapshot of the entered unit. */
+  unitId: integer("unit_id").references(() => units.id),
+  unitName: text("unit_name"),
+  unitKind: text("unit_kind", { enum: ["weight", "count"] }),
+  factorToBase: integer("factor_to_base"),
+  /** Price per entered unit. */
   unitPrice: real("unit_price").notNull(),
-  unitBasis: text("unit_basis", { enum: ["g", "kg"] })
-    .notNull()
-    .default("kg"),
   lineTotal: real("line_total").notNull(),
 });
 
@@ -307,8 +382,8 @@ export const itemIngredients = sqliteTable(
     ingredientId: integer("ingredient_id")
       .notNull()
       .references(() => ingredients.id),
-    /** Grams consumed per one sold unit. */
-    gramsPerUnit: integer("grams_per_unit").notNull(),
+    /** Base quantity consumed per one sold unit (gram or piece). */
+    qtyBase: integer("qty_base").notNull(),
   },
   (table) => [
     uniqueIndex("item_ingredients_item_ingredient_idx").on(
@@ -372,7 +447,7 @@ export const cashierStationsRelations = relations(
   }),
 );
 
-export const itemsRelations = relations(items, ({ one }) => ({
+export const itemsRelations = relations(items, ({ one, many }) => ({
   venue: one(venues, {
     fields: [items.venueId],
     references: [venues.id],
@@ -385,6 +460,11 @@ export const itemsRelations = relations(items, ({ one }) => ({
     fields: [items.kitchenPrinterId],
     references: [printers.id],
   }),
+  unit: one(units, {
+    fields: [items.unitId],
+    references: [units.id],
+  }),
+  movements: many(itemMovements),
 }));
 
 export const tablesRelations = relations(tables, ({ one }) => ({
@@ -418,6 +498,10 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   table: one(tables, {
     fields: [orders.tableId],
     references: [tables.id],
+  }),
+  customer: one(customers, {
+    fields: [orders.customerId],
+    references: [customers.id],
   }),
   waiter: one(users, {
     fields: [orders.waiterId],
@@ -457,10 +541,27 @@ export const cancelledItemsRelations = relations(cancelledItems, ({ one }) => ({
   }),
 }));
 
-export const ingredientsRelations = relations(ingredients, ({ many }) => ({
-  bomLines: many(itemIngredients),
-  movements: many(ingredientMovements),
+export const unitsRelations = relations(units, ({ many }) => ({
+  ingredients: many(ingredients),
+  items: many(items),
   purchaseLines: many(purchaseInvoiceLines),
+}));
+
+export const ingredientsRelations = relations(
+  ingredients,
+  ({ one, many }) => ({
+    preferredUnit: one(units, {
+      fields: [ingredients.preferredUnitId],
+      references: [units.id],
+    }),
+    bomLines: many(itemIngredients),
+    movements: many(ingredientMovements),
+    purchaseLines: many(purchaseInvoiceLines),
+  }),
+);
+
+export const customersRelations = relations(customers, ({ many }) => ({
+  orders: many(orders),
 }));
 
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
@@ -494,6 +595,14 @@ export const purchaseInvoiceLinesRelations = relations(
       fields: [purchaseInvoiceLines.ingredientId],
       references: [ingredients.id],
     }),
+    item: one(items, {
+      fields: [purchaseInvoiceLines.itemId],
+      references: [items.id],
+    }),
+    unit: one(units, {
+      fields: [purchaseInvoiceLines.unitId],
+      references: [units.id],
+    }),
   }),
 );
 
@@ -510,6 +619,25 @@ export const itemIngredientsRelations = relations(
     }),
   }),
 );
+
+export const itemMovementsRelations = relations(itemMovements, ({ one }) => ({
+  item: one(items, {
+    fields: [itemMovements.itemId],
+    references: [items.id],
+  }),
+  order: one(orders, {
+    fields: [itemMovements.orderId],
+    references: [orders.id],
+  }),
+  invoice: one(purchaseInvoices, {
+    fields: [itemMovements.invoiceId],
+    references: [purchaseInvoices.id],
+  }),
+  user: one(users, {
+    fields: [itemMovements.userId],
+    references: [users.id],
+  }),
+}));
 
 export const ingredientMovementsRelations = relations(
   ingredientMovements,

@@ -57,7 +57,7 @@ export function AdminLoginForm({ resetNotice = false }: { resetNotice?: boolean 
         {resetNotice ? (
           <div className="alert alert-success alert-soft mt-4 text-sm">
             <span>
-              تمت إعادة تهيئة النظام. سجّل الدخول باستخدام admin / admin123
+              تمت إعادة تهيئة النظام. سجّل الدخول باستخدام admin / 123
               ثم غيّر كلمة المرور.
             </span>
           </div>

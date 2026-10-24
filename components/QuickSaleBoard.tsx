@@ -6,6 +6,8 @@ import { Banknote, CreditCard, LoaderCircle } from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
 import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
+import { CustomerSelect } from "@/components/CustomerSelect";
+import type { CustomerOption } from "@/app/actions/customers";
 import {
   quickSalePayNotice,
   type PayNotice,
@@ -26,14 +28,17 @@ export function QuickSaleBoard({
   venueId,
   categories,
   items,
+  customers,
 }: {
   venueId: string;
   categories: MenuCategory[];
   items: MenuItem[];
+  customers: CustomerOption[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [cart, setCart] = useState<QuickSaleLine[]>([]);
+  const [customerId, setCustomerId] = useState<number | null>(null);
   const [method, setMethod] = useState<"cash" | "card" | null>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PayNotice | null>(null);
@@ -152,7 +157,7 @@ export function QuickSaleBoard({
   function confirmPay() {
     if (!method) return;
     startTransition(async () => {
-      const payResult = await payQuickSale(venueId, cart, method);
+      const payResult = await payQuickSale(venueId, cart, method, customerId);
       if ("error" in payResult) {
         showToast("error", payResult.error);
         return;
@@ -160,6 +165,7 @@ export function QuickSaleBoard({
 
       closeModal();
       setCart([]);
+      setCustomerId(null);
 
       let kitchenFailed = payResult.kitchenFailed;
       let receiptFailed = payResult.receiptFailed;
@@ -191,33 +197,42 @@ export function QuickSaleBoard({
   const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
 
   const payFooter = (
-    <div className="grid grid-cols-[1fr_auto] gap-1">
-      <div className="grid grid-cols-2 gap-1">
-        <button
-          type="button"
-          className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
-          disabled={pending || cart.length === 0}
-          onClick={() => askConfirm("cash")}
-        >
-          <Banknote className="size-3.5" />
-          نقدي
-        </button>
-        <button
-          type="button"
-          className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
-          disabled={pending || cart.length === 0}
-          onClick={() => askConfirm("card")}
-        >
-          <CreditCard className="size-3.5" />
-          بطاقة
-        </button>
-      </div>
-      <PreviewReceiptButton
-        venueId={venueId}
-        cart={cart}
-        compact
-        disabled={pending || cart.length === 0}
+    <div className="space-y-1">
+      <CustomerSelect
+        customers={customers}
+        value={customerId}
+        onSelect={setCustomerId}
+        disabled={pending}
       />
+      <div className="grid grid-cols-[1fr_auto] gap-1">
+        <div className="grid grid-cols-2 gap-1">
+          <button
+            type="button"
+            className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
+            disabled={pending || cart.length === 0}
+            onClick={() => askConfirm("cash")}
+          >
+            <Banknote className="size-3.5" />
+            نقدي
+          </button>
+          <button
+            type="button"
+            className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
+            disabled={pending || cart.length === 0}
+            onClick={() => askConfirm("card")}
+          >
+            <CreditCard className="size-3.5" />
+            بطاقة
+          </button>
+        </div>
+        <PreviewReceiptButton
+          venueId={venueId}
+          cart={cart}
+          customerId={customerId}
+          compact
+          disabled={pending || cart.length === 0}
+        />
+      </div>
     </div>
   );
 

@@ -6,7 +6,7 @@ Fast POS — بعد التثبيت
 
 2) لوحة الإدارة:
    اسم المستخدم: admin
-   كلمة المرور: admin123
+   كلمة المرور: 123
    غيّر كلمة المرور فوراً من: الإدارة ← الإعدادات.
 
 3) دخول الكاشير:
@@ -32,7 +32,7 @@ Fast POS — بعد التثبيت
 
 English quick start
 -------------------
-Admin: admin / admin123 (change it immediately)
+Admin: admin / 123 (change it immediately)
 Cashier PIN: 2580
 LAN URL: http://<server-ip>:3000
 Service name: FastPOS (starts on boot). Data lives in <install>\server\data.

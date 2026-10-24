@@ -14,7 +14,7 @@
 | D1 | **Counter mode is cashier-only**: no waiters, no dining tables, no cafe venue. Staff PIN login goes to cashier quick-sale flow. |
 | D2 | **Insufficient ingredient stock never blocks payment**: sale completes, stock may go negative (shown in red), cashier sees a warning toast, audit entry recorded. |
 | D3 | **Server auto-start = Windows service** via bundled WinSW wrapper (starts on boot before login, auto-restart on crash). |
-| D4 | **Installed systems seed clean production data**: admin (`admin`/`admin123`) + full menu + placeholder printers + **one main cashier PIN `2580`** (shown in installer finish page). NO demo staff, NO sample orders, NO PINs 1111–6666 on installed systems. Dev (`npm run dev`, no `data/deployment.json`) keeps today's rich demo seed unchanged. |
+| D4 | **Installed systems seed clean production data**: admin (`admin`/`123`) + full menu + placeholder printers + **one main cashier PIN `2580`** (shown in installer finish page). NO demo staff, NO sample orders, NO PINs 1111–6666 on installed systems. Dev (`npm run dev`, no `data/deployment.json`) keeps today's rich demo seed unchanged. |
 | D5 | **Ingredient consumption happens at payment** (`status → paid`), not at order creation or kitchen send. |
 | D6 | **Installer bundles a portable Node.js runtime** (win-x64). Target machine needs zero prerequisites (Win10+ x64 only). |
 
@@ -123,7 +123,7 @@ Steps:
 - Firewall: `[Run]` `netsh advfirewall firewall add rule name="Fast POS" dir=in action=allow protocol=TCP localport=3000` (and delete on uninstall `[UninstallRun]`).
 - Service: `[Run]` (postinstall, checked): `{app}\FastPOS-service.exe install` then `start`; `[UninstallRun]`: stop + uninstall service first. Stop the service before file copy on upgrades (`CurStepChanged`).
 - Shortcuts: desktop/Start-menu "Fast POS" → `{app}\bin\fast-pos-open.cmd` (opens `http://localhost:3000` in default browser, waits for port).
-- Finish page / postinstall memo: credentials — admin `admin`/`admin123` (change on first login), cashier PIN `2580`, LAN URL `http://<server-ip>:3000`.
+- Finish page / postinstall memo: credentials — admin `admin`/`123` (change on first login), cashier PIN `2580`, LAN URL `http://<server-ip>:3000`.
 
 ### B4. Verify
 Build, then on a Windows VM: install **counter** → service runs, PATH commands work, firewall rule exists, first boot seeds restaurant-only/no tables, POS usable with PIN 2580; install **full** → both venues + tables. Reinstall over existing → `pos.db` preserved (activation state intact — license row must survive upgrades).
@@ -245,4 +245,4 @@ BOM in Excel import/export · low-stock badges on cashier tiles · per-venue inv
 - Three-place schema sync (schema.ts / ensureSchema / test DDL) + reset.ts.
 - WinSW requires .NET Framework 4.6.1+ (present on all supported Win10/11 x64).
 - Installer needs elevation (HKLM PATH + service + firewall) — `PrivilegesRequired=admin`.
-- Default admin password ships as `admin/admin123` — finish-page instructs change (optional future: force-change flag).
+- Default admin password ships as `admin/123` — finish-page instructs change (optional future: force-change flag).

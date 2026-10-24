@@ -14,7 +14,7 @@ import { createPurchaseInvoice } from "@/app/actions/inventory";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { ActionFeedback } from "@/components/ActionFeedback";
 import { formatMoney } from "@/lib/venues";
-import type { QuantityBasis } from "@/lib/inventory/rules";
+import type { UnitKind } from "@/lib/inventory/rules";
 
 export type PurchaseInvoiceRow = {
   id: number;
@@ -32,25 +32,44 @@ type Option = {
   active: boolean;
 };
 
+export type PurchaseTargetOption = Option & {
+  unitId: number | null;
+  unitName: string;
+  unitKind: UnitKind;
+  factorToBase: number;
+};
+
+export type UnitOption = {
+  id: number;
+  name: string;
+  kind: UnitKind;
+  factorToBase: number;
+  active: boolean;
+};
+
 type DraftLine = {
-  ingredientId: string;
+  targetKey: string;
   qty: string;
-  unitBasis: QuantityBasis;
+  unitId: string;
   unitPrice: string;
 };
 
 function blankLine(): DraftLine {
-  return { ingredientId: "", qty: "", unitBasis: "kg", unitPrice: "" };
+  return { targetKey: "", qty: "", unitId: "", unitPrice: "" };
 }
 
 export function PurchaseInvoicesAdmin({
   invoices,
   suppliers,
   ingredients,
+  trackedItems,
+  units,
 }: {
   invoices: PurchaseInvoiceRow[];
   suppliers: Option[];
-  ingredients: Option[];
+  ingredients: PurchaseTargetOption[];
+  trackedItems: PurchaseTargetOption[];
+  units: UnitOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -61,12 +80,41 @@ export function PurchaseInvoicesAdmin({
   const [note, setNote] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
 
+  const targets = [
+    ...ingredients.map((target) => ({
+      ...target,
+      targetType: "ingredient" as const,
+    })),
+    ...trackedItems.map((target) => ({
+      ...target,
+      targetType: "item" as const,
+    })),
+  ];
+  const targetsByKey = new Map(
+    targets.map((target) => [`${target.targetType}:${target.id}`, target]),
+  );
+
   const grandTotal = lines.reduce((sum, line) => {
     const qty = Number(line.qty);
     const price = Number(line.unitPrice);
     if (!Number.isFinite(qty) || !Number.isFinite(price)) return sum;
     return sum + qty * price;
   }, 0);
+
+  function targetFor(line: DraftLine) {
+    return line.targetKey ? targetsByKey.get(line.targetKey) : undefined;
+  }
+
+  function unitsFor(line: DraftLine) {
+    const target = targetFor(line);
+    if (!target) return [];
+    const selectedId = Number(line.unitId);
+    return units.filter(
+      (unit) =>
+        unit.kind === target.unitKind &&
+        (unit.active || unit.id === selectedId),
+    );
+  }
 
   function resetForm() {
     setSupplierId("");
@@ -88,6 +136,29 @@ export function PurchaseInvoicesAdmin({
     );
   }
 
+  function updateTarget(index: number, targetKey: string) {
+    const target = targetKey ? targetsByKey.get(targetKey) : undefined;
+    const preferredUnit = target
+      ? (units.find(
+          (unit) => unit.id === target.unitId && unit.active,
+        ) ??
+        units.find(
+          (unit) => unit.kind === target.unitKind && unit.active,
+        ))
+      : undefined;
+    setLines((rows) =>
+      rows.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              targetKey,
+              unitId: preferredUnit ? String(preferredUnit.id) : "",
+            }
+          : row,
+      ),
+    );
+  }
+
   function removeLine(index: number) {
     setLines((rows) => rows.filter((_, i) => i !== index));
   }
@@ -95,15 +166,15 @@ export function PurchaseInvoicesAdmin({
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const payloadLines: Array<{
-      ingredientId: number;
+      targetType: "ingredient" | "item";
+      targetId: number;
       qty: number;
-      unitBasis: QuantityBasis;
+      unitId: number;
       unitPrice: number;
     }> = [];
 
     const activeLines = lines.filter(
-      (line) =>
-        line.ingredientId || line.qty.trim() || line.unitPrice.trim(),
+      (line) => line.targetKey || line.qty.trim() || line.unitPrice.trim(),
     );
     if (activeLines.length === 0) {
       setError("أضف بنداً واحداً على الأقل");
@@ -111,24 +182,27 @@ export function PurchaseInvoicesAdmin({
     }
 
     for (const line of activeLines) {
-      const ingredientId = Number(line.ingredientId);
+      const target = targetFor(line);
       const qty = Number(line.qty);
+      const unitId = Number(line.unitId);
       const unitPrice = Number(line.unitPrice);
       if (
-        !Number.isInteger(ingredientId) ||
-        ingredientId <= 0 ||
+        !target ||
         !Number.isFinite(qty) ||
         qty <= 0 ||
+        !Number.isInteger(unitId) ||
+        unitId <= 0 ||
         !Number.isFinite(unitPrice) ||
         unitPrice < 0
       ) {
-        setError("أكمل بيانات كل بند: المكوّن، الكمية، وسعر الوحدة");
+        setError("أكمل بيانات كل بند: الهدف، الكمية، الوحدة، وسعر الوحدة");
         return;
       }
       payloadLines.push({
-        ingredientId,
+        targetType: target.targetType,
+        targetId: target.id,
         qty,
-        unitBasis: line.unitBasis,
+        unitId,
         unitPrice,
       });
     }
@@ -163,7 +237,7 @@ export function PurchaseInvoicesAdmin({
               <div>
                 <h3 className="font-black">فواتير المشتريات</h3>
                 <p className="text-xs text-base-content/45">
-                  كل فاتورة تضيف الكميات للمخزون تلقائياً
+                  كل فاتورة تضيف الكميات لمخزون المكونات أو الأصناف المتتبعة
                 </p>
               </div>
             </div>
@@ -302,114 +376,167 @@ export function PurchaseInvoicesAdmin({
               </button>
             </div>
 
-            <div className="mt-3 space-y-2">
-              {lines.map((line, index) => {
-                const lineTotal =
-                  Number(line.qty) * Number(line.unitPrice) || 0;
-                return (
-                  <div
-                    key={index}
-                    className="grid grid-cols-2 items-end gap-2 rounded-xl bg-base-200/40 p-2 sm:grid-cols-12"
-                  >
-                    <label className="form-control col-span-2 sm:col-span-4">
-                      <span className="label-text mb-1 text-[11px] font-bold">
-                        المكوّن
-                      </span>
-                      <select
-                        className="select select-bordered select-sm w-full"
-                        value={line.ingredientId}
-                        onChange={(event) =>
-                          updateLine(index, {
-                            ingredientId: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">اختر مكوّناً</option>
-                        {ingredients
-                          .filter(
-                            (ingredient) =>
-                              ingredient.active ||
-                              String(ingredient.id) === line.ingredientId,
-                          )
-                          .map((ingredient) => (
-                            <option
-                              key={ingredient.id}
-                              value={ingredient.id}
-                            >
-                              {ingredient.name}
-                              {ingredient.active ? "" : " (معطّل)"}
+            {targets.length === 0 ? (
+              <p className="mt-3 rounded-xl bg-base-200/60 px-3 py-2 text-xs text-base-content/55">
+                أضف مكونات من{" "}
+                <Link
+                  href="/admin/inventory"
+                  className="link link-primary font-bold"
+                >
+                  صفحة المخزون
+                </Link>{" "}
+                أو فعّل تتبع المخزون لصنف من{" "}
+                <Link
+                  href="/admin/items"
+                  className="link link-primary font-bold"
+                >
+                  صفحة الأصناف
+                </Link>{" "}
+                لتتمكن من تسجيل المشتريات.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {lines.map((line, index) => {
+                  const lineTotal =
+                    Number(line.qty) * Number(line.unitPrice) || 0;
+                  const target = targetFor(line);
+                  const lineUnits = unitsFor(line);
+                  return (
+                    <div
+                      key={index}
+                      className="grid grid-cols-2 items-end gap-2 rounded-xl bg-base-200/40 p-2 sm:grid-cols-12"
+                    >
+                      <label className="form-control col-span-2 sm:col-span-4">
+                        <span className="label-text mb-1 text-[11px] font-bold">
+                          المكوّن / الصنف
+                        </span>
+                        <select
+                          className="select select-bordered select-sm w-full"
+                          value={line.targetKey}
+                          onChange={(event) =>
+                            updateTarget(index, event.target.value)
+                          }
+                        >
+                          <option value="">اختر الهدف</option>
+                          {ingredients.length > 0 ? (
+                            <optgroup label="المكونات">
+                              {ingredients
+                                .filter(
+                                  (ingredient) =>
+                                    ingredient.active ||
+                                    line.targetKey ===
+                                      `ingredient:${ingredient.id}`,
+                                )
+                                .map((ingredient) => (
+                                  <option
+                                    key={`ingredient-${ingredient.id}`}
+                                    value={`ingredient:${ingredient.id}`}
+                                  >
+                                    {ingredient.name}
+                                    {ingredient.active ? "" : " (معطّل)"}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          ) : null}
+                          {trackedItems.length > 0 ? (
+                            <optgroup label="أصناف متتبعة">
+                              {trackedItems
+                                .filter(
+                                  (item) =>
+                                    item.active ||
+                                    line.targetKey === `item:${item.id}`,
+                                )
+                                .map((item) => (
+                                  <option
+                                    key={`item-${item.id}`}
+                                    value={`item:${item.id}`}
+                                  >
+                                    {item.name}
+                                    {item.active ? "" : " (معطّل)"}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          ) : null}
+                        </select>
+                      </label>
+                      <label className="form-control sm:col-span-2">
+                        <span className="label-text mb-1 text-[11px] font-bold">
+                          الكمية
+                        </span>
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={line.qty}
+                          onChange={(event) =>
+                            updateLine(index, { qty: event.target.value })
+                          }
+                          className="input input-bordered input-sm w-full"
+                        />
+                      </label>
+                      <label className="form-control sm:col-span-2">
+                        <span className="label-text mb-1 text-[11px] font-bold">
+                          الوحدة
+                        </span>
+                        <select
+                          className="select select-bordered select-sm w-full"
+                          value={line.unitId}
+                          onChange={(event) =>
+                            updateLine(index, { unitId: event.target.value })
+                          }
+                          disabled={!target}
+                          required
+                        >
+                          {!target ? (
+                            <option value="">اختر الهدف أولاً</option>
+                          ) : null}
+                          {lineUnits.map((unit) => (
+                            <option key={unit.id} value={unit.id}>
+                              {unit.name}
+                              {unit.active ? "" : " (معطّلة)"}
                             </option>
                           ))}
-                      </select>
-                    </label>
-                    <label className="form-control sm:col-span-2">
-                      <span className="label-text mb-1 text-[11px] font-bold">
-                        الكمية
-                      </span>
-                      <input
-                        type="number"
-                        min="0.001"
-                        step="0.001"
-                        value={line.qty}
-                        onChange={(event) =>
-                          updateLine(index, { qty: event.target.value })
-                        }
-                        className="input input-bordered input-sm w-full"
-                      />
-                    </label>
-                    <label className="form-control sm:col-span-1">
-                      <span className="label-text mb-1 text-[11px] font-bold">
-                        الوحدة
-                      </span>
-                      <select
-                        className="select select-bordered select-sm w-full"
-                        value={line.unitBasis}
-                        onChange={(event) =>
-                          updateLine(index, {
-                            unitBasis: event.target.value as QuantityBasis,
-                          })
-                        }
+                        </select>
+                      </label>
+                      <label className="form-control sm:col-span-2">
+                        <span className="label-text mb-1 text-[11px] font-bold">
+                          سعر الوحدة
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.unitPrice}
+                          onChange={(event) =>
+                            updateLine(index, {
+                              unitPrice: event.target.value,
+                            })
+                          }
+                          className="input input-bordered input-sm w-full"
+                        />
+                      </label>
+                      <div className="sm:col-span-1">
+                        <span className="label-text mb-1 block text-[11px] font-bold">
+                          الإجمالي
+                        </span>
+                        <p className="font-mono text-sm font-black text-primary">
+                          {formatMoney(lineTotal)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-square btn-ghost btn-sm text-error sm:col-span-1"
+                        onClick={() => removeLine(index)}
+                        disabled={lines.length === 1}
+                        title="حذف البند"
                       >
-                        <option value="kg">كغ</option>
-                        <option value="g">غ</option>
-                      </select>
-                    </label>
-                    <label className="form-control sm:col-span-2">
-                      <span className="label-text mb-1 text-[11px] font-bold">
-                        سعر الوحدة
-                      </span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={line.unitPrice}
-                        onChange={(event) =>
-                          updateLine(index, { unitPrice: event.target.value })
-                        }
-                        className="input input-bordered input-sm w-full"
-                      />
-                    </label>
-                    <div className="sm:col-span-2">
-                      <span className="label-text mb-1 block text-[11px] font-bold">
-                        الإجمالي
-                      </span>
-                      <p className="font-mono text-sm font-black text-primary">
-                        {formatMoney(lineTotal)}
-                      </p>
+                        <Trash2 className="size-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      className="btn btn-square btn-ghost btn-sm text-error sm:col-span-1"
-                      onClick={() => removeLine(index)}
-                      disabled={lines.length === 1}
-                      title="حذف البند"
-                    >
-                      <Trash2 className="size-4" />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
 
             <div className="mt-4 flex items-center justify-between border-t border-base-300/60 pt-3">
               <span className="text-sm font-bold text-base-content/55">
@@ -431,7 +558,11 @@ export function PurchaseInvoicesAdmin({
             >
               إلغاء
             </button>
-            <button type="submit" className="btn btn-primary" disabled={pending}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={pending || targets.length === 0}
+            >
               {pending ? (
                 <>
                   <LoaderCircle className="size-4 animate-spin" />

@@ -72,17 +72,21 @@ export function applyPartialReset(options: ResetOptions) {
 
   if (options.menu) {
     sqlite.exec("DELETE FROM item_ingredients");
+    sqlite.exec("UPDATE item_movements SET item_id = NULL");
+    sqlite.exec("UPDATE purchase_invoice_lines SET item_id = NULL");
     sqlite.exec("DELETE FROM items");
     sqlite.exec("DELETE FROM categories");
   }
 
   if (options.inventory) {
     sqlite.exec("DELETE FROM item_ingredients");
+    sqlite.exec("DELETE FROM item_movements");
     sqlite.exec("DELETE FROM ingredient_movements");
     sqlite.exec("DELETE FROM purchase_invoice_lines");
     sqlite.exec("DELETE FROM purchase_invoices");
     sqlite.exec("DELETE FROM ingredients");
     sqlite.exec("DELETE FROM suppliers");
+    sqlite.exec("UPDATE items SET stock_base = 0");
   }
 
   if (options.tables) {

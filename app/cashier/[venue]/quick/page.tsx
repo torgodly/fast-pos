@@ -7,7 +7,7 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
 import { QuickSaleBoard } from "@/components/QuickSaleBoard";
 import { db } from "@/lib/db";
-import { categories, items } from "@/lib/db/schema";
+import { categories, customers, items } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
 import { availableAtVenue } from "@/lib/menu/scope";
 
@@ -43,6 +43,17 @@ export default async function CashierQuickPage({
     .where(availableAtVenue(items.venueId, venue))
     .all();
 
+  const customerOptions = db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      phone: customers.phone,
+    })
+    .from(customers)
+    .where(eq(customers.active, true))
+    .orderBy(asc(customers.name), asc(customers.id))
+    .all();
+
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
       <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
@@ -67,6 +78,7 @@ export default async function CashierQuickPage({
           venueId={venue}
           categories={cats}
           items={menuItems}
+          customers={customerOptions}
         />
       </main>
     </div>

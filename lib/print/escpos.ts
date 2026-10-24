@@ -392,6 +392,14 @@ export function buildCheckoutEscPos(
     fieldLine(parts, "السفرادجي", data.waiterName);
   }
 
+  if (data.customerName) {
+    fieldLine(parts, "العميل", data.customerName);
+  }
+
+  if (data.customerPhone) {
+    fieldLine(parts, "الهاتف", data.customerPhone);
+  }
+
   printLine(parts, `الكاشير: ${data.cashierName}`, { bold: true });
   fieldLine(parts, "الدفع", method);
   fieldLine(parts, "الوقت", data.paidAt);

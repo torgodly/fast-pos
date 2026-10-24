@@ -17,7 +17,7 @@ import {
 } from "@/lib/inventory/service";
 import {
   insufficientWarningText,
-  type InsufficientIngredient,
+  type InsufficientStock,
 } from "@/lib/inventory/rules";
 
 type ActionResult = { ok: true } | { error: string };
@@ -32,7 +32,7 @@ function auditInventoryWarnings(
   session: AdminSession,
   venueId: string,
   orderId: number,
-  warnings: InsufficientIngredient[],
+  warnings: InsufficientStock[],
 ) {
   if (warnings.length === 0) return;
   recordSessionAudit(session, {

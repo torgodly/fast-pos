@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, or } from "drizzle-orm";
 import { ArrowRight } from "lucide-react";
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { CancelTableButton } from "@/components/CancelTableButton";
 import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
+import { OrderCustomerSelect } from "@/components/OrderCustomerSelect";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PayButtons } from "@/components/PayButtons";
 import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
@@ -13,6 +14,7 @@ import { db } from "@/lib/db";
 import {
   cancelledItems,
   categories,
+  customers,
   items,
   orderItems,
   orders,
@@ -73,6 +75,22 @@ export default async function CashierOrderPage({
     .where(availableAtVenue(items.venueId, venue))
     .all();
 
+  const customerOptions = db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      phone: customers.phone,
+    })
+    .from(customers)
+    .where(
+      or(
+        eq(customers.active, true),
+        eq(customers.id, order.customerId ?? 0),
+      ),
+    )
+    .orderBy(asc(customers.name), asc(customers.id))
+    .all();
+
   const lines = db
     .select()
     .from(orderItems)
@@ -130,6 +148,12 @@ export default async function CashierOrderPage({
           }))}
           footer={
             <div className="space-y-1">
+              <OrderCustomerSelect
+                key="customer"
+                orderId={orderId}
+                customers={customerOptions}
+                value={order.customerId}
+              />
               <KitchenConfirmButton
                 key="kitchen"
                 orderId={orderId}

@@ -5,6 +5,7 @@ import { MenuExcelBar } from "@/components/admin/MenuExcelBar";
 import { requireAdmin } from "@/app/actions/auth";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
+import { isCounterMode } from "@/lib/deployment";
 import { db } from "@/lib/db";
 import {
   categories,
@@ -12,9 +13,11 @@ import {
   itemIngredients,
   items,
   printers,
+  units,
 } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
+import type { UnitKind } from "@/lib/inventory/rules";
 import type { VenueId } from "@/lib/types";
 import { getVenueName, isVenueId } from "@/lib/venues";
 
@@ -35,8 +38,23 @@ export default async function AdminItemsPage({
     .all();
 
   const allItems = db
-    .select()
+    .select({
+      id: items.id,
+      name: items.name,
+      categoryId: items.categoryId,
+      price: items.price,
+      active: items.active,
+      venueId: items.venueId,
+      trackStock: items.trackStock,
+      unitId: items.unitId,
+      stockBase: items.stockBase,
+      lowStockBase: items.lowStockBase,
+      unitName: units.name,
+      unitKind: units.kind,
+      factorToBase: units.factorToBase,
+    })
     .from(items)
+    .leftJoin(units, eq(items.unitId, units.id))
     .where(availableAtVenue(items.venueId, venue))
     .all();
 
@@ -55,10 +73,32 @@ export default async function AdminItemsPage({
     .all();
 
   const allIngredients = db
-    .select()
+    .select({
+      id: ingredients.id,
+      name: ingredients.name,
+      active: ingredients.active,
+      unitId: ingredients.preferredUnitId,
+      unitName: units.name,
+      unitKind: units.kind,
+      factorToBase: units.factorToBase,
+    })
     .from(ingredients)
+    .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
     .orderBy(asc(ingredients.name))
     .all();
+
+  const unitOptions = db
+    .select()
+    .from(units)
+    .orderBy(asc(units.kind), asc(units.factorToBase), asc(units.name))
+    .all()
+    .map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      kind: unit.kind as UnitKind,
+      factorToBase: unit.factorToBase,
+      active: unit.active,
+    }));
 
   const itemIds = allItems.map((item) => item.id);
   const bomRows =
@@ -108,6 +148,13 @@ export default async function AdminItemsPage({
           price: item.price,
           active: item.active,
           venueId: item.venueId,
+          trackStock: item.trackStock,
+          unitId: item.unitId,
+          stockBase: item.stockBase,
+          lowStockBase: item.lowStockBase,
+          unitName: item.unitName,
+          unitKind: item.unitKind,
+          factorToBase: item.factorToBase,
         }))}
         kitchenPrinters={kitchenPrinters.map((p) => ({
           id: p.id,
@@ -135,12 +182,18 @@ export default async function AdminItemsPage({
           id: ingredient.id,
           name: ingredient.name,
           active: ingredient.active,
+          unitId: ingredient.unitId,
+          unitName: ingredient.unitName ?? "غرام",
+          unitKind: (ingredient.unitKind ?? "weight") as UnitKind,
+          factorToBase: ingredient.factorToBase ?? 1,
         }))}
+        units={unitOptions}
         bomByItem={bomRows.map((row) => ({
           itemId: row.itemId,
           ingredientId: row.ingredientId,
-          gramsPerUnit: row.gramsPerUnit,
+          qtyBase: row.qtyBase,
         }))}
+        counterMode={isCounterMode()}
       />
     </div>
   );

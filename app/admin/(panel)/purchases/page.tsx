@@ -4,14 +4,19 @@ import { requireAdmin } from "@/app/actions/auth";
 import {
   PurchaseInvoicesAdmin,
   type PurchaseInvoiceRow,
+  type PurchaseTargetOption,
+  type UnitOption,
 } from "@/components/admin/PurchaseInvoicesAdmin";
 import { db } from "@/lib/db";
 import {
   ingredients,
+  items,
   purchaseInvoiceLines,
   purchaseInvoices,
   suppliers,
+  units,
 } from "@/lib/db/schema";
+import type { UnitKind } from "@/lib/inventory/rules";
 
 export default async function AdminPurchasesPage({
   searchParams,
@@ -72,11 +77,61 @@ export default async function AdminPurchasesPage({
     lineCount: countsByInvoice.get(row.id) ?? 0,
   }));
 
-  const ingredientOptions = db
-    .select({ id: ingredients.id, name: ingredients.name, active: ingredients.active })
+  const unitOptions: UnitOption[] = db
+    .select()
+    .from(units)
+    .orderBy(desc(units.builtIn), asc(units.kind), asc(units.factorToBase))
+    .all()
+    .map((unit) => ({
+      id: unit.id,
+      name: unit.name,
+      kind: unit.kind,
+      factorToBase: unit.factorToBase,
+      active: unit.active,
+    }));
+
+  const ingredientOptions: PurchaseTargetOption[] = db
+    .select({
+      id: ingredients.id,
+      name: ingredients.name,
+      active: ingredients.active,
+      unitId: ingredients.preferredUnitId,
+      unitName: units.name,
+      unitKind: units.kind,
+      factorToBase: units.factorToBase,
+    })
     .from(ingredients)
+    .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
     .orderBy(asc(ingredients.name), asc(ingredients.id))
-    .all();
+    .all()
+    .map((row) => ({
+      ...row,
+      unitName: row.unitName ?? "غرام",
+      unitKind: (row.unitKind ?? "weight") as UnitKind,
+      factorToBase: row.factorToBase ?? 1,
+    }));
+
+  const trackedItemOptions: PurchaseTargetOption[] = db
+    .select({
+      id: items.id,
+      name: items.name,
+      active: items.active,
+      unitId: items.unitId,
+      unitName: units.name,
+      unitKind: units.kind,
+      factorToBase: units.factorToBase,
+    })
+    .from(items)
+    .leftJoin(units, eq(items.unitId, units.id))
+    .where(eq(items.trackStock, true))
+    .orderBy(asc(items.name), asc(items.id))
+    .all()
+    .map((row) => ({
+      ...row,
+      unitName: row.unitName ?? "حبة",
+      unitKind: (row.unitKind ?? "count") as UnitKind,
+      factorToBase: row.factorToBase ?? 1,
+    }));
 
   const supplierOptions = db
     .select({ id: suppliers.id, name: suppliers.name, active: suppliers.active })
@@ -121,6 +176,8 @@ export default async function AdminPurchasesPage({
       <PurchaseInvoicesAdmin
         invoices={invoices}
         ingredients={ingredientOptions}
+        trackedItems={trackedItemOptions}
+        units={unitOptions}
         suppliers={supplierOptions}
       />
     </div>

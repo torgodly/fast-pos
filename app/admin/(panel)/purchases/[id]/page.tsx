@@ -16,18 +16,33 @@ import {
   purchaseInvoices,
   suppliers,
 } from "@/lib/db/schema";
-import { gramsToDisplay } from "@/lib/inventory/rules";
+import {
+  baseToQuantity,
+  formatBaseQuantity,
+  type UnitKind,
+} from "@/lib/inventory/rules";
 import { formatMoney } from "@/lib/venues";
 
-function displayEnteredQty(qtyGrams: number, unitBasis: string) {
-  if (unitBasis === "kg") {
-    const kg = qtyGrams / 1000;
-    const text = Number.isInteger(kg)
-      ? String(kg)
-      : kg.toFixed(3).replace(/\.?0+$/, "");
-    return `${text} كغ`;
-  }
-  return `${qtyGrams} غ`;
+function formatQty(value: number) {
+  return Number.isInteger(value)
+    ? String(value)
+    : value.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function lineUnit(line: {
+  unitName: string | null;
+  unitKind: "weight" | "count" | null;
+  factorToBase: number | null;
+}) {
+  const kind: UnitKind = line.unitKind ?? "weight";
+  return {
+    name: line.unitName ?? (kind === "count" ? "حبة" : "غرام"),
+    kind,
+    factorToBase:
+      typeof line.factorToBase === "number" && line.factorToBase > 0
+        ? line.factorToBase
+        : 1,
+  };
 }
 
 export default async function AdminPurchaseInvoicePage({
@@ -157,31 +172,44 @@ export default async function AdminPurchaseInvoicePage({
             <table className="table table-zebra">
               <thead>
                 <tr>
-                  <th>المكوّن</th>
+                  <th>الصنف / المكوّن</th>
                   <th>الكمية المُدخلة</th>
-                  <th>المكافئ</th>
+                  <th>المكافئ الأساسي</th>
                   <th>سعر الوحدة</th>
                   <th>الإجمالي</th>
                 </tr>
               </thead>
               <tbody>
-                {lines.map((line) => (
-                  <tr key={line.id}>
-                    <td className="font-bold">{line.ingredientName}</td>
-                    <td className="font-mono">
-                      {displayEnteredQty(line.qtyGrams, line.unitBasis)}
-                    </td>
-                    <td className="font-mono text-base-content/60">
-                      {gramsToDisplay(line.qtyGrams)}
-                    </td>
-                    <td className="font-mono">
-                      {formatMoney(line.unitPrice)}
-                    </td>
-                    <td className="font-black text-primary">
-                      {formatMoney(line.lineTotal)}
-                    </td>
-                  </tr>
-                ))}
+                {lines.map((line) => {
+                  const unit = lineUnit(line);
+                  return (
+                    <tr key={line.id}>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold">{line.targetName}</span>
+                          <span className="badge badge-ghost badge-sm">
+                            {line.itemId != null ? "صنف" : "مكوّن"}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="font-mono">
+                        {formatQty(
+                          baseToQuantity(line.qtyBase, unit.factorToBase),
+                        )}{" "}
+                        {unit.name}
+                      </td>
+                      <td className="font-mono text-base-content/60">
+                        {formatBaseQuantity(line.qtyBase, unit.kind)}
+                      </td>
+                      <td className="font-mono">
+                        {formatMoney(line.unitPrice)}
+                      </td>
+                      <td className="font-black text-primary">
+                        {formatMoney(line.lineTotal)}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {lines.length === 0 && (
                   <tr>
                     <td colSpan={5} className="text-center opacity-60">

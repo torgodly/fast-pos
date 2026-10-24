@@ -60,6 +60,10 @@ function createMemoryDb() {
       name TEXT NOT NULL,
       price REAL NOT NULL,
       kitchen_printer_id INTEGER,
+      unit_id INTEGER,
+      track_stock INTEGER NOT NULL DEFAULT 0,
+      stock_base INTEGER NOT NULL DEFAULT 0,
+      low_stock_base INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE tables (
@@ -72,6 +76,7 @@ function createMemoryDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL,
       table_id INTEGER,
+      customer_id INTEGER,
       waiter_id INTEGER,
       cashier_id INTEGER,
       shift_id INTEGER,

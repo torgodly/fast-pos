@@ -20,13 +20,17 @@ import {
   categories,
   ingredients,
   itemIngredients,
+  itemMovements,
   items,
   orderItems,
   orders,
   printers,
+  purchaseInvoiceLines,
   tables,
+  units,
   users,
 } from "@/lib/db/schema";
+import { quantityToBase, type UnitKind } from "@/lib/inventory/rules";
 import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import {
   clearReceiptFooterMessage,
@@ -344,18 +348,106 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     .get();
   if (!category) return { error: "التصنيف غير موجود" };
 
+  const trackStock = formData.get("trackStock") === "on";
+  let unitId: number | null = null;
+  let lowStockBase = 0;
+  let unit: typeof units.$inferSelect | null = null;
+
+  if (trackStock) {
+    unitId = Number(formData.get("unitId"));
+    if (!Number.isInteger(unitId) || unitId <= 0) {
+      return { error: "اختر وحدة بيع الصنف" };
+    }
+    unit =
+      db.select().from(units).where(eq(units.id, unitId)).get() ?? null;
+    if (!unit) return { error: "الوحدة غير موجودة" };
+
+    const lowStockValue = Number(formData.get("lowStockValue") ?? 0);
+    if (!Number.isFinite(lowStockValue) || lowStockValue < 0) {
+      return { error: "حد التنبيه غير صالح" };
+    }
+    lowStockBase = quantityToBase(lowStockValue, unit.factorToBase);
+  }
+
   const bom = parseBomJson(formData.get("ingredientsJson"));
   if (bom && "error" in bom) return { error: bom.error };
 
+  if (trackStock && bom && bom.rows.length > 0) {
+    return {
+      error: "صنف متتبع المخزون لا يمكن أن يملك مكونات — اختر طريقة واحدة",
+    };
+  }
+
+  let resolvedBom: Array<{ ingredientId: number; qtyBase: number }> = [];
   if (bom && bom.rows.length > 0) {
-    const ids = bom.rows.map((row) => row.ingredientId);
-    const existing = db
-      .select({ id: ingredients.id })
+    const ingredientIds = bom.rows.map((row) => row.ingredientId);
+    const ingredientRows = db
+      .select({
+        id: ingredients.id,
+        preferredUnitId: ingredients.preferredUnitId,
+        unitKind: units.kind,
+        factorToBase: units.factorToBase,
+      })
       .from(ingredients)
-      .where(inArray(ingredients.id, ids))
+      .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
+      .where(inArray(ingredients.id, ingredientIds))
       .all();
-    if (existing.length !== ids.length) {
+    if (ingredientRows.length !== new Set(ingredientIds).size) {
       return { error: "أحد المكونات غير موجود" };
+    }
+    const byId = new Map(ingredientRows.map((row) => [row.id, row]));
+
+    const bomUnitIds = [...new Set(bom.rows.map((row) => row.unitId))];
+    const bomUnits = db
+      .select()
+      .from(units)
+      .where(inArray(units.id, bomUnitIds))
+      .all();
+    const unitsById = new Map(bomUnits.map((row) => [row.id, row]));
+
+    const resolved: Array<{ ingredientId: number; qtyBase: number }> = [];
+    for (const row of bom.rows) {
+      const ingredient = byId.get(row.ingredientId);
+      const bomUnit = unitsById.get(row.unitId);
+      if (!ingredient || !bomUnit) {
+        return { error: "وحدة أحد المكونات غير صالحة" };
+      }
+      const ingredientKind: UnitKind =
+        ingredient.unitKind === "count" ? "count" : "weight";
+      if (bomUnit.kind !== ingredientKind) {
+        return { error: "وحدة المكوّن غير متوافقة مع وحدته الأساسية" };
+      }
+      const qtyBase = quantityToBase(row.qty, bomUnit.factorToBase);
+      if (qtyBase <= 0 || qtyBase > 1_000_000) {
+        return { error: "كمية المكوّن يجب أن تكون أكبر من صفر" };
+      }
+      resolved.push({ ingredientId: row.ingredientId, qtyBase });
+    }
+    resolvedBom = resolved;
+  }
+
+  const existingItem = id
+    ? db.select().from(items).where(eq(items.id, id)).get()
+    : null;
+  if (id && !existingItem) return { error: "الصنف غير موجود" };
+
+  if (existingItem?.trackStock) {
+    const hasHistory =
+      existingItem.stockBase !== 0 ||
+      !!db
+        .select({ id: itemMovements.id })
+        .from(itemMovements)
+        .where(eq(itemMovements.itemId, existingItem.id))
+        .get();
+    if (hasHistory && trackStock && existingItem.unitId !== unitId) {
+      return {
+        error: "لا يمكن تغيير وحدة صنف له رصيد أو حركات مخزون — صفّر الرصيد أولاً",
+      };
+    }
+    if (hasHistory && !trackStock) {
+      return {
+        error: "لا يمكن إيقاف تتبع المخزون لصنف له رصيد أو حركات — صفّر الرصيد أولاً",
+      };
     }
   }
 
@@ -365,6 +457,9 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     name,
     price,
     kitchenPrinterId: null as number | null,
+    trackStock,
+    unitId: trackStock ? unitId : null,
+    lowStockBase: trackStock ? lowStockBase : 0,
   };
 
   db.transaction(() => {
@@ -374,23 +469,23 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
     } else {
       const created = db
         .insert(items)
-        .values({ ...values, active: true })
+        .values({ ...values, stockBase: 0, active: true })
         .returning()
         .get();
       itemId = created.id;
     }
 
-    if (bom && itemId) {
+    if (itemId) {
       db.delete(itemIngredients)
         .where(eq(itemIngredients.itemId, itemId))
         .run();
-      if (bom.rows.length > 0) {
+      if (resolvedBom.length > 0) {
         db.insert(itemIngredients)
           .values(
-            bom.rows.map((row) => ({
+            resolvedBom.map((row) => ({
               itemId: itemId!,
               ingredientId: row.ingredientId,
-              gramsPerUnit: row.gramsPerUnit,
+              qtyBase: row.qtyBase,
             })),
           )
           .run();
@@ -400,10 +495,11 @@ export async function upsertItem(formData: FormData): Promise<ActionResult> {
 
   revalidatePath("/admin/items");
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/units");
   return { ok: true };
 }
 
-type BomRowInput = { ingredientId: number; gramsPerUnit: number };
+type BomRowInput = { ingredientId: number; qty: number; unitId: number };
 
 function parseBomJson(
   raw: FormDataEntryValue | null,
@@ -430,20 +526,20 @@ function parseBomJson(
     }
     const value = entry as Record<string, unknown>;
     const ingredientId = Number(value.ingredientId);
-    const gramsPerUnit = Math.trunc(Number(value.gramsPerUnit));
+    const qty = Number(value.qty);
+    const unitId = Number(value.unitId);
     if (!Number.isInteger(ingredientId) || ingredientId <= 0) {
       return { error: "مكوّن غير صالح في قائمة المكونات" };
     }
-    if (
-      !Number.isFinite(gramsPerUnit) ||
-      gramsPerUnit <= 0 ||
-      gramsPerUnit > 1_000_000
-    ) {
+    if (!Number.isFinite(qty) || qty <= 0) {
       return { error: "كمية المكوّن يجب أن تكون أكبر من صفر" };
+    }
+    if (!Number.isInteger(unitId) || unitId <= 0) {
+      return { error: "وحدة المكوّن غير صالحة" };
     }
     if (seen.has(ingredientId)) continue;
     seen.add(ingredientId);
-    rows.push({ ingredientId, gramsPerUnit });
+    rows.push({ ingredientId, qty, unitId });
   }
   return { rows };
 }
@@ -466,10 +562,19 @@ export async function deleteItem(id: number): Promise<ActionResult> {
       .set({ itemId: null })
       .where(eq(orderItems.itemId, id))
       .run();
+    db.update(itemMovements)
+      .set({ itemId: null })
+      .where(eq(itemMovements.itemId, id))
+      .run();
+    db.update(purchaseInvoiceLines)
+      .set({ itemId: null })
+      .where(eq(purchaseInvoiceLines.itemId, id))
+      .run();
     db.delete(items).where(eq(items.id, id)).run();
   });
   revalidatePath("/admin/items");
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/units");
   return { ok: true };
 }
 
@@ -499,11 +604,20 @@ export async function deleteItems(ids: number[]): Promise<ActionResult> {
       .set({ itemId: null })
       .where(inArray(orderItems.itemId, unique))
       .run();
+    db.update(itemMovements)
+      .set({ itemId: null })
+      .where(inArray(itemMovements.itemId, unique))
+      .run();
+    db.update(purchaseInvoiceLines)
+      .set({ itemId: null })
+      .where(inArray(purchaseInvoiceLines.itemId, unique))
+      .run();
     db.delete(items).where(inArray(items.id, unique)).run();
   });
   revalidateFloorMenu();
   revalidatePath("/admin/items");
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/units");
   return { ok: true };
 }
 

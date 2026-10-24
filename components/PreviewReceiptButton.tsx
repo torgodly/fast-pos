@@ -14,12 +14,14 @@ export function PreviewReceiptButton({
   orderId,
   venueId,
   cart,
+  customerId,
   disabled,
   compact = false,
 }: {
   orderId?: number;
   venueId?: string;
   cart?: QuickSaleLine[];
+  customerId?: number | null;
   disabled?: boolean;
   compact?: boolean;
 }) {
@@ -32,7 +34,7 @@ export function PreviewReceiptButton({
         orderId != null
           ? await printOpenOrderReceipt(orderId)
           : venueId
-            ? await printQuickSalePreview(venueId, cart ?? [])
+            ? await printQuickSalePreview(venueId, cart ?? [], customerId ?? null)
             : { error: "طلب غير صالح" };
 
       if ("error" in result) {

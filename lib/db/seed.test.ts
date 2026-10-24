@@ -70,6 +70,7 @@ function createMemoryDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
       table_id INTEGER REFERENCES tables(id),
+      customer_id INTEGER,
       waiter_id INTEGER REFERENCES users(id),
       cashier_id INTEGER REFERENCES users(id),
       shift_id INTEGER,
@@ -107,7 +108,14 @@ describe("factory seed", () => {
     sqlite.close();
   });
 
-  it("counter seed is restaurant-only with cashier PIN 2580 and no tables/waiters", () => {
+  function countRows(table: string) {
+    const row = sqlite
+      .prepare(`SELECT COUNT(*) AS n FROM ${table}`)
+      .get() as { n: number };
+    return row.n;
+  }
+
+  it("counter seed creates only restaurant venue and users, with cashier PIN 2580", () => {
     const created = createMemoryDb();
     sqlite = created.sqlite;
     seedFactoryDatabase(created.db, "counter");
@@ -125,8 +133,8 @@ describe("factory seed", () => {
       pin_hash: string | null;
       is_main_cashier: number;
     }>;
+    expect(users.map((u) => u.role).sort()).toEqual(["admin", "cashier"]);
     expect(users.some((u) => u.role === "waiter")).toBe(false);
-    expect(users.some((u) => u.role === "admin")).toBe(true);
     const cashier = users.find((u) => u.role === "cashier");
     expect(cashier?.name).toBe("كاشير");
     expect(cashier?.is_main_cashier).toBe(1);
@@ -135,28 +143,12 @@ describe("factory seed", () => {
       true,
     );
 
-    const tableCount = sqlite.prepare("SELECT COUNT(*) AS n FROM tables").get() as {
-      n: number;
-    };
-    expect(tableCount.n).toBe(0);
-
-    const orderCount = sqlite.prepare("SELECT COUNT(*) AS n FROM orders").get() as {
-      n: number;
-    };
-    expect(orderCount.n).toBe(0);
-
-    const printers = sqlite.prepare("SELECT name, role FROM printers").all() as {
-      name: string;
-      role: string;
-    }[];
-    expect(printers).toHaveLength(3);
-    expect(printers.filter((p) => p.role === "kitchen")).toHaveLength(2);
-    expect(printers.filter((p) => p.role === "checkout")).toHaveLength(1);
-
-    const stations = sqlite
-      .prepare("SELECT venue_id FROM cashier_stations")
-      .all() as { venue_id: string }[];
-    expect(stations).toEqual([{ venue_id: "restaurant" }]);
+    expect(countRows("printers")).toBe(0);
+    expect(countRows("cashier_stations")).toBe(0);
+    expect(countRows("categories")).toBe(0);
+    expect(countRows("items")).toBe(0);
+    expect(countRows("tables")).toBe(0);
+    expect(countRows("orders")).toBe(0);
 
     const mode = sqlite
       .prepare("SELECT value FROM app_settings WHERE key = ?")
@@ -164,7 +156,7 @@ describe("factory seed", () => {
     expect(mode.value).toBe("counter");
   });
 
-  it("full factory seed has both venues, tables, and no demo waiters/orders", () => {
+  it("full factory seed creates both venues and users only", () => {
     const created = createMemoryDb();
     sqlite = created.sqlite;
     seedFactoryDatabase(created.db, "full");
@@ -174,20 +166,17 @@ describe("factory seed", () => {
     }[];
     expect(venues.map((v) => v.id)).toEqual(["cafe", "restaurant"]);
 
-    const waiterCount = sqlite
-      .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'waiter'")
-      .get() as { n: number };
-    expect(waiterCount.n).toBe(0);
+    const users = sqlite
+      .prepare("SELECT role FROM users ORDER BY role")
+      .all() as { role: string }[];
+    expect(users.map((u) => u.role)).toEqual(["admin", "cashier"]);
 
-    const tableCount = sqlite.prepare("SELECT COUNT(*) AS n FROM tables").get() as {
-      n: number;
-    };
-    expect(tableCount.n).toBeGreaterThan(0);
-
-    const orderCount = sqlite.prepare("SELECT COUNT(*) AS n FROM orders").get() as {
-      n: number;
-    };
-    expect(orderCount.n).toBe(0);
+    expect(countRows("printers")).toBe(0);
+    expect(countRows("cashier_stations")).toBe(0);
+    expect(countRows("categories")).toBe(0);
+    expect(countRows("items")).toBe(0);
+    expect(countRows("tables")).toBe(0);
+    expect(countRows("orders")).toBe(0);
 
     const mode = sqlite
       .prepare("SELECT value FROM app_settings WHERE key = ?")

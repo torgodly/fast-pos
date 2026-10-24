@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Upload } from "lucide-react";
+import { Download, FileDown, Upload } from "lucide-react";
 
 type Summary = {
   categoriesCreated: number;
@@ -54,6 +54,10 @@ export function MenuExcelBar() {
       <a href="/api/admin/menu/export" className="btn btn-outline btn-sm gap-1.5 rounded-xl">
         <Download className="size-3.5" />
         تصدير Excel
+      </a>
+      <a href="/api/admin/menu/template" className="btn btn-ghost btn-sm gap-1.5 rounded-xl">
+        <FileDown className="size-3.5" />
+        تحميل القالب
       </a>
       <input
         ref={inputRef}

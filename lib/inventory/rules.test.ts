@@ -1,25 +1,38 @@
 import { describe, expect, it } from "vitest";
 import {
+  baseToQuantity,
   computeConsumption,
   findInsufficient,
-  gramsFromQuantity,
+  formatQuantity,
   gramsToDisplay,
   insufficientWarningText,
   isLowStock,
-  kgToGrams,
   lineCost,
+  quantityToBase,
   roundMoney,
   type BomEntry,
+  type IngredientStock,
 } from "./rules";
 
+const gram = { name: "غرام", kind: "weight" as const, factorToBase: 1 };
+const kilo = { name: "كيلو", kind: "weight" as const, factorToBase: 1000 };
+const dozen = { name: "دزينة", kind: "count" as const, factorToBase: 12 };
+
 describe("inventory quantity helpers", () => {
-  it("converts kilograms to grams and rounds", () => {
-    expect(kgToGrams(2.5)).toBe(2500);
-    expect(kgToGrams(1.2345)).toBe(1235);
-    expect(gramsFromQuantity(2.5, "kg")).toBe(2500);
-    expect(gramsFromQuantity(350, "g")).toBe(350);
-    expect(gramsFromQuantity(350.6, "g")).toBe(351);
-    expect(gramsFromQuantity(Number.NaN, "kg")).toBe(0);
+  it("converts quantities to base units and rounds", () => {
+    expect(quantityToBase(2.5, 1000)).toBe(2500);
+    expect(quantityToBase(1.2345, 1000)).toBe(1235);
+    expect(quantityToBase(350, 1)).toBe(350);
+    expect(quantityToBase(350.6, 1)).toBe(351);
+    expect(quantityToBase(2, 12)).toBe(24);
+    expect(quantityToBase(Number.NaN, 1000)).toBe(0);
+    expect(quantityToBase(2, 0)).toBe(0);
+  });
+
+  it("converts base units back to a display quantity", () => {
+    expect(baseToQuantity(2500, 1000)).toBe(2.5);
+    expect(baseToQuantity(24, 12)).toBe(2);
+    expect(baseToQuantity(Number.NaN, 12)).toBe(0);
   });
 
   it("formats grams for display in g/kg", () => {
@@ -27,8 +40,15 @@ describe("inventory quantity helpers", () => {
     expect(gramsToDisplay(0)).toBe("0 غ");
     expect(gramsToDisplay(2000)).toBe("2 كغ");
     expect(gramsToDisplay(2500)).toBe("2.5 كغ");
-    expect(gramsToDisplay(1234)).toBe("1.23 كغ");
+    expect(gramsToDisplay(1234)).toBe("1.234 كغ");
     expect(gramsToDisplay(-1500)).toBe("-1.5 كغ");
+  });
+
+  it("formats quantities using the unit snapshot", () => {
+    expect(formatQuantity(2500, gram)).toBe("2.5 كغ");
+    expect(formatQuantity(2500, kilo)).toBe("2.5 كيلو");
+    expect(formatQuantity(24, dozen)).toBe("2 دزينة");
+    expect(formatQuantity(24, null)).toBe("24 غ");
   });
 
   it("rounds money and computes line costs", () => {
@@ -48,17 +68,17 @@ describe("inventory quantity helpers", () => {
 
 describe("consumption aggregation", () => {
   const bom = new Map<number, BomEntry[]>([
-    [10, [{ ingredientId: 1, gramsPerUnit: 200 }]],
+    [10, [{ ingredientId: 1, qtyBase: 200 }]],
     [
       11,
       [
-        { ingredientId: 1, gramsPerUnit: 50 },
-        { ingredientId: 2, gramsPerUnit: 30 },
+        { ingredientId: 1, qtyBase: 50 },
+        { ingredientId: 2, qtyBase: 30 },
       ],
     ],
   ]);
 
-  it("aggregates grams per ingredient across lines", () => {
+  it("aggregates base quantities per ingredient across lines", () => {
     const result = computeConsumption(bom, [
       { itemId: 10, qty: 2 },
       { itemId: 11, qty: 3 },
@@ -82,8 +102,8 @@ describe("consumption aggregation", () => {
       [
         10,
         [
-          { ingredientId: 1, gramsPerUnit: 0 },
-          { ingredientId: 2, gramsPerUnit: 100 },
+          { ingredientId: 1, qtyBase: 0 },
+          { ingredientId: 2, qtyBase: 100 },
         ],
       ],
     ]);
@@ -94,10 +114,37 @@ describe("consumption aggregation", () => {
 });
 
 describe("insufficiency warnings", () => {
-  const stock = new Map([
-    [1, { name: "لحم", stockGrams: 500 }],
-    [2, { name: "جبنة", stockGrams: 100 }],
-    [3, { name: "خبز", stockGrams: 800 }],
+  const stock = new Map<number, IngredientStock>([
+    [
+      1,
+      {
+        name: "لحم",
+        stockBase: 500,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
+    ],
+    [
+      2,
+      {
+        name: "جبنة",
+        stockBase: 100,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
+    ],
+    [
+      3,
+      {
+        name: "خبز",
+        stockBase: 800,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
+    ],
   ]);
 
   it("reports only ingredients with a deficit, largest first", () => {
@@ -110,25 +157,82 @@ describe("insufficiency warnings", () => {
       stock,
     );
     expect(warnings).toEqual([
-      { ingredientId: 1, name: "لحم", deficit: 300 },
-      { ingredientId: 2, name: "جبنة", deficit: 50 },
+      {
+        targetId: 1,
+        targetType: "ingredient",
+        name: "لحم",
+        deficitBase: 300,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
+      {
+        targetId: 2,
+        targetType: "ingredient",
+        name: "جبنة",
+        deficitBase: 50,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
     ]);
   });
 
   it("counts existing negative stock as part of the deficit", () => {
     const warnings = findInsufficient(
       new Map([[1, 200]]),
-      new Map([[1, { name: "لحم", stockGrams: -100 }]]),
+      new Map([[1, {
+        name: "لحم",
+        stockBase: -100,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      }]]),
     );
-    expect(warnings).toEqual([{ ingredientId: 1, name: "لحم", deficit: 300 }]);
+    expect(warnings).toEqual([
+      {
+        targetId: 1,
+        targetType: "ingredient",
+        name: "لحم",
+        deficitBase: 300,
+        unitName: "غرام",
+        unitKind: "weight",
+        factorToBase: 1,
+      },
+    ]);
   });
 
   it("formats warning text in Arabic", () => {
     expect(
       insufficientWarningText([
-        { ingredientId: 1, name: "لحم", deficit: 300 },
-        { ingredientId: 2, name: "جبنة", deficit: 1500 },
+        {
+          targetId: 1,
+          targetType: "ingredient",
+          name: "لحم",
+          deficitBase: 300,
+          unitName: "غرام",
+          unitKind: "weight",
+          factorToBase: 1,
+        },
+        {
+          targetId: 2,
+          targetType: "ingredient",
+          name: "جبنة",
+          deficitBase: 1500,
+          unitName: "غرام",
+          unitKind: "weight",
+          factorToBase: 1,
+        },
+        {
+          targetId: 3,
+          targetType: "item",
+          name: "كولا",
+          deficitBase: 24,
+          unitName: "حبة",
+          unitKind: "count",
+          factorToBase: 1,
+        },
       ]),
-    ).toBe("لحم (ناقص 300 غ)، جبنة (ناقص 1.5 كغ)");
+    ).toBe("لحم (ناقص 300 غ)، جبنة (ناقص 1.5 كغ)، كولا (ناقص 24 حبة)");
   });
 });
