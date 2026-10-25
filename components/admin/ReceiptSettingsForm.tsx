@@ -6,17 +6,23 @@ import { LoaderCircle, RotateCcw, Save } from "lucide-react";
 import { resetReceiptSettings, saveReceiptSettings } from "@/app/actions/admin";
 import { ActionFeedback } from "@/components/ActionFeedback";
 import { useToast } from "@/components/ToastProvider";
+import { BRAND_LIMITS, type BrandDetails } from "@/lib/brand";
 
 const DEFAULT_FOOTER = "شكراً لزيارتكم — نراكم قريباً";
 
 export function ReceiptSettingsForm({
   initialMessage,
+  initialBrand,
 }: {
   initialMessage: string;
+  initialBrand: BrandDetails;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [message, setMessage] = useState(initialMessage);
+  const [brandName, setBrandName] = useState(initialBrand.name);
+  const [brandPhone, setBrandPhone] = useState(initialBrand.phone);
+  const [brandAddress, setBrandAddress] = useState(initialBrand.address);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -24,12 +30,17 @@ export function ReceiptSettingsForm({
     event.preventDefault();
     startTransition(async () => {
       setError(null);
-      const result = await saveReceiptSettings(message);
+      const result = await saveReceiptSettings({
+        message,
+        brandName,
+        brandPhone,
+        brandAddress,
+      });
       if (result && "error" in result) {
         setError(result.error);
         return;
       }
-      showToast("success", "تم حفظ رسالة الإيصال");
+      showToast("success", "تم حفظ إعدادات الإيصال");
       router.refresh();
     });
   }
@@ -43,13 +54,60 @@ export function ReceiptSettingsForm({
         return;
       }
       setMessage(DEFAULT_FOOTER);
-      showToast("success", "تمت إعادة رسالة الإيصال للافتراضي");
+      setBrandName("");
+      setBrandPhone("");
+      setBrandAddress("");
+      showToast("success", "تمت إعادة إعدادات الإيصال للافتراضي");
       router.refresh();
     });
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <form onSubmit={submit} className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="form-control w-full">
+          <span className="label-text mb-2 font-bold">اسم العلامة التجارية</span>
+          <input
+            className="input input-bordered w-full"
+            value={brandName}
+            onChange={(event) => setBrandName(event.target.value)}
+            maxLength={BRAND_LIMITS.name}
+            placeholder="مثال: مطعم الأصيل"
+          />
+          <span className="label-text-alt mt-2 text-base-content/45">
+            يظهر أعلى الفاتورة بدل اسم الفرع. اتركه فارغاً لاستخدام اسم الفرع.
+          </span>
+        </label>
+        <label className="form-control w-full">
+          <span className="label-text mb-2 font-bold">رقم الهاتف</span>
+          <input
+            type="tel"
+            dir="ltr"
+            className="input input-bordered w-full text-left"
+            value={brandPhone}
+            onChange={(event) => setBrandPhone(event.target.value)}
+            maxLength={BRAND_LIMITS.phone}
+            placeholder="091 000 0000"
+          />
+          <span className="label-text-alt mt-2 text-base-content/45">
+            اختياري — يظهر تحت اسم العلامة.
+          </span>
+        </label>
+        <label className="form-control w-full md:col-span-2">
+          <span className="label-text mb-2 font-bold">العنوان</span>
+          <input
+            className="input input-bordered w-full"
+            value={brandAddress}
+            onChange={(event) => setBrandAddress(event.target.value)}
+            maxLength={BRAND_LIMITS.address}
+            placeholder="المدينة — الشارع"
+          />
+          <span className="label-text-alt mt-2 text-base-content/45">
+            اختياري — يظهر تحت اسم العلامة.
+          </span>
+        </label>
+      </div>
+
       <label className="form-control w-full">
         <span className="label-text mb-2 font-bold">
           رسالة أسفل فاتورة الكاشير
@@ -76,7 +134,7 @@ export function ReceiptSettingsForm({
           ) : (
             <>
               <Save className="size-4" />
-              حفظ الإعدادات
+              حفظ إعدادات الإيصال
             </>
           )}
         </button>

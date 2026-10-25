@@ -81,6 +81,12 @@ try {
   $serverDir = Join-Path $Payload "server"
   Copy-DirectoryContents $standalone $serverDir
 
+  # Loaded at runtime by Skia, not traced via require() — missing it crashes on Arabic text.
+  $icuData = Join-Path $serverDir "node_modules\@napi-rs\canvas-win32-x64-msvc\icudtl.dat"
+  if (-not (Test-Path $icuData)) {
+    Fail "Missing @napi-rs/canvas ICU data (icudtl.dat) in the standalone build; Arabic receipt printing would crash the server. Check outputFileTracingIncludes in next.config.ts."
+  }
+
   $staticSource = Join-Path $Project ".next\static"
   $staticDestination = Join-Path $serverDir ".next\static"
   Copy-DirectoryContents $staticSource $staticDestination

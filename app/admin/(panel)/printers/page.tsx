@@ -83,6 +83,7 @@ export default async function AdminPrintersPage({
           host: p.host,
           port: p.port,
           connectionType: p.connectionType,
+          autoPrint: p.autoPrint,
           active: p.active,
         }))}
       />

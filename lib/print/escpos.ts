@@ -14,6 +14,7 @@ import {
   useArabicRaster,
 } from "./encoding";
 import { appendLogo } from "./logo";
+import { receiptBrandBlock } from "./brand";
 import { textToEscPosRaster } from "./text-raster";
 
 const ESC = 0x1b;
@@ -65,8 +66,14 @@ function doubleSize(on: boolean) {
   return cmd(GS, 0x21, on ? 0x11 : 0x00);
 }
 
+/** Blank feed before cutting: the cutter sits ~30mm past the print head. */
+const CUT_FEED_LINES = 8;
+
 function cut() {
-  return concat(textLine(), textLine(), cmd(GS, 0x56, 0x00));
+  return concat(
+    ...Array.from({ length: CUT_FEED_LINES }, () => textLine()),
+    cmd(GS, 0x56, 0x00),
+  );
 }
 
 function separator() {
@@ -154,10 +161,21 @@ function printWrappedName(parts: Uint8Array[], name: string, bold = true) {
   }
 }
 
-function headerBlock(parts: Uint8Array[], title: string, subtitle?: string) {
+function headerBlock(
+  parts: Uint8Array[],
+  title: string,
+  subtitle?: string,
+  contacts: string[] = [],
+) {
   printLine(parts, title, { bold: true, center: true, fontSize: 34 });
   if (subtitle) {
     printLine(parts, subtitle, { center: true, fontSize: 28 });
+  }
+  if (contacts.length > 0) {
+    parts.push(align("center"));
+    for (const contact of contacts) {
+      printLine(parts, contact, { center: true, fontSize: 26 });
+    }
   }
   parts.push(align("right"));
 }
@@ -381,9 +399,10 @@ export function buildCheckoutEscPos(
         ? "نقدي"
         : "بطاقة";
   const footer = data.footerMessage?.trim() || "شكراً لزيارتكم";
+  const brand = receiptBrandBlock(data);
   const parts: Uint8Array[] = [init()];
   appendLogo(parts, logo);
-  headerBlock(parts, data.venueName, "إيصال الدفع");
+  headerBlock(parts, brand.title, brand.subtitle, brand.contacts);
   parts.push(separator());
   fieldLine(parts, "فاتورة", data.orderId > 0 ? `#${data.orderId}` : "—");
   fieldLine(parts, "الطاولة", data.tableName);

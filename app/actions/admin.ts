@@ -33,12 +33,19 @@ import {
 import { quantityToBase, type UnitKind } from "@/lib/inventory/rules";
 import { buildTestPrintBytes } from "@/lib/print/test-bytes";
 import {
+  clearBrandDetails,
   clearReceiptFooterMessage,
   resetZWindow,
+  setBrandDetails,
   setReceiptFooterMessage,
   setZWindow,
 } from "@/lib/settings";
+import { validateBrandDetails } from "@/lib/brand";
 import { printToPrinter } from "@/lib/print/network";
+import {
+  resolvePrinterAutoPrint,
+  validateAutoPrintHost,
+} from "@/lib/print/checkout-print-mode";
 import { parseSystemPrinterRef } from "@/lib/print/system-printer-ref";
 import { listSystemPrinters } from "@/lib/print/system";
 import { recordSessionAudit } from "@/lib/audit";
@@ -906,6 +913,9 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     ) as PrinterConnectionType;
     const host = String(formData.get("host") ?? "").trim();
     const port = Number(formData.get("port") ?? 9100);
+    const requestedAutoPrint =
+      formData.get("autoPrint") === "on" ||
+      formData.get("autoPrint") === "true";
 
     if (!isPrinterRole(role)) {
       return { error: "نوع الطابعة غير صالح" };
@@ -944,6 +954,20 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
     const resolvedHost =
       resolvedConnection === "local" ? host.trim() || "default" : host;
 
+    const autoPrint = resolvePrinterAutoPrint(
+      role,
+      resolvedConnection,
+      requestedAutoPrint,
+    );
+    const autoPrintError = validateAutoPrintHost(
+      resolvedConnection,
+      autoPrint,
+      resolvedHost,
+    );
+    if (autoPrintError) {
+      return { error: autoPrintError };
+    }
+
     if (resolvedConnection === "network") {
       if (!Number.isFinite(port) || port < 1) {
         return { error: "منفذ الطابعة غير صالح" };
@@ -957,6 +981,7 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
       host: resolvedHost,
       port: resolvedConnection === "local" ? 0 : port,
       connectionType: resolvedConnection,
+      autoPrint,
     };
 
     let printerId = id && Number.isFinite(id) ? id : null;
@@ -1059,8 +1084,9 @@ export async function testPrinter(
 
   if (printer.connectionType === "local") {
     return {
-      error:
-        "طابعة Chrome — تُطبع من جهاز الكاشير عند الدفع (نافذة طباعة المتصفح)",
+      error: printer.autoPrint
+        ? "الطباعة التلقائية — تُختبر عند إتمام عملية الدفع"
+        : "طابعة Chrome — تُطبع من جهاز الكاشير عند الدفع (نافذة طباعة المتصفح)",
     };
   }
 
@@ -1147,11 +1173,23 @@ export async function factoryResetDatabase(
   return { ok: true as const };
 }
 
-export async function saveReceiptSettings(
-  message: string,
-): Promise<ActionResult> {
+export async function saveReceiptSettings(input: {
+  message: string;
+  brandName: string;
+  brandPhone: string;
+  brandAddress: string;
+}): Promise<ActionResult> {
   await assertAdmin();
-  setReceiptFooterMessage(message);
+  const brand = {
+    name: input.brandName,
+    phone: input.brandPhone,
+    address: input.brandAddress,
+  };
+  const brandError = validateBrandDetails(brand);
+  if (brandError) return { error: brandError };
+
+  setReceiptFooterMessage(input.message);
+  setBrandDetails(brand);
   revalidatePath("/admin/settings");
   return { ok: true };
 }
@@ -1159,6 +1197,7 @@ export async function saveReceiptSettings(
 export async function resetReceiptSettings(): Promise<ActionResult> {
   await assertAdmin();
   clearReceiptFooterMessage();
+  clearBrandDetails();
   revalidatePath("/admin/settings");
   return { ok: true };
 }

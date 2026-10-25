@@ -23,15 +23,18 @@ import {
   getVenueName,
   isVenueId,
 } from "@/lib/venues";
+import { nowSqlTripoli } from "@/lib/time/tripoli";
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
 import { buildCheckoutReceiptHtml } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
 import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
+import { resolveCheckoutPrintMode } from "@/lib/print/checkout-print-mode";
+import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
 import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-printer";
 import { availableAtVenue } from "@/lib/menu/scope";
-import { getReceiptFooterMessage } from "@/lib/settings";
+import { getBrandDetails, getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
 import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import { consumeForPaidOrder } from "@/lib/inventory/service";
@@ -944,6 +947,26 @@ async function buildCheckoutReceiptForOrder(
   };
 }
 
+function buildBrowserCheckoutPrint(receipt: CheckoutReceiptData) {
+  const footerMessage = getReceiptFooterMessage();
+  const brand = getBrandDetails();
+  const logoDataUrl = getReceiptLogoPrintDataUrl();
+  return {
+    printOk: false as const,
+    browserPrint: true as const,
+    receiptHtml: buildCheckoutReceiptHtml(
+      {
+        ...receipt,
+        footerMessage,
+        brandName: brand.name,
+        brandPhone: brand.phone,
+        brandAddress: brand.address,
+      },
+      logoDataUrl,
+    ),
+  };
+}
+
 async function printCheckoutReceipt(
   receipt: CheckoutReceiptData,
   printer: typeof printers.$inferSelect,
@@ -959,18 +982,21 @@ async function printCheckoutReceipt(
       receiptHtml: string;
     }
 > {
+  const mode = resolveCheckoutPrintMode(printer);
+
   try {
-    if (printer.connectionType === "local") {
-      const footerMessage = getReceiptFooterMessage();
-      const logoDataUrl = getReceiptLogoPrintDataUrl();
-      return {
-        printOk: false,
-        browserPrint: true,
-        receiptHtml: buildCheckoutReceiptHtml(
-          { ...receipt, footerMessage },
-          logoDataUrl,
-        ),
-      };
+    if (mode === "browser") {
+      return buildBrowserCheckoutPrint(receipt);
+    }
+
+    if (mode === "windows") {
+      try {
+        const data = await buildCheckoutPrintBytes(receipt);
+        await printRawToWindowsPrinter(printer.host, data);
+        return { printOk: true };
+      } catch {
+        return buildBrowserCheckoutPrint(receipt);
+      }
     }
 
     const data = await buildCheckoutPrintBytes(receipt);
@@ -1035,7 +1061,7 @@ export async function payOrder(
 
   const total = recalcOrderTotal(orderId);
   const isQuickSale = order.tableId === null;
-  const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const paidAt = nowSqlTripoli();
 
   db.update(orders)
     .set({
@@ -1303,7 +1329,7 @@ export async function payQuickSale(
     }
   }
 
-  const paidAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const paidAt = nowSqlTripoli();
   db.update(orders)
     .set({
       status: "paid",
@@ -1596,7 +1622,7 @@ export async function printOpenOrderReceipt(
       customerPhone: customer?.phone ?? null,
       cashierName: session.role === "cashier" ? session.name : "—",
       paymentMethod: "preview",
-      paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
+      paidAt: formatDateTime(nowSqlTripoli()),
       total,
       lines: lines.map((line) => ({
         name: line.itemName,
@@ -1664,7 +1690,7 @@ export async function printQuickSalePreview(
       customerPhone: customer?.phone ?? null,
       cashierName: session.name,
       paymentMethod: "preview",
-      paidAt: formatDateTime(new Date().toISOString().slice(0, 19).replace("T", " ")),
+      paidAt: formatDateTime(nowSqlTripoli()),
       total,
       lines: validLines.map((line) => ({
         name: line.item.name,

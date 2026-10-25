@@ -6,6 +6,7 @@ import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
+import { migratePrinterAutoPrint } from "./migrate-printer-auto-print";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
@@ -75,6 +76,7 @@ function createDb() {
   const db = drizzle(sqlite, { schema });
   ensureSchema(sqlite);
   migrateUnits(sqlite);
+  migratePrinterAutoPrint(sqlite);
   migratePrinterVenueNullable(sqlite);
   migrateDeduplicateKitchenPrinters(sqlite);
   migrateNullableMenuVenue(sqlite);
@@ -296,10 +298,11 @@ function migratePrinterVenueNullable(sqlite: Database.Database) {
       host TEXT NOT NULL,
       port INTEGER NOT NULL DEFAULT 9100,
       connection_type TEXT NOT NULL DEFAULT 'network',
+      auto_print INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
     );
     INSERT INTO printers__venue_null (
-      id, venue_id, name, role, host, port, connection_type, active
+      id, venue_id, name, role, host, port, connection_type, auto_print, active
     )
     SELECT
       id,
@@ -309,6 +312,7 @@ function migratePrinterVenueNullable(sqlite: Database.Database) {
       host,
       port,
       COALESCE(connection_type, 'network'),
+      COALESCE(auto_print, 0),
       active
     FROM printers;
     DROP TABLE printers;
@@ -424,6 +428,7 @@ function ensureSchema(sqlite: Database.Database) {
       role TEXT NOT NULL,
       host TEXT NOT NULL,
       port INTEGER NOT NULL DEFAULT 9100,
+      auto_print INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
     );
 

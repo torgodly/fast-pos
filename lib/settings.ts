@@ -1,4 +1,5 @@
 import type { VenueId } from "@/lib/types";
+import type { BrandDetails } from "@/lib/brand";
 import { tripoliMinutesOfDay, tripoliParts } from "@/lib/time/tripoli";
 import { getSqlite } from "./db/index";
 
@@ -9,6 +10,10 @@ const DEFAULT_Z_END = "01:00";
 export const SETTING_RECEIPT_FOOTER = "receipt_footer_message";
 export const SETTING_Z_WINDOW_START = "z_window_start";
 export const SETTING_Z_WINDOW_END = "z_window_end";
+
+const BRAND_NAME_KEY = "brand_name";
+const BRAND_PHONE_KEY = "brand_phone";
+const BRAND_ADDRESS_KEY = "brand_address";
 
 function zStartKey(venueId: VenueId) {
   return `z_window_start_${venueId}`;
@@ -50,6 +55,37 @@ export function clearReceiptFooterMessage() {
   sqlite
     .prepare("DELETE FROM app_settings WHERE key = ?")
     .run(SETTING_RECEIPT_FOOTER);
+}
+
+export function getBrandDetails(): BrandDetails {
+  return {
+    name: getSetting(BRAND_NAME_KEY) ?? "",
+    phone: getSetting(BRAND_PHONE_KEY) ?? "",
+    address: getSetting(BRAND_ADDRESS_KEY) ?? "",
+  };
+}
+
+export function setBrandDetails(details: BrandDetails) {
+  setOrClearSetting(BRAND_NAME_KEY, details.name);
+  setOrClearSetting(BRAND_PHONE_KEY, details.phone);
+  setOrClearSetting(BRAND_ADDRESS_KEY, details.address);
+}
+
+export function clearBrandDetails() {
+  const sqlite = getSqlite();
+  sqlite
+    .prepare("DELETE FROM app_settings WHERE key IN (?, ?, ?)")
+    .run(BRAND_NAME_KEY, BRAND_PHONE_KEY, BRAND_ADDRESS_KEY);
+}
+
+function setOrClearSetting(key: string, value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    const sqlite = getSqlite();
+    sqlite.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
+    return;
+  }
+  setSetting(key, trimmed);
 }
 
 /** HH:mm — per-venue Z window start (default 23:00). Falls back to legacy global key. */

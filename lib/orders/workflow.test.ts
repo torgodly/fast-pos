@@ -51,6 +51,7 @@ function createMemoryDb() {
       host TEXT NOT NULL,
       port INTEGER NOT NULL DEFAULT 9100,
       connection_type TEXT NOT NULL DEFAULT 'network',
+      auto_print INTEGER NOT NULL DEFAULT 0,
       active INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE items (

@@ -61,6 +61,7 @@ Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environmen
 [Run]
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""Fast POS"" dir=in action=allow protocol=TCP localport=3000"; Flags: runhidden waituntilterminated; StatusMsg: "إضافة قاعدة جدار الحماية..."
 Filename: "{app}\bin\fast-pos-install-service.cmd"; Flags: runhidden waituntilterminated; StatusMsg: "تثبيت خدمة Fast POS..."
+Filename: "{app}\bin\fast-pos-open.cmd"; Description: "تشغيل Fast POS الآن | Launch Fast POS now"; Flags: postinstall nowait skipifsilent; StatusMsg: "فتح Fast POS..."
 Filename: "notepad.exe"; Parameters: """{app}\README-FIRST.txt"""; Description: "عرض بيانات الدخول وتعليمات التشغيل"; Flags: postinstall nowait skipifsilent unchecked
 
 [UninstallRun]

@@ -6,6 +6,7 @@ import { SettingsDangerZone } from "@/components/admin/SettingsDangerZone";
 import { ZWindowSettingsForm } from "@/components/admin/ZWindowSettingsForm";
 import { requireAdmin } from "@/app/actions/auth";
 import {
+  getBrandDetails,
   getReceiptFooterMessage,
   getZWindowEnd,
   getZWindowStart,
@@ -17,6 +18,7 @@ export default async function AdminSettingsPage() {
   await requireAdmin();
   const mode = getDeploymentMode();
   const footerMessage = getReceiptFooterMessage();
+  const brand = getBrandDetails();
 
   return (
     <div className="space-y-7">
@@ -113,8 +115,16 @@ export default async function AdminSettingsPage() {
 
       <section className="premium-card card">
         <div className="card-body gap-5 p-5 sm:p-6">
-          <h3 className="font-black">رسالة الفاتورة</h3>
-          <ReceiptSettingsForm initialMessage={footerMessage} />
+          <div>
+            <h3 className="font-black">بيانات العلامة ورسالة الفاتورة</h3>
+            <p className="text-xs text-base-content/45">
+              الاسم والهاتف والعنوان يظهرون أعلى فاتورة الكاشير، والرسالة أسفلها
+            </p>
+          </div>
+          <ReceiptSettingsForm
+            initialMessage={footerMessage}
+            initialBrand={brand}
+          />
         </div>
       </section>
 

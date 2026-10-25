@@ -84,6 +84,9 @@ export const printers = sqliteTable("printers", {
   connectionType: text("connection_type", { enum: ["network", "local"] })
     .notNull()
     .default("network"),
+  autoPrint: integer("auto_print", { mode: "boolean" })
+    .notNull()
+    .default(false),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 

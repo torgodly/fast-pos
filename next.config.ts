@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     "/*": [
       "node_modules/better-sqlite3/**/*",
       "node_modules/@napi-rs/canvas/**/*",
+      "node_modules/@napi-rs/canvas-win32-x64-msvc/**/*",
     ],
   },
   outputFileTracingExcludes: {

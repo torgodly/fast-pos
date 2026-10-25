@@ -1,3 +1,5 @@
+import { receiptBrandBlock } from "./brand";
+
 export type ReceiptLine = {
   name: string;
   qty: number;
@@ -71,6 +73,9 @@ export type CheckoutReceiptData = {
   waiterName: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  brandName?: string | null;
+  brandPhone?: string | null;
+  brandAddress?: string | null;
   cashierName: string;
   paymentMethod: "cash" | "card" | "preview";
   paidAt: string;
@@ -166,6 +171,14 @@ function shell(title: string, body: string) {
       margin: 1.5mm 0 0;
       font-size: 15px;
       font-weight: 900;
+      text-align: right;
+      color: #000;
+    }
+
+    .brand-contact {
+      margin: 0.8mm 0 0;
+      font-size: 13px;
+      font-weight: 700;
       text-align: right;
       color: #000;
     }
@@ -401,6 +414,10 @@ export function buildCheckoutReceiptHtml(
   const logoHtml = logoDataUrl
     ? `<img class="logo" src="${logoDataUrl}" alt="الشعار" />`
     : "";
+  const brand = receiptBrandBlock(data);
+  const contactHtml = brand.contacts
+    .map((contact) => `<p class="brand-contact">${escapeHtml(contact)}</p>`)
+    .join("");
   const lines = data.lines
     .map(
       (line) => `
@@ -420,8 +437,9 @@ export function buildCheckoutReceiptHtml(
     `
     <div class="center">
       ${logoHtml}
-      <p class="brand">${escapeHtml(data.venueName)}</p>
-      <p class="subtitle">إيصال الدفع</p>
+      <p class="brand">${escapeHtml(brand.title)}</p>
+      <p class="subtitle">${escapeHtml(brand.subtitle)}</p>
+      ${contactHtml}
       <p class="cashier-banner">الكاشير: ${escapeHtml(data.cashierName)}</p>
     </div>
     <hr class="divider" />

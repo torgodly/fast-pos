@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Pencil, Plus, Printer } from "lucide-react";
 import {
   deletePrinter,
+  getSystemPrinters,
   setPrinterActive,
   upsertPrinter,
 } from "@/app/actions/admin";
@@ -18,8 +19,12 @@ import {
   supportsCheckout,
   supportsKitchen,
 } from "@/lib/printers";
+import {
+  isExplicitWindowsPrinterName,
+  validateAutoPrintHost,
+} from "@/lib/print/checkout-print-mode";
 import { getVenueName, VENUES } from "@/lib/venues";
-import type { VenueId } from "@/lib/types";
+import type { SystemPrinter, VenueId } from "@/lib/types";
 
 type PrinterRow = {
   id: number;
@@ -29,6 +34,7 @@ type PrinterRow = {
   host: string;
   port: number;
   connectionType: string;
+  autoPrint: boolean;
   active: boolean;
 };
 
@@ -53,6 +59,14 @@ export function PrintersAdmin({
   );
   const [hostDraft, setHostDraft] = useState("");
   const [portDraft, setPortDraft] = useState("9100");
+  const [autoPrintDraft, setAutoPrintDraft] = useState(false);
+  const [systemPrinters, setSystemPrinters] = useState<SystemPrinter[]>([]);
+  const [systemPrintersStatus, setSystemPrintersStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [systemPrintersError, setSystemPrintersError] = useState<string | null>(
+    null,
+  );
 
   const [printerModal, setPrinterModal] = useState<
     | { mode: "create" }
@@ -68,6 +82,24 @@ export function PrintersAdmin({
     (p) => p.venueId === venueId,
   );
 
+  async function loadSystemPrinters() {
+    setSystemPrintersStatus("loading");
+    setSystemPrintersError(null);
+    try {
+      const result = await getSystemPrinters();
+      if ("error" in result) {
+        setSystemPrintersStatus("error");
+        setSystemPrintersError(result.error);
+        return;
+      }
+      setSystemPrinters(result.printers);
+      setSystemPrintersStatus("ready");
+    } catch {
+      setSystemPrintersStatus("error");
+      setSystemPrintersError("تعذر قراءة طابعات Windows المثبتة");
+    }
+  }
+
   function openPrinterModal(
     modal: { mode: "create" } | { mode: "edit"; printer: PrinterRow },
   ) {
@@ -81,8 +113,10 @@ export function PrintersAdmin({
     setConnectionDraft(isLocal ? "local" : "network");
     setHostDraft(isLocal ? localPrinterName : (printer?.host ?? ""));
     setPortDraft(String(printer?.port || 9100));
+    setAutoPrintDraft(printer?.autoPrint ?? false);
     setError(null);
     setPrinterModal(modal);
+    void loadSystemPrinters();
   }
 
   function closeModals() {
@@ -93,10 +127,13 @@ export function PrintersAdmin({
 
   function changeRole(value: string) {
     setRoleDraft(value);
-    if (supportsKitchen(value) && connectionDraft === "local") {
-      setConnectionDraft("network");
-      setHostDraft("");
-      setPortDraft("9100");
+    if (supportsKitchen(value)) {
+      setAutoPrintDraft(false);
+      if (connectionDraft === "local") {
+        setConnectionDraft("network");
+        setHostDraft("");
+        setPortDraft("9100");
+      }
     }
   }
 
@@ -107,6 +144,8 @@ export function PrintersAdmin({
       setPortDraft("0");
       return;
     }
+    setAutoPrintDraft(false);
+    setHostDraft("");
     setPortDraft(portDraft === "0" ? "9100" : portDraft || "9100");
   }
 
@@ -131,6 +170,13 @@ export function PrintersAdmin({
     printerModal?.mode === "edit" ? printerModal.printer : null;
   const showVenue = needsCashierVenue(roleDraft);
   const supportsKitchenRole = supportsKitchen(roleDraft);
+  const autoPrintError = validateAutoPrintHost(
+    "local",
+    autoPrintDraft,
+    hostDraft,
+  );
+  const localAutoPrintReady = (printer: PrinterRow) =>
+    printer.autoPrint && isExplicitWindowsPrinterName(printer.host);
 
   return (
     <>
@@ -197,8 +243,20 @@ export function PrintersAdmin({
                     <td>{printerRoleLabel(printer.role)}</td>
                     <td>
                       {printer.connectionType === "local" ? (
-                        <span className="badge badge-info badge-soft badge-sm">
-                          Chrome
+                        <span
+                          className={`badge badge-sm ${
+                            printer.autoPrint
+                              ? localAutoPrintReady(printer)
+                                ? "badge-success badge-soft"
+                                : "badge-warning badge-soft"
+                              : "badge-info badge-soft"
+                          }`}
+                        >
+                          {printer.autoPrint
+                            ? localAutoPrintReady(printer)
+                              ? "تلقائي"
+                              : "تحتاج تحديد"
+                            : "Chrome"}
                         </span>
                       ) : (
                         <span className="badge badge-ghost badge-sm">شبكة</span>
@@ -206,9 +264,13 @@ export function PrintersAdmin({
                     </td>
                     <td className="font-mono text-xs sm:text-sm">
                       {printer.connectionType === "local"
-                        ? printer.host && printer.host !== "default"
-                          ? `Chrome — ${printer.host}`
-                          : "Chrome — جهاز الكاشير"
+                        ? printer.autoPrint
+                          ? isExplicitWindowsPrinterName(printer.host)
+                            ? `Windows — ${printer.host}`
+                            : "اختر طابعة Windows"
+                          : printer.host && printer.host !== "default"
+                            ? `Chrome — ${printer.host}`
+                            : "Chrome — جهاز الكاشير"
                         : `${printer.host}:${printer.port}`}
                     </td>
                     <td>
@@ -226,7 +288,13 @@ export function PrintersAdmin({
                       {printer.active && printer.connectionType === "network" ? (
                         <TestPrintButton printerId={printer.id} />
                       ) : printer.connectionType === "local" ? (
-                        <span className="text-xs text-base-content/45">Chrome</span>
+                        <span className="text-xs text-base-content/45">
+                          {printer.autoPrint
+                            ? localAutoPrintReady(printer)
+                              ? "تلقائي"
+                              : "تحتاج تحديد"
+                            : "Chrome"}
+                        </span>
                       ) : (
                         "-"
                       )}
@@ -400,30 +468,98 @@ export function PrintersAdmin({
             <>
               <label className="form-control w-full">
                 <span className="label-text mb-2 font-bold">
-                  اسم الطابعة في Windows (اختياري)
+                  طابعة Windows على جهاز Fast POS
                 </span>
-                <input
-                  name="host"
-                  value={hostDraft}
-                  onChange={(event) => setHostDraft(event.target.value)}
-                  placeholder="اتركه فارغاً لاستخدام الطابعة الافتراضية"
-                  className="input input-bordered w-full"
-                />
+                {systemPrintersStatus === "error" ? (
+                  <input
+                    name="host"
+                    value={hostDraft}
+                    onChange={(event) => setHostDraft(event.target.value)}
+                    placeholder="أدخل اسم الطابعة كما هو في Windows"
+                    className="input input-bordered w-full"
+                  />
+                ) : (
+                  <select
+                    name="host"
+                    className="select select-bordered w-full"
+                    value={hostDraft}
+                    onChange={(event) => setHostDraft(event.target.value)}
+                    disabled={systemPrintersStatus === "loading"}
+                  >
+                    <option value="">
+                      {systemPrintersStatus === "loading"
+                        ? "جارٍ قراءة طابعات Windows..."
+                        : "بدون تحديد — تُستخدم نافذة Chrome"}
+                    </option>
+                    {hostDraft &&
+                    !systemPrinters.some((p) => p.name === hostDraft) ? (
+                      <option value={hostDraft}>
+                        {hostDraft} — غير مثبتة حالياً
+                      </option>
+                    ) : null}
+                    {systemPrinters.map((printer) => (
+                      <option key={printer.name} value={printer.name}>
+                        {printer.name}
+                        {printer.isDefault ? " — الافتراضية في Windows" : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <span className="label-text-alt mt-2 text-base-content/45">
-                  يظهر للكاشير لتسهيل اختيار الطابعة في نافذة Chrome
+                  {autoPrintDraft
+                    ? "اختر الطابعة المثبتة بالاسم نفسه. لا تُستخدم الطابعة الافتراضية لأن الخدمة تعمل بحساب النظام."
+                    : "اسم اختياري يساعد الكاشير على تمييز الطابعة في نافذة Chrome."}
                 </span>
+                {systemPrintersStatus === "error" ? (
+                  <span className="label-text-alt mt-1 text-warning">
+                    {systemPrintersError ?? "تعذر قراءة طابعات Windows"} —
+                    أدخل الاسم يدوياً.
+                  </span>
+                ) : null}
+                {autoPrintError ? (
+                  <span className="label-text-alt mt-1 text-warning">
+                    {autoPrintError}
+                  </span>
+                ) : null}
               </label>
               <input type="hidden" name="port" value="0" />
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 bg-base-200/40 px-3 py-2.5">
+                <input
+                  type="checkbox"
+                  name="autoPrint"
+                  className="checkbox checkbox-primary checkbox-sm mt-0.5"
+                  checked={autoPrintDraft}
+                  onChange={(event) =>
+                    setAutoPrintDraft(event.target.checked)
+                  }
+                />
+                <span>
+                  <span className="block text-sm font-bold">
+                    طباعة تلقائية بدون نافذة Chrome
+                  </span>
+                  <span className="mt-1 block text-xs text-base-content/50">
+                    ترسل الفاتورة مباشرة إلى طابعة Windows على جهاز Fast POS
+                    دون فتح نافذة الطباعة.
+                  </span>
+                </span>
+              </label>
               <div className="rounded-xl border border-base-300 bg-base-200/50 px-3 py-2.5">
-                <p className="text-sm font-bold">طباعة Chrome</p>
+                <p className="text-sm font-bold">
+                  {autoPrintDraft ? "طباعة تلقائية" : "طباعة Chrome"}
+                </p>
                 <p className="mt-1 text-sm text-base-content/60">
-                  {hostDraft
-                    ? `تُفتح نافذة الطباعة على جهاز الكاشير — اختر «${hostDraft}».`
-                    : "لم تُحدد طابعة Windows — ستُستخدم الطابعة الافتراضية في نافذة Chrome."}
+                  {autoPrintDraft
+                    ? hostDraft
+                      ? `تُرسل الفاتورة مباشرة إلى «${hostDraft}» على جهاز Fast POS.`
+                      : "اختر الطابعة أولاً — لن تُطبع الفاتورة تلقائياً قبل تحديدها."
+                    : hostDraft
+                      ? `تُفتح نافذة الطباعة على جهاز الكاشير — اختر «${hostDraft}».`
+                      : "لم تُحدد طابعة Windows — ستُستخدم الطابعة الافتراضية في نافذة Chrome."}
                 </p>
                 <p className="mt-1 text-xs text-base-content/45">
-                  تأكد أن الطابعة مثبتة على جهاز الكاشير، أو اجعلها الافتراضية
-                  في Windows.
+                  {autoPrintDraft
+                    ? "يجب أن تكون الطابعة مثبتة على جهاز Fast POS. عند تعذر الطباعة التلقائية تُفتح نافذة Chrome كخطة بديلة."
+                    : "تأكد أن الطابعة مثبتة على جهاز الكاشير، أو اجعلها الافتراضية في Windows."}
                 </p>
               </div>
             </>
@@ -438,7 +574,11 @@ export function PrintersAdmin({
             >
               إلغاء
             </button>
-            <button type="submit" className="btn btn-primary" disabled={pending}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={pending || Boolean(autoPrintError)}
+            >
               {editingPrinter ? "حفظ التعديلات" : "إضافة"}
             </button>
           </div>
