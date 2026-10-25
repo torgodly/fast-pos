@@ -17,6 +17,7 @@ import { ReprintReceiptButton } from "@/components/ReprintReceiptButton";
 import { db } from "@/lib/db";
 import { orderItems, orders, tables, users } from "@/lib/db/schema";
 import { orderHasKitchenPending } from "@/lib/orders/rules";
+import { getOpenShift } from "@/lib/shifts/core";
 import { formatDateTime, formatMoney, isVenueId } from "@/lib/venues";
 
 function localYmd(date: Date) {
@@ -141,10 +142,16 @@ export default async function CashierSalesPage({
       href: `/cashier/${venue}/sales?day=week`,
     },
   ];
+  const shiftOpen = !!getOpenShift(venue);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير"
+        showExpense={shiftOpen}
+      />
       <main className="page-shell flex-1 space-y-6 p-4 sm:p-6 lg:p-8">
         <div className="premium-card flex flex-col gap-4 rounded-3xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex items-center gap-3">

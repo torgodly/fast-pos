@@ -23,6 +23,7 @@ import {
 } from "@/lib/db/schema";
 import { formatMoney, isVenueId } from "@/lib/venues";
 import { availableAtVenue } from "@/lib/menu/scope";
+import { getOpenShift } from "@/lib/shifts/core";
 
 export default async function CashierOrderPage({
   params,
@@ -34,6 +35,7 @@ export default async function CashierOrderPage({
   const session = await requireCashier(venue);
   const me = db.select().from(users).where(eq(users.id, session.userId)).get();
   const isMainCashier = !!me?.isMainCashier;
+  const shiftOpen = !!getOpenShift(venue);
   const orderId = Number(id);
 
   const order = db
@@ -105,7 +107,12 @@ export default async function CashierOrderPage({
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير"
+        showExpense={shiftOpen}
+      />
       <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
         <div className="flex h-10 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2.5">
           <p className="truncate text-sm font-black">
@@ -172,6 +179,7 @@ export default async function CashierOrderPage({
                 key="pay"
                 orderId={orderId}
                 totalLabel={formatMoney(order.total)}
+                shiftOpen={shiftOpen}
               />
             </div>
           }

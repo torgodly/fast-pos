@@ -8,6 +8,7 @@ import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { categories, items } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
+import { getOpenShift } from "@/lib/shifts/core";
 import { isVenueId } from "@/lib/venues";
 
 export default async function CashierItemsPage({
@@ -36,10 +37,16 @@ export default async function CashierItemsPage({
     .from(items)
     .where(availableAtVenue(items.venueId, venue))
     .all();
+  const shiftOpen = !!getOpenShift(venue);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير رئيسي" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير رئيسي"
+        showExpense={shiftOpen}
+      />
       <main className="page-shell flex flex-1 flex-col gap-3 p-2 sm:p-3 lg:p-4">
         <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">

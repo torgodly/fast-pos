@@ -7,19 +7,41 @@ import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
 import { migratePrinterAutoPrint } from "./migrate-printer-auto-print";
+import { migrateShiftCash } from "./migrate-shift-cash";
+import { migrateShiftExpenses } from "./migrate-shift-expenses";
 import { seedIfNeeded } from "./seed";
 
 const dataDir = path.join(process.cwd(), "data");
 const dbPath = path.join(dataDir, "pos.db");
 const seedLockPath = path.join(dataDir, ".seed.lock");
 
-let sqliteRef: Database.Database | null = null;
+const globalForDb = globalThis as unknown as {
+  __posSqlite?: Database.Database;
+  __posDb?: ReturnType<typeof createDb>;
+};
 
 export function getSqlite(): Database.Database {
-  if (!sqliteRef) {
-    createDb();
+  if (!globalForDb.__posSqlite) {
+    globalForDb.__posDb = createDb();
   }
-  return sqliteRef!;
+  return globalForDb.__posSqlite!;
+}
+
+function getDbInstance() {
+  if (!globalForDb.__posDb || !globalForDb.__posSqlite) {
+    globalForDb.__posDb = createDb();
+  }
+  return globalForDb.__posDb;
+}
+
+/** Used only by the restore flow; the caller must reopen before serving requests. */
+export function closeDatabase() {
+  const sqlite = globalForDb.__posSqlite;
+  globalForDb.__posSqlite = undefined;
+  globalForDb.__posDb = undefined;
+  if (sqlite?.open) {
+    sqlite.close();
+  }
 }
 
 function sleepMs(ms: number) {
@@ -69,20 +91,33 @@ function createDb() {
   }
 
   const sqlite = new Database(dbPath);
-  sqliteRef = sqlite;
-  sqlite.pragma("journal_mode = WAL");
-  sqlite.pragma("foreign_keys = ON");
+  globalForDb.__posSqlite = sqlite;
 
-  const db = drizzle(sqlite, { schema });
-  ensureSchema(sqlite);
-  migrateUnits(sqlite);
-  migratePrinterAutoPrint(sqlite);
-  migratePrinterVenueNullable(sqlite);
-  migrateDeduplicateKitchenPrinters(sqlite);
-  migrateNullableMenuVenue(sqlite);
-  migrateSharedStaff(sqlite);
-  runSeedSafely(db);
-  return db;
+  try {
+    sqlite.pragma("journal_mode = WAL");
+    sqlite.pragma("foreign_keys = ON");
+
+    const db = drizzle(sqlite, { schema });
+    ensureSchema(sqlite);
+    migrateUnits(sqlite);
+    migratePrinterAutoPrint(sqlite);
+    migrateShiftCash(sqlite);
+    migrateShiftExpenses(sqlite);
+    migratePrinterVenueNullable(sqlite);
+    migrateDeduplicateKitchenPrinters(sqlite);
+    migrateNullableMenuVenue(sqlite);
+    migrateSharedStaff(sqlite);
+    runSeedSafely(db);
+    return db;
+  } catch (error) {
+    globalForDb.__posSqlite = undefined;
+    try {
+      sqlite.close();
+    } catch {
+      // ignore close failures while unwinding a failed open
+    }
+    throw error;
+  }
 }
 
 function tableColumns(sqlite: Database.Database, table: string) {
@@ -469,12 +504,30 @@ function ensureSchema(sqlite: Database.Database) {
       status TEXT NOT NULL DEFAULT 'open',
       opened_by INTEGER REFERENCES users(id),
       opened_at TEXT NOT NULL DEFAULT (datetime('now')),
+      opening_float REAL NOT NULL DEFAULT 0,
       closed_by INTEGER REFERENCES users(id),
       closed_at TEXT,
+      expected_cash REAL,
+      counted_cash REAL,
+      difference REAL,
       x_printed_at TEXT
     );
     CREATE UNIQUE INDEX IF NOT EXISTS shifts_venue_date_number_idx
       ON shifts(venue_id, work_date, shift_number);
+    CREATE UNIQUE INDEX IF NOT EXISTS shifts_one_open_per_venue_idx
+      ON shifts(venue_id) WHERE status = 'open';
+
+    CREATE TABLE IF NOT EXISTS shift_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      shift_id INTEGER NOT NULL REFERENCES shifts(id),
+      amount REAL NOT NULL,
+      reason TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id),
+      created_by_name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS shift_expenses_shift_idx
+      ON shift_expenses(shift_id);
 
     CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -827,11 +880,20 @@ function ensureSchema(sqlite: Database.Database) {
   }
 }
 
-const globalForDb = globalThis as unknown as {
-  __posDb?: ReturnType<typeof createDb>;
-};
+const dbTarget = {} as ReturnType<typeof createDb>;
 
-export const db = globalForDb.__posDb ?? createDb();
-globalForDb.__posDb = db;
+/**
+ * Stable proxy so a restored database can be reopened without invalidating
+ * already-imported `db` bindings in server actions and route handlers.
+ */
+export const db = new Proxy(dbTarget, {
+  get(_target, property) {
+    const instance = getDbInstance();
+    const value = Reflect.get(instance, property, instance);
+    return typeof value === "function" ? value.bind(instance) : value;
+  },
+});
 
-export type Db = typeof db;
+export type Db = ReturnType<typeof createDb>;
+
+getDbInstance();

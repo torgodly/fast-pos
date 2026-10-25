@@ -8,6 +8,7 @@ import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { tables } from "@/lib/db/schema";
 import { compareTableNames } from "@/lib/db/floor-tables";
+import { getOpenShift } from "@/lib/shifts/core";
 import { isVenueId } from "@/lib/venues";
 import { isCounterMode, staffLandingPath } from "@/lib/deployment";
 
@@ -27,10 +28,16 @@ export default async function CashierTablesPage({
     .where(eq(tables.venueId, venue))
     .all()
     .sort((a, b) => compareTableNames(a.name, b.name));
+  const shiftOpen = !!getOpenShift(venue);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير رئيسي" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير رئيسي"
+        showExpense={shiftOpen}
+      />
       <main className="page-shell flex flex-1 flex-col gap-3 p-2 sm:p-3 lg:p-4">
         <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">

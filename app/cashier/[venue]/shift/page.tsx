@@ -7,8 +7,27 @@ import { CashierShiftPanel } from "@/components/CashierShiftPanel";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { buildDayReportData, getDayReportStatus } from "@/lib/shifts/core";
+import {
+  getOpenShift,
+  getShiftTotals,
+  listShiftExpenses,
+  listShifts,
+  type ShiftTotals,
+} from "@/lib/shifts/core";
 import { getVenueName, isVenueId } from "@/lib/venues";
+
+const EMPTY_TOTALS: ShiftTotals = {
+  invoiceCount: 0,
+  totalSales: 0,
+  cashTotal: 0,
+  cardTotal: 0,
+  totalItems: 0,
+  tableSales: 0,
+  quickSales: 0,
+  groups: [],
+  items: [],
+  expenseTotal: 0,
+};
 
 export default async function CashierShiftPage({
   params,
@@ -24,23 +43,32 @@ export default async function CashierShiftPage({
     redirect(`/cashier/${venue}`);
   }
 
-  const status = getDayReportStatus(venue);
-  const preview = buildDayReportData(venue, "X", session.name);
+  const openShift = getOpenShift(venue);
+  const totals = openShift
+    ? getShiftTotals(venue, openShift.id)
+    : EMPTY_TOTALS;
+  const expenses = openShift ? listShiftExpenses(openShift.id) : [];
+  const history = listShifts(venue, 60);
   const venueLabel = getVenueName(venue);
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير رئيسي" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير رئيسي"
+        showExpense={!!openShift}
+      />
       <main className="page-shell flex flex-1 flex-col gap-3 p-2 sm:p-3 lg:p-4">
         <div className="flex items-center justify-between gap-2 rounded-xl border border-base-300 bg-base-100 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <Clock3 className="size-4 shrink-0 text-primary" />
             <div className="min-w-0">
               <h2 className="truncate text-sm font-black sm:text-base">
-                تقارير X و Z · {venueLabel}
+                الوردية · {venueLabel}
               </h2>
               <p className="truncate text-xs text-base-content/45">
-                مبيعات هذا الفرع فقط — لا تشمل {venue === "cafe" ? "المطعم" : "الكافيه"}
+                العهدة، النقد المتوقع والفروقات — مبيعات هذا الفرع فقط
               </p>
             </div>
           </div>
@@ -56,18 +84,19 @@ export default async function CashierShiftPage({
         <CashierShiftPanel
           venueId={venue}
           venueLabel={venueLabel}
-          lastZLabel={status.lastZLabel}
-          zWindowStart={status.zWindowStart}
-          zWindowEnd={status.zWindowEnd}
-          canPrintZ={status.canPrintZ}
-          canReprintZ={status.canReprintZ}
-          zAlreadyClosedThisWindow={status.zAlreadyClosedThisWindow}
-          preview={{
-            invoiceCount: preview.invoiceCount,
-            totalSales: preview.totalSales,
-            cashTotal: preview.cashTotal,
-            cardTotal: preview.cardTotal,
-          }}
+          openShift={
+            openShift
+              ? {
+                  shiftId: openShift.id,
+                  shiftNumber: openShift.shiftNumber,
+                  openedAt: openShift.openedAt,
+                  openingFloat: openShift.openingFloat,
+                }
+              : null
+          }
+          totals={totals}
+          expenses={expenses}
+          history={history}
         />
       </main>
     </div>

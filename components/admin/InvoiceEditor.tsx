@@ -184,7 +184,7 @@ export function InvoiceEditor({
             </button>
           )}
           <p className="text-xs text-base-content/45">
-            أي تعديل يظهر فوراً في التقارير و X/Z
+            أي تعديل يظهر فوراً في التقارير والورديات
           </p>
         </div>
       </section>

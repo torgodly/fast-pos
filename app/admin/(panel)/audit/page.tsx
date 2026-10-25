@@ -125,7 +125,7 @@ export default async function AdminAuditPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">سجل التدقيق</h2>
             <p className="text-sm text-base-content/45">
-              من فعل ماذا — طباعة، مطبخ، X/Z، وتعديل الفواتير
+              من فعل ماذا — طباعة، مطبخ، ورديات، وتعديل الفواتير
             </p>
           </div>
         </div>

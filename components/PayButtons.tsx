@@ -10,9 +10,11 @@ import { useToast } from "@/components/ToastProvider";
 export function PayButtons({
   orderId,
   totalLabel,
+  shiftOpen,
 }: {
   orderId: number;
   totalLabel?: string;
+  shiftOpen: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -73,7 +75,7 @@ export function PayButtons({
         <button
           type="button"
           className="btn btn-success btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
-          disabled={pending}
+          disabled={pending || !shiftOpen}
           onClick={() => askConfirm("cash")}
         >
           <Banknote className="size-4" />
@@ -82,13 +84,19 @@ export function PayButtons({
         <button
           type="button"
           className="btn btn-info btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm"
-          disabled={pending}
+          disabled={pending || !shiftOpen}
           onClick={() => askConfirm("card")}
         >
           <CreditCard className="size-4" />
           بطاقة
         </button>
       </div>
+
+      {!shiftOpen ? (
+        <p className="text-xs font-bold text-warning">
+          لا توجد وردية مفتوحة — الدفع موقوف حتى يفتحها الكاشير الرئيسي.
+        </p>
+      ) : null}
 
       <dialog id={dialogId} className="modal modal-bottom sm:modal-middle">
         <div className="modal-box max-w-sm rounded-t-2xl p-4 sm:rounded-2xl">

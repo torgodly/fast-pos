@@ -41,7 +41,7 @@ export const users = sqliteTable(
     username: text("username"),
     passwordHash: text("password_hash"),
     pinHash: text("pin_hash"),
-    /** Main cashiers may print X/Z and cancel after kitchen; multiple allowed. */
+    /** Main cashiers open/close shifts and print shift reports; multiple allowed. */
     isMainCashier: integer("is_main_cashier", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -148,8 +148,12 @@ export const shifts = sqliteTable(
     openedAt: text("opened_at")
       .notNull()
       .default(sql`(datetime('now'))`),
+    openingFloat: real("opening_float").notNull().default(0),
     closedBy: integer("closed_by").references(() => users.id),
     closedAt: text("closed_at"),
+    expectedCash: real("expected_cash"),
+    countedCash: real("counted_cash"),
+    difference: real("difference"),
     xPrintedAt: text("x_printed_at"),
   },
   (table) => [
@@ -159,6 +163,25 @@ export const shifts = sqliteTable(
       table.shiftNumber,
     ),
   ],
+);
+
+export const shiftExpenses = sqliteTable(
+  "shift_expenses",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    shiftId: integer("shift_id")
+      .notNull()
+      .references(() => shifts.id),
+    /** Cash paid out of the drawer; deducted from expected cash. */
+    amount: real("amount").notNull(),
+    reason: text("reason").notNull(),
+    createdBy: integer("created_by").references(() => users.id),
+    createdByName: text("created_by_name").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [index("shift_expenses_shift_idx").on(table.shiftId)],
 );
 
 export const customers = sqliteTable("customers", {
@@ -491,6 +514,7 @@ export const shiftsRelations = relations(shifts, ({ one, many }) => ({
     references: [users.id],
   }),
   orders: many(orders),
+  expenses: many(shiftExpenses),
 }));
 
 export const ordersRelations = relations(orders, ({ one, many }) => ({

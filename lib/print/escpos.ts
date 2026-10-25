@@ -2,6 +2,7 @@ import type {
   CheckoutReceiptData,
   KitchenReceiptData,
   ReportSummaryPrintData,
+  ShiftItemsPrintData,
   ShiftReportPrintData,
 } from "./receipts";
 import {
@@ -343,17 +344,24 @@ export function buildReportSummaryEscPos(data: ReportSummaryPrintData): Uint8Arr
 
 export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   const parts: Uint8Array[] = [init()];
-  const title = data.kind === "X" ? "تقرير X" : "تقرير Z";
+  const title =
+    data.kind === "close"
+      ? `إغلاق وردية #${data.shiftNumber}`
+      : data.kind === "reprint"
+        ? `إعادة طباعة وردية #${data.shiftNumber}`
+        : `ملخص وردية #${data.shiftNumber}`;
 
   headerBlock(parts, title, data.venueName);
   reportSep(parts);
   fieldLine(parts, "اليوم", data.workDate);
-  fieldLine(parts, "من", data.periodFrom);
-  fieldLine(parts, "إلى", data.periodTo);
+  fieldLine(parts, "الفتح", data.openedAt);
+  fieldLine(parts, "الإغلاق", data.closedAt ?? "مفتوحة");
   fieldLine(parts, "طباعة", data.printedAt);
   fieldLine(parts, "بواسطة", data.printedByName);
-  if (data.isReprint) {
-    fieldLine(parts, "النوع", "إعادة طباعة Z");
+  if (data.openedByName) fieldLine(parts, "فتحها", data.openedByName);
+  if (data.closedByName) fieldLine(parts, "أغلقها", data.closedByName);
+  if (data.kind === "reprint") {
+    fieldLine(parts, "النوع", "إعادة طباعة");
   }
   reportSep(parts);
 
@@ -369,20 +377,81 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
 
   reportSep(parts);
   printLine(parts, "المبيعات حسب المجموعة", { bold: true });
-  for (const group of data.groups) {
-    printLine(
-      parts,
-      `${group.name}: ${group.qty} = ${money(group.revenue)}`,
-    );
+  if (data.groups.length === 0) {
+    printLine(parts, "لا مبيعات في هذه الوردية");
+  } else {
+    for (const group of data.groups) {
+      printLine(
+        parts,
+        `${group.name}: ${group.qty} = ${money(group.revenue)}`,
+      );
+    }
+  }
+
+  reportSep(parts);
+  fieldLine(parts, "العهدة الافتتاحية", money(data.openingFloat));
+  printLine(parts, "المصروفات", { bold: true });
+  if (data.expenses.length === 0) {
+    printLine(parts, "لا مصروفات في هذه الوردية");
+  } else {
+    for (const expense of data.expenses) {
+      printLine(parts, `${expense.reason}: ${money(expense.amount)}`);
+    }
+  }
+  fieldLine(parts, "إجمالي المصروفات", money(data.expenseTotal));
+  reportSep(parts);
+  fieldLine(parts, "النقد المتوقع", money(data.expectedCash));
+  fieldLine(
+    parts,
+    "النقد المعدود",
+    data.countedCash === null ? "—" : money(data.countedCash),
+  );
+  if (data.difference !== null) {
+    const label =
+      data.difference === 0
+        ? "مطابق"
+        : data.difference > 0
+          ? `زيادة ${money(data.difference)}`
+          : `عجز ${money(Math.abs(data.difference))}`;
+    printLine(parts, `الفرق: ${label}`, { bold: true });
   }
 
   reportSep(parts);
   parts.push(align("center"));
   printLine(
     parts,
-    data.kind === "Z" ? "نهاية يوم العمل (Z)" : "تقرير منتصف اليوم (X)",
+    data.kind === "close" ? "تم إغلاق الوردية" : "الوردية ما زالت مفتوحة",
     { center: true, bold: true },
   );
+  parts.push(cut());
+
+  return concat(...parts);
+}
+
+export function buildShiftItemsEscPos(data: ShiftItemsPrintData): Uint8Array {
+  const parts: Uint8Array[] = [init()];
+  headerBlock(parts, `أصناف وردية #${data.shiftNumber}`, data.venueName);
+  reportSep(parts);
+  fieldLine(parts, "اليوم", data.workDate);
+  fieldLine(parts, "طباعة", data.printedAt);
+  fieldLine(parts, "بواسطة", data.printedByName);
+  if (data.kind === "reprint") fieldLine(parts, "النوع", "إعادة طباعة");
+  reportSep(parts);
+
+  if (data.items.length === 0) {
+    printLine(parts, "لا أصناف مبيعة في هذه الوردية");
+  } else {
+    for (const item of data.items) {
+      fieldLine(parts, item.name, String(item.qty));
+    }
+  }
+
+  reportSep(parts);
+  fieldLine(parts, "إجمالي الأصناف", String(data.items.length));
+  fieldLine(parts, "إجمالي القطع", String(data.totalItems));
+  reportSep(parts);
+  parts.push(align("center"));
+  printLine(parts, "نهاية تقرير الأصناف", { center: true, bold: true });
   parts.push(cut());
 
   return concat(...parts);

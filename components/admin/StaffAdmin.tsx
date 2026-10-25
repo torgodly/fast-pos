@@ -272,11 +272,12 @@ export function StaffAdmin({
               defaultChecked={editing?.isMainCashier ?? false}
             />
             <span className="label-text font-bold">
-              كاشير رئيسي (طباعة تقارير X و Z فقط)
+              كاشير رئيسي (يفتح ويغلق الوردية)
             </span>
           </label>
           <p className="text-xs text-base-content/45">
-            يمكن تعيين أكثر من كاشير رئيسي — كل منهم يطبع تقارير X و Z
+            يمكن تعيين أكثر من كاشير رئيسي — كل منهم يفتح ويغلق الوردية
+            ويطبع تقاريرها
           </p>
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">

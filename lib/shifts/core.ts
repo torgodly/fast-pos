@@ -1,88 +1,59 @@
-import { and, asc, desc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import { db } from "@/lib/db";
 import {
   categories,
   items,
   orderItems,
   orders,
+  shiftExpenses,
   shifts,
   users,
 } from "@/lib/db/schema";
 import { reportGroupsForVenue } from "@/lib/reports/groups";
-import { getZWindowEnd, getZWindowStart, isWithinZWindow, isSqlInZWindowBounds, resolveZWindowBounds } from "@/lib/settings";
 import { nowSqlTripoli, workDateTripoli } from "@/lib/time/tripoli";
 import type { VenueId } from "@/lib/types";
-import { formatDateTime, formatPrintTimestamp, getVenueName } from "@/lib/venues";
+import { formatPrintTimestamp, getVenueName, isVenueId } from "@/lib/venues";
+import {
+  calculateShiftCash,
+  roundMoney,
+  validateShiftExpense,
+} from "./cash";
 
-export function workDateToday() {
-  return workDateTripoli();
-}
+export const OPEN_SHIFT_REQUIRED_ERROR =
+  "لا توجد وردية مفتوحة — افتح الوردية أولاً قبل البيع";
+export const SHIFT_ALREADY_OPEN_ERROR =
+  "توجد وردية مفتوحة بالفعل لهذا القسم — أغلقها قبل فتح وردية جديدة";
 
-export function nowSql() {
-  return nowSqlTripoli();
-}
+export type ShiftRow = typeof shifts.$inferSelect;
 
-/** Last Z closedAt for venue — start of current working day. */
-export function getLastZAt(venueId: VenueId): string | null {
-  const row = db
-    .select({ closedAt: shifts.closedAt })
-    .from(shifts)
-    .where(
-      and(
-        eq(shifts.venueId, venueId),
-        eq(shifts.status, "closed"),
-        isNotNull(shifts.closedAt),
-      ),
-    )
-    .orderBy(desc(shifts.closedAt))
-    .get();
-  return row?.closedAt ?? null;
-}
+export type ShiftExpenseRow = typeof shiftExpenses.$inferSelect;
 
-export function getLastClosedShift(venueId: VenueId) {
-  return db
-    .select()
-    .from(shifts)
-    .where(
-      and(
-        eq(shifts.venueId, venueId),
-        eq(shifts.status, "closed"),
-        isNotNull(shifts.closedAt),
-      ),
-    )
-    .orderBy(desc(shifts.closedAt))
-    .get();
-}
+export type ShiftExpenseItem = {
+  id: number;
+  reason: string;
+  amount: number;
+  createdByName: string;
+  createdAt: string;
+};
 
-/** Z close immediately before `beforeClosedAt` (exclusive). */
-export function getPreviousZAt(
-  venueId: VenueId,
-  beforeClosedAt: string,
-): string | null {
-  const row = db
-    .select({ closedAt: shifts.closedAt })
-    .from(shifts)
-    .where(
-      and(
-        eq(shifts.venueId, venueId),
-        eq(shifts.status, "closed"),
-        isNotNull(shifts.closedAt),
-        sql`${shifts.closedAt} < ${beforeClosedAt}`,
-      ),
-    )
-    .orderBy(desc(shifts.closedAt))
-    .get();
-  return row?.closedAt ?? null;
-}
+export type ShiftItemSale = { name: string; qty: number };
 
-export type DayReportData = {
-  kind: "X" | "Z";
+export type ShiftReportKind = "summary" | "close" | "reprint";
+
+export type ShiftReportData = {
+  kind: ShiftReportKind;
+  shiftId: number;
+  shiftNumber: number;
+  venueId: VenueId;
   venueName: string;
   workDate: string;
-  periodFrom: string;
-  periodTo: string;
+  openedAt: string;
+  closedAt: string | null;
   printedAt: string;
   printedByName: string;
+  openedByName: string | null;
+  closedByName: string | null;
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
@@ -91,44 +62,134 @@ export type DayReportData = {
   tableSales: number;
   quickSales: number;
   groups: Array<{ name: string; qty: number; revenue: number }>;
-  zWindowStart: string;
-  zWindowEnd: string;
-  canPrintZ: boolean;
-  /** True when reprinting a past Z (not a new close). */
-  isReprint?: boolean;
+  items: ShiftItemSale[];
+  openingFloat: number;
+  expenseTotal: number;
+  expenses: Array<{
+    id: number;
+    reason: string;
+    amount: number;
+    createdByName: string;
+  }>;
+  expectedCash: number;
+  countedCash: number | null;
+  difference: number | null;
 };
 
-function paidOrdersBetween(
+export type ShiftTotals = {
+  invoiceCount: number;
+  totalSales: number;
+  cashTotal: number;
+  cardTotal: number;
+  totalItems: number;
+  tableSales: number;
+  quickSales: number;
+  groups: Array<{ name: string; qty: number; revenue: number }>;
+  items: ShiftItemSale[];
+  expenseTotal: number;
+};
+
+export type ShiftListItem = {
+  shiftId: number;
+  shiftNumber: number;
+  workDate: string;
+  openedAt: string;
+  closedAt: string;
+  openedByName: string | null;
+  closedByName: string | null;
+  openingFloat: number;
+  expectedCash: number | null;
+  countedCash: number | null;
+  difference: number | null;
+  invoiceCount: number;
+  totalSales: number;
+  cashTotal: number;
+  cardTotal: number;
+  expenseTotal: number;
+};
+
+export function getOpenShift(venueId: VenueId): ShiftRow | null {
+  return (
+    db
+      .select()
+      .from(shifts)
+      .where(and(eq(shifts.venueId, venueId), eq(shifts.status, "open")))
+      .orderBy(desc(shifts.openedAt))
+      .get() ?? null
+  );
+}
+
+export function getShiftById(shiftId: number): ShiftRow | null {
+  return db.select().from(shifts).where(eq(shifts.id, shiftId)).get() ?? null;
+}
+
+export function getLastClosedShift(venueId: VenueId): ShiftRow | null {
+  return (
+    db
+      .select()
+      .from(shifts)
+      .where(
+        and(
+          eq(shifts.venueId, venueId),
+          eq(shifts.status, "closed"),
+          isNotNull(shifts.closedAt),
+        ),
+      )
+      .orderBy(desc(shifts.closedAt))
+      .get() ?? null
+  );
+}
+
+export function openShift(
   venueId: VenueId,
-  fromExclusive: string | null,
-  toInclusive: string,
-) {
+  userId: number,
+  openingFloat: number,
+): { error: string } | { ok: true; shift: ShiftRow } {
+  if (!Number.isFinite(openingFloat) || openingFloat < 0) {
+    return { error: "العهدة الافتتاحية غير صالحة" };
+  }
+  if (getOpenShift(venueId)) {
+    return { error: SHIFT_ALREADY_OPEN_ERROR };
+  }
+
+  const workDate = workDateTripoli();
+  const last = db
+    .select({ shiftNumber: shifts.shiftNumber })
+    .from(shifts)
+    .where(and(eq(shifts.venueId, venueId), eq(shifts.workDate, workDate)))
+    .orderBy(desc(shifts.shiftNumber))
+    .get();
+  const shiftNumber = (last?.shiftNumber ?? 0) + 1;
+
+  try {
+    const shift = db
+      .insert(shifts)
+      .values({
+        venueId,
+        workDate,
+        shiftNumber,
+        status: "open",
+        openedBy: userId,
+        openedAt: nowSqlTripoli(),
+        openingFloat: roundMoney(openingFloat),
+      })
+      .returning()
+      .get();
+    return { ok: true, shift };
+  } catch {
+    return { error: SHIFT_ALREADY_OPEN_ERROR };
+  }
+}
+
+function paidOrdersForShift(shiftId: number) {
   return db
     .select()
     .from(orders)
-    .where(
-      fromExclusive
-        ? and(
-            eq(orders.venueId, venueId),
-            eq(orders.status, "paid"),
-            gt(orders.paidAt, fromExclusive),
-            lte(orders.paidAt, toInclusive),
-          )
-        : and(
-            eq(orders.venueId, venueId),
-            eq(orders.status, "paid"),
-            lte(orders.paidAt, toInclusive),
-          ),
-    )
-    .all()
-    .filter((o) => o.paidAt != null);
+    .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")))
+    .all();
 }
 
-function groupSalesBetween(
-  venueId: VenueId,
-  fromExclusive: string | null,
-  toInclusive: string,
-) {
+function groupSalesForShift(shiftId: number) {
   return db
     .select({
       categoryName: sql<string>`coalesce(
@@ -145,20 +206,7 @@ function groupSalesBetween(
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
     .leftJoin(items, eq(orderItems.itemId, items.id))
     .leftJoin(categories, eq(items.categoryId, categories.id))
-    .where(
-      fromExclusive
-        ? and(
-            eq(orders.venueId, venueId),
-            eq(orders.status, "paid"),
-            gt(orders.paidAt, fromExclusive),
-            lte(orders.paidAt, toInclusive),
-          )
-        : and(
-            eq(orders.venueId, venueId),
-            eq(orders.status, "paid"),
-            lte(orders.paidAt, toInclusive),
-          ),
-    )
+    .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")))
     .groupBy(
       sql`coalesce(
         nullif(trim(${orderItems.categoryName}), ''),
@@ -169,47 +217,118 @@ function groupSalesBetween(
     .all();
 }
 
-function assembleDayReport(options: {
-  venueId: VenueId;
-  kind: "X" | "Z";
-  printedByName: string;
-  periodFromExclusive: string | null;
-  periodToInclusive: string;
-  workDate: string;
-  isReprint?: boolean;
-}): DayReportData {
-  const {
-    venueId,
-    kind,
-    printedByName,
-    periodFromExclusive,
-    periodToInclusive,
-    workDate,
-    isReprint,
-  } = options;
+function itemSalesForShift(shiftId: number): ShiftItemSale[] {
+  return db
+    .select({
+      name: orderItems.itemName,
+      qty: sql<number>`coalesce(sum(${orderItems.qty}), 0)`.mapWith(Number),
+    })
+    .from(orderItems)
+    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")))
+    .groupBy(orderItems.itemName)
+    .all()
+    .sort(
+      (a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ar"),
+    );
+}
 
-  const paidOrders = paidOrdersBetween(
-    venueId,
-    periodFromExclusive,
-    periodToInclusive,
-  );
-  const totalSales = paidOrders.reduce((s, o) => s + o.total, 0);
-  const cashTotal = paidOrders
-    .filter((o) => o.paymentMethod === "cash")
-    .reduce((s, o) => s + o.total, 0);
-  const cardTotal = paidOrders
-    .filter((o) => o.paymentMethod === "card")
-    .reduce((s, o) => s + o.total, 0);
-  const tableSales = paidOrders.filter((o) => o.tableId != null).length;
-  const quickSales = paidOrders.length - tableSales;
+export function getShiftExpenseTotal(shiftId: number): number {
+  const row = db
+    .select({
+      total: sql<number>`coalesce(sum(${shiftExpenses.amount}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(shiftExpenses)
+    .where(eq(shiftExpenses.shiftId, shiftId))
+    .get();
+  return roundMoney(row?.total ?? 0);
+}
 
-  const groupRows = groupSalesBetween(
-    venueId,
-    periodFromExclusive,
-    periodToInclusive,
+export function listShiftExpenses(shiftId: number): ShiftExpenseItem[] {
+  return db
+    .select({
+      id: shiftExpenses.id,
+      reason: shiftExpenses.reason,
+      amount: shiftExpenses.amount,
+      createdByName: shiftExpenses.createdByName,
+      createdAt: shiftExpenses.createdAt,
+    })
+    .from(shiftExpenses)
+    .where(eq(shiftExpenses.shiftId, shiftId))
+    .orderBy(asc(shiftExpenses.id))
+    .all();
+}
+
+export function addShiftExpense(input: {
+  shiftId: number;
+  userId: number;
+  userName: string;
+  amount: number;
+  reason: string;
+}): { error: string } | { ok: true; expense: ShiftExpenseRow } {
+  const shift = getShiftById(input.shiftId);
+  if (!shift) return { error: "الوردية غير موجودة" };
+  if (shift.status !== "open") {
+    return { error: "لا يمكن تسجيل مصروف بعد إغلاق الوردية" };
+  }
+
+  const validation = validateShiftExpense(input.amount, input.reason);
+  if (validation) return { error: validation };
+
+  const expense = db
+    .insert(shiftExpenses)
+    .values({
+      shiftId: shift.id,
+      amount: roundMoney(input.amount),
+      reason: input.reason.trim(),
+      createdBy: input.userId,
+      createdByName: input.userName,
+    })
+    .returning()
+    .get();
+  return { ok: true, expense };
+}
+
+export function removeShiftExpense(
+  expenseId: number,
+): { error: string } | { ok: true; expense: ShiftExpenseRow } {
+  const expense = db
+    .select()
+    .from(shiftExpenses)
+    .where(eq(shiftExpenses.id, expenseId))
+    .get();
+  if (!expense) return { error: "المصروف غير موجود" };
+
+  const shift = getShiftById(expense.shiftId);
+  if (!shift || shift.status !== "open") {
+    return { error: "لا يمكن حذف مصروف بعد إغلاق الوردية" };
+  }
+
+  db.delete(shiftExpenses).where(eq(shiftExpenses.id, expense.id)).run();
+  return { ok: true, expense };
+}
+
+export function getShiftTotals(venueId: VenueId, shiftId: number): ShiftTotals {
+  const paidOrders = paidOrdersForShift(shiftId);
+  const totalSales = roundMoney(
+    paidOrders.reduce((sum, order) => sum + order.total, 0),
   );
+  const cashTotal = roundMoney(
+    paidOrders
+      .filter((order) => order.paymentMethod === "cash")
+      .reduce((sum, order) => sum + order.total, 0),
+  );
+  const cardTotal = roundMoney(
+    paidOrders
+      .filter((order) => order.paymentMethod === "card")
+      .reduce((sum, order) => sum + order.total, 0),
+  );
+  const tableSales = paidOrders.filter((order) => order.tableId !== null).length;
+
   const byName = new Map(
-    groupRows.map((row) => [
+    groupSalesForShift(shiftId).map((row) => [
       row.categoryName,
       { qty: row.qty, revenue: row.revenue },
     ]),
@@ -219,117 +338,140 @@ function assembleDayReport(options: {
     qty: byName.get(name)?.qty ?? 0,
     revenue: byName.get(name)?.revenue ?? 0,
   }));
-  const totalItems = groups.reduce((s, g) => s + g.qty, 0);
 
   return {
-    kind,
-    venueName: getVenueName(venueId),
-    workDate,
-    periodFrom: periodFromExclusive
-      ? formatPrintTimestamp(periodFromExclusive)
-      : "بداية التشغيل",
-    periodTo: formatPrintTimestamp(periodToInclusive),
-    printedAt: formatPrintTimestamp(new Date()),
-    printedByName,
     invoiceCount: paidOrders.length,
     totalSales,
     cashTotal,
     cardTotal,
-    totalItems,
+    totalItems: groups.reduce((sum, group) => sum + group.qty, 0),
     tableSales,
-    quickSales,
+    quickSales: paidOrders.length - tableSales,
     groups,
-    zWindowStart: getZWindowStart(venueId),
-    zWindowEnd: getZWindowEnd(venueId),
-    canPrintZ: (() => {
-      const within = isWithinZWindow(new Date(), venueId);
-      if (!within) return false;
-      const bounds = resolveZWindowBounds(new Date(), venueId);
-      const last = getLastZAt(venueId);
-      if (bounds && last && isSqlInZWindowBounds(last, bounds)) return false;
-      return true;
-    })(),
-    isReprint,
+    items: itemSalesForShift(shiftId),
+    expenseTotal: getShiftExpenseTotal(shiftId),
   };
 }
 
-export function buildDayReportData(
-  venueId: VenueId,
-  kind: "X" | "Z",
-  printedByName: string,
-): DayReportData {
-  const lastZ = getLastZAt(venueId);
-  const now = nowSql();
-  return assembleDayReport({
-    venueId,
-    kind,
-    printedByName,
-    periodFromExclusive: lastZ,
-    periodToInclusive: now,
-    workDate: workDateToday(),
-  });
-}
-
-/** Rebuild the last closed Z period for reprint (does not open a new day). */
-export function buildLastZReprintData(
-  venueId: VenueId,
-  printedByName: string,
-): DayReportData | null {
-  const last = getLastClosedShift(venueId);
-  if (!last?.closedAt) return null;
-  return buildZReportByShiftId(last.id, printedByName);
-}
-
-/** Reprint any closed Z by shift row id. */
-export function buildZReportByShiftId(
+export function buildShiftReportData(
   shiftId: number,
   printedByName: string,
-): DayReportData | null {
-  const shift = db.select().from(shifts).where(eq(shifts.id, shiftId)).get();
-  if (!shift?.closedAt || shift.status !== "closed") return null;
-  if (shift.venueId !== "restaurant" && shift.venueId !== "cafe") return null;
+  kind: ShiftReportKind,
+): ShiftReportData | null {
+  const shift = getShiftById(shiftId);
+  if (!shift || !isVenueId(shift.venueId)) {
+    return null;
+  }
 
-  const previous = getPreviousZAt(shift.venueId, shift.closedAt);
-  return assembleDayReport({
+  const totals = getShiftTotals(shift.venueId, shift.id);
+  const cash = calculateShiftCash(
+    shift.openingFloat,
+    totals.cashTotal,
+    totals.expenseTotal,
+    shift.countedCash,
+  );
+  const openedBy = shift.openedBy
+    ? db.select().from(users).where(eq(users.id, shift.openedBy)).get()
+    : null;
+  const closedBy = shift.closedBy
+    ? db.select().from(users).where(eq(users.id, shift.closedBy)).get()
+    : null;
+
+  return {
+    kind,
+    shiftId: shift.id,
+    shiftNumber: shift.shiftNumber,
     venueId: shift.venueId,
-    kind: "Z",
-    printedByName,
-    periodFromExclusive: previous,
-    periodToInclusive: shift.closedAt,
+    venueName: getVenueName(shift.venueId),
     workDate: shift.workDate,
-    isReprint: true,
-  });
+    openedAt: formatPrintTimestamp(shift.openedAt),
+    closedAt: shift.closedAt ? formatPrintTimestamp(shift.closedAt) : null,
+    printedAt: formatPrintTimestamp(new Date()),
+    printedByName,
+    openedByName: openedBy?.name ?? null,
+    closedByName: closedBy?.name ?? null,
+    invoiceCount: totals.invoiceCount,
+    totalSales: totals.totalSales,
+    cashTotal: totals.cashTotal,
+    cardTotal: totals.cardTotal,
+    totalItems: totals.totalItems,
+    tableSales: totals.tableSales,
+    quickSales: totals.quickSales,
+    groups: totals.groups,
+    items: totals.items,
+    openingFloat: roundMoney(shift.openingFloat),
+    expenseTotal: totals.expenseTotal,
+    expenses: listShiftExpenses(shift.id).map((expense) => ({
+      id: expense.id,
+      reason: expense.reason,
+      amount: expense.amount,
+      createdByName: expense.createdByName,
+    })),
+    expectedCash: shift.expectedCash ?? cash.expectedCash,
+    countedCash: shift.countedCash,
+    difference: shift.difference ?? cash.difference,
+  };
 }
 
-export type ZReportListItem = {
-  shiftId: number;
-  venueId: VenueId;
-  workDate: string;
-  shiftNumber: number;
-  closedAt: string;
-  closedByName: string | null;
-  invoiceCount: number;
-  totalSales: number;
-  cashTotal: number;
-  cardTotal: number;
-  periodFrom: string | null;
-};
+export function closeShift(
+  shiftId: number,
+  userId: number,
+  countedCash: number,
+): { error: string } | { ok: true; shift: ShiftRow; totals: ShiftTotals } {
+  if (!Number.isFinite(countedCash) || countedCash < 0) {
+    return { error: "المبلغ المعدود غير صالح" };
+  }
 
-export function listZReports(
-  venueId: VenueId,
-  limit = 100,
-): ZReportListItem[] {
-  const closed = db
+  const shift = getShiftById(shiftId);
+  if (!shift) return { error: "الوردية غير موجودة" };
+  if (shift.status !== "open") return { error: "الوردية مغلقة بالفعل" };
+  if (!isVenueId(shift.venueId)) {
+    return { error: "فرع غير صالح" };
+  }
+
+  const totals = getShiftTotals(shift.venueId, shift.id);
+  const counted = roundMoney(countedCash);
+  const { expectedCash, difference } = calculateShiftCash(
+    shift.openingFloat,
+    totals.cashTotal,
+    totals.expenseTotal,
+    counted,
+  );
+
+  db.update(shifts)
+    .set({
+      status: "closed",
+      closedBy: userId,
+      closedAt: nowSqlTripoli(),
+      expectedCash,
+      countedCash: counted,
+      difference,
+    })
+    .where(eq(shifts.id, shift.id))
+    .run();
+
+  return { ok: true, shift: getShiftById(shift.id)!, totals };
+}
+
+export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
+  const closedUser = alias(users, "closed_user");
+  const rows = db
     .select({
       id: shifts.id,
-      venueId: shifts.venueId,
-      workDate: shifts.workDate,
       shiftNumber: shifts.shiftNumber,
+      workDate: shifts.workDate,
+      openedAt: shifts.openedAt,
       closedAt: shifts.closedAt,
-      closedByName: users.name,
+      openingFloat: shifts.openingFloat,
+      expectedCash: shifts.expectedCash,
+      countedCash: shifts.countedCash,
+      difference: shifts.difference,
+      openedByName: users.name,
+      closedByName: closedUser.name,
     })
     .from(shifts)
-    .leftJoin(users, eq(shifts.closedBy, users.id))
+    .leftJoin(users, eq(shifts.openedBy, users.id))
+    .leftJoin(closedUser, eq(shifts.closedBy, closedUser.id))
     .where(
       and(
         eq(shifts.venueId, venueId),
@@ -341,103 +483,68 @@ export function listZReports(
     .limit(limit)
     .all();
 
-  return closed.flatMap((row) => {
+  const totalsRows = db
+    .select({
+      shiftId: orders.shiftId,
+      invoiceCount: sql<number>`count(*)`.mapWith(Number),
+      totalSales: sql<number>`coalesce(sum(${orders.total}), 0)`.mapWith(Number),
+      cashTotal: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'cash' then ${orders.total} else 0 end), 0)`.mapWith(
+        Number,
+      ),
+      cardTotal: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'card' then ${orders.total} else 0 end), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.venueId, venueId),
+        eq(orders.status, "paid"),
+        isNotNull(orders.shiftId),
+      ),
+    )
+    .groupBy(orders.shiftId)
+    .all();
+  const totalsByShift = new Map(
+    totalsRows.map((row) => [row.shiftId, row]),
+  );
+
+  const expenseRows = db
+    .select({
+      shiftId: shiftExpenses.shiftId,
+      expenseTotal: sql<number>`coalesce(sum(${shiftExpenses.amount}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(shiftExpenses)
+    .groupBy(shiftExpenses.shiftId)
+    .all();
+  const expensesByShift = new Map(
+    expenseRows.map((row) => [row.shiftId, row.expenseTotal]),
+  );
+
+  return rows.flatMap((row) => {
     if (!row.closedAt) return [];
-    if (row.venueId !== "restaurant" && row.venueId !== "cafe") return [];
-    const previous = getPreviousZAt(row.venueId, row.closedAt);
-    const paid = paidOrdersBetween(row.venueId, previous, row.closedAt);
-    const totalSales = paid.reduce((sum, order) => sum + order.total, 0);
-    const cashTotal = paid
-      .filter((order) => order.paymentMethod === "cash")
-      .reduce((sum, order) => sum + order.total, 0);
-    const cardTotal = paid
-      .filter((order) => order.paymentMethod === "card")
-      .reduce((sum, order) => sum + order.total, 0);
+    const totals = totalsByShift.get(row.id);
     return [
       {
         shiftId: row.id,
-        venueId: row.venueId,
-        workDate: row.workDate,
         shiftNumber: row.shiftNumber,
+        workDate: row.workDate,
+        openedAt: row.openedAt,
         closedAt: row.closedAt,
+        openedByName: row.openedByName,
         closedByName: row.closedByName,
-        invoiceCount: paid.length,
-        totalSales,
-        cashTotal,
-        cardTotal,
-        periodFrom: previous,
+        openingFloat: row.openingFloat,
+        expectedCash: row.expectedCash,
+        countedCash: row.countedCash,
+        difference: row.difference,
+        invoiceCount: totals?.invoiceCount ?? 0,
+        totalSales: totals?.totalSales ?? 0,
+        cashTotal: totals?.cashTotal ?? 0,
+        cardTotal: totals?.cardTotal ?? 0,
+        expenseTotal: expensesByShift.get(row.id) ?? 0,
       },
     ];
   });
-}
-
-export function alreadyClosedZThisWindow(
-  venueId: VenueId,
-  date = new Date(),
-): boolean {
-  const bounds = resolveZWindowBounds(date, venueId);
-  if (!bounds) return false;
-  const lastZ = getLastZAt(venueId);
-  if (!lastZ) return false;
-  return isSqlInZWindowBounds(lastZ, bounds);
-}
-
-export function getDayReportStatus(venueId: VenueId) {
-  const lastZ = getLastZAt(venueId);
-  const withinWindow = isWithinZWindow(new Date(), venueId);
-  const zAlreadyClosedThisWindow = alreadyClosedZThisWindow(venueId);
-  return {
-    venueId,
-    lastZAt: lastZ,
-    lastZLabel: lastZ ? formatDateTime(lastZ) : null,
-    zWindowStart: getZWindowStart(venueId),
-    zWindowEnd: getZWindowEnd(venueId),
-    canPrintZ: withinWindow && !zAlreadyClosedThisWindow,
-    zAlreadyClosedThisWindow,
-    workDate: workDateToday(),
-    canReprintZ: Boolean(lastZ),
-  };
-}
-
-/** Record a Z close marker (does not block selling). */
-export function recordZClose(venueId: VenueId, userId: number) {
-  const workDate = workDateToday();
-  const existing = db
-    .select()
-    .from(shifts)
-    .where(and(eq(shifts.venueId, venueId), eq(shifts.workDate, workDate)))
-    .orderBy(asc(shifts.shiftNumber))
-    .all();
-  const nextNumber =
-    existing.length === 0
-      ? 1
-      : Math.max(...existing.map((s) => s.shiftNumber)) + 1;
-
-  // Close any leftover "open" shift rows from the old model
-  db.update(shifts)
-    .set({
-      status: "closed",
-      closedBy: userId,
-      closedAt: nowSql(),
-    })
-    .where(and(eq(shifts.venueId, venueId), eq(shifts.status, "open")))
-    .run();
-
-  db.insert(shifts)
-    .values({
-      venueId,
-      workDate,
-      shiftNumber: nextNumber,
-      status: "closed",
-      openedBy: userId,
-      openedAt: nowSql(),
-      closedBy: userId,
-      closedAt: nowSql(),
-    })
-    .run();
-}
-
-// Compat exports (unused by sell path)
-export function getOpenShift(_venueId: VenueId) {
-  return null;
 }

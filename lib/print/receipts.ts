@@ -36,13 +36,16 @@ export type ReportSummaryPrintData = {
 };
 
 export type ShiftReportPrintData = {
-  kind: "X" | "Z";
+  kind: "summary" | "close" | "reprint";
+  shiftNumber: number;
   venueName: string;
   workDate: string;
-  periodFrom: string;
-  periodTo: string;
+  openedAt: string;
+  closedAt: string | null;
   printedAt: string;
   printedByName: string;
+  openedByName: string | null;
+  closedByName: string | null;
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
@@ -51,8 +54,30 @@ export type ShiftReportPrintData = {
   tableSales: number;
   quickSales: number;
   groups: Array<{ name: string; qty: number; revenue: number }>;
-  isReprint?: boolean;
+  items: Array<{ name: string; qty: number }>;
+  openingFloat: number;
+  expenseTotal: number;
+  expenses: Array<{
+    reason: string;
+    amount: number;
+    createdByName: string;
+  }>;
+  expectedCash: number;
+  countedCash: number | null;
+  difference: number | null;
 };
+
+export type ShiftItemsPrintData = Pick<
+  ShiftReportPrintData,
+  | "kind"
+  | "shiftNumber"
+  | "venueName"
+  | "workDate"
+  | "printedAt"
+  | "printedByName"
+  | "items"
+  | "totalItems"
+>;
 
 export type KitchenReceiptData = {
   venueName: string;

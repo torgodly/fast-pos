@@ -39,6 +39,7 @@ import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
 import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import { consumeForPaidOrder } from "@/lib/inventory/service";
 import { insufficientWarningText } from "@/lib/inventory/rules";
+import { getOpenShift, OPEN_SHIFT_REQUIRED_ERROR } from "@/lib/shifts/core";
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -1045,6 +1046,11 @@ export async function payOrder(
     return { error: "فرع غير صالح" };
   }
 
+  const openShift = getOpenShift(order.venueId);
+  if (!openShift) {
+    return { error: OPEN_SHIFT_REQUIRED_ERROR };
+  }
+
   const stationCtx = await getCashierStationContext(order.venueId);
   if ("error" in stationCtx) {
     return { error: stationCtx.error };
@@ -1068,7 +1074,7 @@ export async function payOrder(
       status: "paid",
       paymentMethod,
       cashierId: session.userId,
-      shiftId: null,
+      shiftId: openShift.id,
       total,
       paidAt,
     })
@@ -1194,6 +1200,11 @@ export async function payQuickSale(
     return { error: "الفاتورة فارغة" };
   }
 
+  const openShift = getOpenShift(venueId);
+  if (!openShift) {
+    return { error: OPEN_SHIFT_REQUIRED_ERROR };
+  }
+
   const customer = receiptCustomer(customerId);
   if (customerId != null && !customer) {
     return { error: "العميل غير موجود" };
@@ -1241,7 +1252,7 @@ export async function payQuickSale(
           customerId: customerId ?? null,
           waiterId: null,
           cashierId: session.userId,
-          shiftId: null,
+          shiftId: openShift.id,
           status: "open",
           total,
         })

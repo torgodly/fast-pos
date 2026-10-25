@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { categories, customers, items } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
 import { availableAtVenue } from "@/lib/menu/scope";
+import { getOpenShift } from "@/lib/shifts/core";
 
 export default async function CashierQuickPage({
   params,
@@ -22,6 +23,10 @@ export default async function CashierQuickPage({
 
   const stationCtx = await getCashierStationContext(venue);
   if ("error" in stationCtx) {
+    redirect(`/cashier/${venue}`);
+  }
+
+  if (!getOpenShift(venue)) {
     redirect(`/cashier/${venue}`);
   }
 
@@ -56,7 +61,12 @@ export default async function CashierQuickPage({
 
   return (
     <div className="flex h-dvh max-h-dvh min-h-0 flex-1 flex-col overflow-hidden">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير"
+        showExpense
+      />
       <main className="page-shell flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1 sm:p-1.5">
         <div className="flex h-10 shrink-0 items-center justify-between gap-2 border border-base-300 bg-base-100 px-2.5">
           <p className="truncate text-sm font-black">

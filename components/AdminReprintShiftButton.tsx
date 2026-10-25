@@ -2,10 +2,10 @@
 
 import { useTransition } from "react";
 import { LoaderCircle, Printer } from "lucide-react";
-import { adminReprintZReport } from "@/app/actions/shifts";
+import { adminReprintShiftReport } from "@/app/actions/shifts";
 import { useToast } from "@/components/ToastProvider";
 
-export function AdminReprintZButton({ shiftId }: { shiftId: number }) {
+export function AdminReprintShiftButton({ shiftId }: { shiftId: number }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
 
@@ -16,7 +16,7 @@ export function AdminReprintZButton({ shiftId }: { shiftId: number }) {
       disabled={pending}
       onClick={() => {
         startTransition(async () => {
-          const result = await adminReprintZReport(shiftId);
+          const result = await adminReprintShiftReport(shiftId);
           if ("error" in result) {
             showToast("error", result.error);
             return;

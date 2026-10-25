@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Coffee, ChefHat, Home, LogOut } from "lucide-react";
 import { LogoutButton } from "@/components/LogoutButton";
+import { ShiftExpenseButton } from "@/components/ShiftExpenseButton";
 import { getVenueName } from "@/lib/venues";
 import type { VenueId } from "@/lib/types";
 
@@ -8,10 +9,12 @@ export function PosHeader({
   venueId,
   name,
   roleLabel,
+  showExpense = false,
 }: {
   venueId: VenueId;
   name: string;
   roleLabel: string;
+  showExpense?: boolean;
 }) {
   const VenueIcon = venueId === "restaurant" ? ChefHat : Coffee;
 
@@ -35,6 +38,7 @@ export function PosHeader({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          {showExpense ? <ShiftExpenseButton venueId={venueId} /> : null}
           <Link
             href="/"
             className="btn btn-ghost btn-sm h-9 min-h-9 gap-1.5 rounded-lg px-2.5"

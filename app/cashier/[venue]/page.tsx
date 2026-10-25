@@ -8,6 +8,7 @@ import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
+import { getOpenShift } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 import { isCounterMode } from "@/lib/deployment";
 
@@ -26,7 +27,8 @@ export default async function CashierHomePage({
 
   const stationCtx = await getCashierStationContext(venue);
   const hasCheckout = !("error" in stationCtx);
-  const canSell = hasCheckout;
+  const openShift = getOpenShift(venue);
+  const canSell = hasCheckout && !!openShift;
 
   const openOrders = db
     .select({
@@ -45,11 +47,21 @@ export default async function CashierHomePage({
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
-      <PosHeader venueId={venue} name={session.name} roleLabel="كاشير" />
+      <PosHeader
+        venueId={venue}
+        name={session.name}
+        roleLabel="كاشير"
+        showExpense={!!openShift}
+      />
       <main className="page-shell flex flex-1 flex-col gap-2 p-2 sm:gap-3 sm:p-3 lg:p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-base-300/70 bg-base-100 px-3 py-2">
           <p className="text-sm font-black">
             فواتير مفتوحة · {openOrders.length}
+            {openShift ? (
+              <span className="mr-2 badge badge-success badge-sm font-bold">
+                وردية #{openShift.shiftNumber}
+              </span>
+            ) : null}
           </p>
           <div className="flex flex-wrap gap-1.5">
             {canSell ? (
@@ -100,7 +112,7 @@ export default async function CashierHomePage({
                   className="btn btn-ghost btn-sm gap-1.5 rounded-lg"
                 >
                   <Clock3 className="size-4" />
-                  تقارير X/Z
+                  الوردية
                 </Link>
               </>
             ) : null}
@@ -110,6 +122,24 @@ export default async function CashierHomePage({
         {!hasCheckout ? (
           <div className="rounded-xl border border-error/30 bg-error/10 px-3 py-2 text-sm font-bold text-error">
             {stationCtx.error}
+          </div>
+        ) : null}
+
+        {hasCheckout && !openShift ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-warning/40 bg-warning/10 px-3 py-2 text-sm font-bold text-warning">
+            <span>
+              لا توجد وردية مفتوحة — البيع والدفع موقوفان حتى يفتحها الكاشير
+              الرئيسي.
+            </span>
+            {isMainCashier ? (
+              <Link
+                href={`/cashier/${venue}/shift`}
+                className="btn btn-warning btn-xs h-7 min-h-7 gap-1 rounded-md"
+              >
+                <Clock3 className="size-3.5" />
+                افتح الوردية
+              </Link>
+            ) : null}
           </div>
         ) : null}
 
