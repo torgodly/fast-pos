@@ -34,6 +34,17 @@ vi.mock("@/lib/db", async () => {
       category_id INTEGER REFERENCES categories(id),
       name TEXT NOT NULL
     );
+    CREATE TABLE payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      deferred INTEGER NOT NULL DEFAULT 0,
+      cash_drawer INTEGER NOT NULL DEFAULT 0,
+      built_in INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE shifts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
@@ -70,6 +81,8 @@ vi.mock("@/lib/db", async () => {
       payment_method TEXT,
       total REAL NOT NULL DEFAULT 0,
       shift_id INTEGER REFERENCES shifts(id),
+      held_at TEXT,
+      held_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       paid_at TEXT
     );
@@ -107,6 +120,8 @@ function seedBase() {
   const db = sqlite();
   db.exec(`
     INSERT INTO venues (id, name) VALUES ('restaurant', 'مطعم');
+    INSERT INTO payment_methods (id, code, name, cash_drawer, built_in, sort_order)
+    VALUES (1, 'cash', 'نقدي', 1, 1, 0), (2, 'card', 'بطاقة', 0, 1, 1);
     INSERT INTO users (id, name) VALUES (1, 'كاشير رئيسي'), (2, 'كاشير');
     INSERT INTO categories (id, name) VALUES (1, 'مشروبات ساخنة');
     INSERT INTO items (id, category_id, name) VALUES (1, 1, 'شاي'), (2, 1, 'قهوة');
@@ -136,6 +151,7 @@ beforeEach(() => {
     DELETE FROM shifts;
     DELETE FROM items;
     DELETE FROM categories;
+    DELETE FROM payment_methods;
     DELETE FROM users;
     DELETE FROM venues;
   `);
@@ -158,10 +174,28 @@ describe("shift totals with expenses", () => {
       invoiceCount: 2,
       totalSales: 30,
       cashTotal: 20,
-      cardTotal: 10,
+      nonCashTotal: 10,
       totalItems: 3,
       expenseTotal: 20,
     });
+    expect(totals.paymentBreakdown).toEqual([
+      {
+        code: "cash",
+        name: "نقدي",
+        deferred: false,
+        cashDrawer: true,
+        total: 20,
+        count: 1,
+      },
+      {
+        code: "card",
+        name: "بطاقة",
+        deferred: false,
+        cashDrawer: false,
+        total: 10,
+        count: 1,
+      },
+    ]);
     expect(totals.items).toEqual([
       { name: "شاي", qty: 2 },
       { name: "قهوة", qty: 1 },

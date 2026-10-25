@@ -59,7 +59,23 @@ export function quickSalePayNotice(options: {
   orderId: number;
   kitchenFailed: boolean;
   receiptFailed: boolean;
+  held?: boolean;
 }): PayNotice {
+  if (options.held) {
+    const lines: PayNoticeLine[] = [
+      { text: `فاتورة #${options.orderId} محفوظة كآجل` },
+    ];
+    if (options.kitchenFailed) {
+      lines.push({ text: "المطبخ لم يُطبع", tone: "error" });
+      lines.push({ text: "أعد إرسال المطبخ من الفاتورة", tone: "muted" });
+    }
+    lines.push({
+      text: "استرجعها من الفواتير المفتوحة عند وصول العميل",
+      tone: "muted",
+    });
+    return { title: "تم تعليق الطلب", lines };
+  }
+
   if (!options.kitchenFailed && !options.receiptFailed) {
     return {
       title: "تم الدفع",

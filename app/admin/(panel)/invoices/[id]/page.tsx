@@ -28,6 +28,8 @@ import {
   users,
 } from "@/lib/db/schema";
 import { availableAtVenue } from "@/lib/menu/scope";
+import { paymentMethodLabel } from "@/lib/payments/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 import {
   formatDateTime,
   formatMoney,
@@ -63,6 +65,13 @@ export default async function AdminInvoicePage({
   const cashier = order.cashierId
     ? db.select().from(users).where(eq(users.id, order.cashierId)).get()
     : null;
+  const paymentMethods = listPaymentMethods();
+  const paymentMethod = order.paymentMethod
+    ? paymentMethods.find((method) => method.code === order.paymentMethod)
+    : null;
+  const paymentLabel = order.paymentMethod
+    ? paymentMethodLabel(order.paymentMethod, paymentMethods)
+    : "—";
 
   const cats = db
     .select()
@@ -157,20 +166,16 @@ export default async function AdminInvoicePage({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">
-            {order.paymentMethod === "card" ? (
-              <CreditCard className="size-3.5" />
-            ) : (
+            {paymentMethod?.cashDrawer ? (
               <Banknote className="size-3.5" />
+            ) : paymentMethod?.deferred ? (
+              <Clock3 className="size-3.5" />
+            ) : (
+              <CreditCard className="size-3.5" />
             )}
             الدفع
           </p>
-          <p className="font-black">
-            {order.paymentMethod === "cash"
-              ? "نقدي"
-              : order.paymentMethod === "card"
-                ? "بطاقة"
-                : "—"}
-          </p>
+          <p className="font-black">{paymentLabel}</p>
         </div>
         <div className="rounded-2xl border border-base-300/70 bg-base-100 px-4 py-3">
           <p className="mb-1 flex items-center gap-1.5 text-xs text-base-content/45">

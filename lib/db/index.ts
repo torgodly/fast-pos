@@ -6,6 +6,7 @@ import path from "path";
 import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateNullableMenuVenue } from "./migrate-nullable-menu-venue";
+import { migratePaymentMethods } from "./migrate-payment-methods";
 import { migratePrinterAutoPrint } from "./migrate-printer-auto-print";
 import { migrateShiftCash } from "./migrate-shift-cash";
 import { migrateShiftExpenses } from "./migrate-shift-expenses";
@@ -100,6 +101,7 @@ function createDb() {
     const db = drizzle(sqlite, { schema });
     ensureSchema(sqlite);
     migrateUnits(sqlite);
+    migratePaymentMethods(sqlite);
     migratePrinterAutoPrint(sqlite);
     migrateShiftCash(sqlite);
     migrateShiftExpenses(sqlite);
@@ -538,6 +540,20 @@ function ensureSchema(sqlite: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      deferred INTEGER NOT NULL DEFAULT 0,
+      cash_drawer INTEGER NOT NULL DEFAULT 0,
+      built_in INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS payment_methods_code_idx
+      ON payment_methods(code);
+
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       venue_id TEXT NOT NULL REFERENCES venues(id),
@@ -548,6 +564,8 @@ function ensureSchema(sqlite: Database.Database) {
       shift_id INTEGER REFERENCES shifts(id),
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
+      held_at TEXT,
+      held_by INTEGER REFERENCES users(id),
       total REAL NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       paid_at TEXT

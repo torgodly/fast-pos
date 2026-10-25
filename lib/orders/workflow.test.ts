@@ -84,6 +84,8 @@ function createMemoryDb() {
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
       total REAL NOT NULL DEFAULT 0,
+      held_at TEXT,
+      held_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       paid_at TEXT
     );

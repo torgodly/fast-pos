@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { db } from "@/lib/db";
 import {
@@ -10,6 +10,11 @@ import {
   shifts,
   users,
 } from "@/lib/db/schema";
+import {
+  buildPaymentBreakdown,
+  type PaymentBreakdownItem,
+} from "@/lib/payments/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 import { reportGroupsForVenue } from "@/lib/reports/groups";
 import { nowSqlTripoli, workDateTripoli } from "@/lib/time/tripoli";
 import type { VenueId } from "@/lib/types";
@@ -57,7 +62,8 @@ export type ShiftReportData = {
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: PaymentBreakdownItem[];
   totalItems: number;
   tableSales: number;
   quickSales: number;
@@ -80,7 +86,8 @@ export type ShiftTotals = {
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: PaymentBreakdownItem[];
   totalItems: number;
   tableSales: number;
   quickSales: number;
@@ -104,7 +111,8 @@ export type ShiftListItem = {
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: PaymentBreakdownItem[];
   expenseTotal: number;
 };
 
@@ -315,15 +323,12 @@ export function getShiftTotals(venueId: VenueId, shiftId: number): ShiftTotals {
   const totalSales = roundMoney(
     paidOrders.reduce((sum, order) => sum + order.total, 0),
   );
-  const cashTotal = roundMoney(
-    paidOrders
-      .filter((order) => order.paymentMethod === "cash")
-      .reduce((sum, order) => sum + order.total, 0),
-  );
-  const cardTotal = roundMoney(
-    paidOrders
-      .filter((order) => order.paymentMethod === "card")
-      .reduce((sum, order) => sum + order.total, 0),
+  const payment = buildPaymentBreakdown(
+    paidOrders.map((order) => ({
+      paymentMethod: order.paymentMethod,
+      total: order.total,
+    })),
+    listPaymentMethods(),
   );
   const tableSales = paidOrders.filter((order) => order.tableId !== null).length;
 
@@ -342,8 +347,9 @@ export function getShiftTotals(venueId: VenueId, shiftId: number): ShiftTotals {
   return {
     invoiceCount: paidOrders.length,
     totalSales,
-    cashTotal,
-    cardTotal,
+    cashTotal: payment.cashTotal,
+    nonCashTotal: payment.nonCashTotal,
+    paymentBreakdown: payment.breakdown,
     totalItems: groups.reduce((sum, group) => sum + group.qty, 0),
     tableSales,
     quickSales: paidOrders.length - tableSales,
@@ -393,7 +399,8 @@ export function buildShiftReportData(
     invoiceCount: totals.invoiceCount,
     totalSales: totals.totalSales,
     cashTotal: totals.cashTotal,
-    cardTotal: totals.cardTotal,
+    nonCashTotal: totals.nonCashTotal,
+    paymentBreakdown: totals.paymentBreakdown,
     totalItems: totals.totalItems,
     tableSales: totals.tableSales,
     quickSales: totals.quickSales,
@@ -483,30 +490,51 @@ export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
     .limit(limit)
     .all();
 
-  const totalsRows = db
-    .select({
-      shiftId: orders.shiftId,
-      invoiceCount: sql<number>`count(*)`.mapWith(Number),
-      totalSales: sql<number>`coalesce(sum(${orders.total}), 0)`.mapWith(Number),
-      cashTotal: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'cash' then ${orders.total} else 0 end), 0)`.mapWith(
-        Number,
-      ),
-      cardTotal: sql<number>`coalesce(sum(case when ${orders.paymentMethod} = 'card' then ${orders.total} else 0 end), 0)`.mapWith(
-        Number,
-      ),
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.venueId, venueId),
-        eq(orders.status, "paid"),
-        isNotNull(orders.shiftId),
-      ),
-    )
-    .groupBy(orders.shiftId)
-    .all();
+  const methods = listPaymentMethods();
+  const shiftIds = rows.map((row) => row.id);
+  const paidRows = shiftIds.length
+    ? db
+        .select({
+          shiftId: orders.shiftId,
+          paymentMethod: orders.paymentMethod,
+          total: orders.total,
+        })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.venueId, venueId),
+            eq(orders.status, "paid"),
+            inArray(orders.shiftId, shiftIds),
+          ),
+        )
+        .all()
+    : [];
+  const paidByShift = new Map<
+    number,
+    Array<{ paymentMethod: string | null; total: number }>
+  >();
+  for (const row of paidRows) {
+    if (row.shiftId === null) continue;
+    const list = paidByShift.get(row.shiftId) ?? [];
+    list.push({ paymentMethod: row.paymentMethod, total: row.total });
+    paidByShift.set(row.shiftId, list);
+  }
   const totalsByShift = new Map(
-    totalsRows.map((row) => [row.shiftId, row]),
+    [...paidByShift.entries()].map(([shiftId, list]) => {
+      const payment = buildPaymentBreakdown(list, methods);
+      return [
+        shiftId,
+        {
+          invoiceCount: list.length,
+          totalSales: roundMoney(
+            list.reduce((sum, row) => sum + row.total, 0),
+          ),
+          cashTotal: payment.cashTotal,
+          nonCashTotal: payment.nonCashTotal,
+          paymentBreakdown: payment.breakdown,
+        },
+      ];
+    }),
   );
 
   const expenseRows = db
@@ -542,7 +570,8 @@ export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
         invoiceCount: totals?.invoiceCount ?? 0,
         totalSales: totals?.totalSales ?? 0,
         cashTotal: totals?.cashTotal ?? 0,
-        cardTotal: totals?.cardTotal ?? 0,
+        nonCashTotal: totals?.nonCashTotal ?? 0,
+        paymentBreakdown: totals?.paymentBreakdown ?? [],
         expenseTotal: expensesByShift.get(row.id) ?? 0,
       },
     ];

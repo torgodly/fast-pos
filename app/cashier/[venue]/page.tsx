@@ -7,10 +7,12 @@ import { requireCashier } from "@/app/actions/auth";
 import { getCashierStationContext } from "@/app/actions/station";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
-import { orders, tables, users } from "@/lib/db/schema";
+import { customers, orders, tables, users } from "@/lib/db/schema";
 import { getOpenShift } from "@/lib/shifts/core";
 import { formatMoney, isVenueId } from "@/lib/venues";
 import { isCounterMode } from "@/lib/deployment";
+import { listPaymentMethods } from "@/lib/payments/store";
+import { paymentMethodLabel } from "@/lib/payments/core";
 
 export default async function CashierHomePage({
   params,
@@ -38,12 +40,19 @@ export default async function CashierHomePage({
       tableName: tables.name,
       waiterName: waiter.name,
       tableId: orders.tableId,
+      paymentMethod: orders.paymentMethod,
+      heldAt: orders.heldAt,
+      customerName: customers.name,
+      customerPhone: customers.phone,
     })
     .from(orders)
     .leftJoin(tables, eq(orders.tableId, tables.id))
     .leftJoin(waiter, eq(orders.waiterId, waiter.id))
+    .leftJoin(customers, eq(orders.customerId, customers.id))
     .where(and(eq(orders.venueId, venue), eq(orders.status, "open")))
     .all();
+
+  const methods = listPaymentMethods();
 
   return (
     <div className="flex min-h-dvh flex-1 flex-col">
@@ -148,22 +157,29 @@ export default async function CashierHomePage({
             <Link
               key={order.id}
               href={
-                canSell
+                hasCheckout
                   ? `/cashier/${venue}/order/${order.id}`
                   : `/cashier/${venue}`
               }
-              className={`flex items-center justify-between gap-3 rounded-xl border border-base-300/70 bg-base-100 px-3 py-3 ${
-                canSell
-                  ? "hover:border-primary/40"
-                  : "pointer-events-none opacity-50"
-              }`}
+              className={`flex items-center justify-between gap-3 rounded-xl border bg-base-100 px-3 py-3 ${
+                order.heldAt
+                  ? "border-warning/50"
+                  : "border-base-300/70"
+              } ${hasCheckout ? "hover:border-primary/40" : "pointer-events-none opacity-50"}`}
             >
               <div className="min-w-0">
-                <p className="truncate font-black">
+                <p className="flex flex-wrap items-center gap-1.5 truncate font-black">
                   #{order.id} · {order.tableName ?? "بيع سريع"}
+                  {order.heldAt ? (
+                    <span className="badge badge-warning badge-sm font-bold">
+                      آجل · {paymentMethodLabel(order.paymentMethod, methods)}
+                    </span>
+                  ) : null}
                 </p>
                 <p className="truncate text-xs text-base-content/45">
-                  {order.waiterName ?? "—"}
+                  {order.customerName
+                    ? `${order.customerName}${order.customerPhone ? ` · ${order.customerPhone}` : ""}`
+                    : (order.waiterName ?? "—")}
                 </p>
               </div>
               <p className="shrink-0 text-base font-black text-primary">

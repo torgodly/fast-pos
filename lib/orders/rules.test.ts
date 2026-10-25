@@ -142,4 +142,33 @@ describe("printer failure policy", () => {
     expect(notice.title).toBe("تم الدفع");
     expect(notice.lines.map((line) => line.text)).toEqual(["فاتورة #1"]);
   });
+
+  it("describes a deferred hold without claiming payment", () => {
+    const notice = quickSalePayNotice({
+      orderId: 12,
+      kitchenFailed: false,
+      receiptFailed: false,
+      held: true,
+    });
+    expect(notice.title).toBe("تم تعليق الطلب");
+    expect(notice.lines.map((line) => line.text)).toEqual([
+      "فاتورة #12 محفوظة كآجل",
+      "استرجعها من الفواتير المفتوحة عند وصول العميل",
+    ]);
+  });
+
+  it("keeps a held order when its kitchen ticket failed", () => {
+    const notice = quickSalePayNotice({
+      orderId: 13,
+      kitchenFailed: true,
+      receiptFailed: false,
+      held: true,
+    });
+    expect(notice.lines.map((line) => line.text)).toEqual([
+      "فاتورة #13 محفوظة كآجل",
+      "المطبخ لم يُطبع",
+      "أعد إرسال المطبخ من الفاتورة",
+      "استرجعها من الفواتير المفتوحة عند وصول العميل",
+    ]);
+  });
 });

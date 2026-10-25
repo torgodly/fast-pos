@@ -24,6 +24,8 @@ import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { categories, printers, users } from "@/lib/db/schema";
+import { paymentMethodLabel } from "@/lib/payments/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 import {
   defaultReportRange,
   inputDate,
@@ -31,6 +33,19 @@ import {
 } from "@/lib/reports/filters";
 import { getReportSummary } from "@/lib/reports/summary";
 import { formatDateTime, formatMoney, getVenueName } from "@/lib/venues";
+
+function PaymentMethodIcon({
+  code,
+  methods,
+}: {
+  code: string | null;
+  methods: Array<{ code: string; cashDrawer: boolean; deferred: boolean }>;
+}) {
+  const method = methods.find((candidate) => candidate.code === code);
+  if (method?.cashDrawer) return <Banknote className="size-3.5" />;
+  if (method?.deferred) return <Clock3 className="size-3.5" />;
+  return <CreditCard className="size-3.5" />;
+}
 
 export default async function AdminReportsPage({
   searchParams,
@@ -79,7 +94,8 @@ export default async function AdminReportsPage({
     totalSales,
     totalItems,
     cashTotal,
-    cardTotal,
+    nonCashTotal,
+    paymentBreakdown,
     averageTicket,
     tableSales,
     quickSales,
@@ -89,6 +105,8 @@ export default async function AdminReportsPage({
     waiterPerformance,
     cashierPerformance,
   } = summary;
+
+  const paymentMethods = listPaymentMethods();
 
   const printFilters = {
     venue,
@@ -356,8 +374,12 @@ export default async function AdminReportsPage({
               className="select select-bordered w-full"
             >
               <option value="all">كل طرق الدفع</option>
-              <option value="cash">نقدي</option>
-              <option value="card">بطاقة</option>
+              {paymentMethods.map((method) => (
+                <option key={method.code} value={method.code}>
+                  {method.name}
+                  {method.active ? "" : " (معطّلة)"}
+                </option>
+              ))}
             </select>
           </label>
           <label className="form-control">
@@ -443,11 +465,11 @@ export default async function AdminReportsPage({
             hint: "الدفعات النقدية",
           },
           {
-            label: "مدفوع بالبطاقة",
-            value: cardTotal,
+            label: "مدفوع بغير النقد",
+            value: nonCashTotal,
             icon: CreditCard,
             color: "bg-info/10 text-info",
-            hint: "دفعات البطاقات",
+            hint: "بطاقة وآجل وباقي الطرق",
           },
         ].map(({ label, value, icon: Icon, color, hint }) => (
           <div key={label} className="premium-card card">
@@ -468,6 +490,41 @@ export default async function AdminReportsPage({
           </div>
         ))}
       </div>
+
+      <section className="premium-card card">
+        <div className="card-body gap-3 p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <CircleDollarSign className="size-5 text-primary" />
+            <div>
+              <h3 className="font-black">التحصيل حسب طريقة الدفع</h3>
+              <p className="text-xs text-base-content/45">
+                كل طريقة مع عدد الفواتير وقيمة التحصيل
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {paymentBreakdown.map((item) => (
+              <div
+                key={item.code ?? "unknown"}
+                className="min-w-36 rounded-xl border border-base-300/70 bg-base-200/30 px-3 py-2"
+              >
+                <p className="text-xs font-bold text-base-content/50">
+                  {item.name}
+                </p>
+                <p className="text-lg font-black">{formatMoney(item.total)}</p>
+                <p className="text-[11px] text-base-content/40">
+                  {item.count} فاتورة
+                </p>
+              </div>
+            ))}
+            {paymentBreakdown.length === 0 ? (
+              <p className="py-2 text-sm text-base-content/45">
+                لا مدفوعات في هذه الفترة
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="premium-card card">
@@ -510,8 +567,10 @@ export default async function AdminReportsPage({
               <CircleDollarSign className="size-5" />
             </span>
             <p className="text-xs font-bold text-base-content/45">مطابقة التحصيل</p>
-            <p className="text-xl font-black">{formatMoney(cashTotal + cardTotal)}</p>
-            <p className="text-xs text-success">نقدي + بطاقة = الإجمالي</p>
+            <p className="text-xl font-black">
+              {formatMoney(cashTotal + nonCashTotal)}
+            </p>
+            <p className="text-xs text-success">نقدي + غير نقدي = الإجمالي</p>
           </div>
         </div>
       </section>
@@ -590,7 +649,7 @@ export default async function AdminReportsPage({
                     <th>الكاشير</th>
                     <th>الفواتير</th>
                     <th>نقدي</th>
-                    <th>بطاقة</th>
+                    <th>غير نقدي</th>
                     <th>الإجمالي</th>
                   </tr>
                 </thead>
@@ -600,7 +659,7 @@ export default async function AdminReportsPage({
                       <td className="font-bold">{person.name}</td>
                       <td>{person.invoices}</td>
                       <td>{formatMoney(person.cash)}</td>
-                      <td>{formatMoney(person.card)}</td>
+                      <td>{formatMoney(person.nonCash)}</td>
                       <td className="font-black text-secondary">
                         {formatMoney(person.sales)}
                       </td>
@@ -744,16 +803,11 @@ export default async function AdminReportsPage({
                     <td>{row.cashierName ?? "-"}</td>
                     <td>
                       <span className="badge badge-ghost gap-1.5">
-                        {row.paymentMethod === "cash" ? (
-                          <Banknote className="size-3.5" />
-                        ) : (
-                          <CreditCard className="size-3.5" />
-                        )}
-                        {row.paymentMethod === "cash"
-                          ? "نقدي"
-                          : row.paymentMethod === "card"
-                            ? "بطاقة"
-                            : "-"}
+                        <PaymentMethodIcon
+                          code={row.paymentMethod}
+                          methods={paymentMethods}
+                        />
+                        {paymentMethodLabel(row.paymentMethod, paymentMethods)}
                       </span>
                     </td>
                     <td className="font-black">{formatMoney(row.total)}</td>

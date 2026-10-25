@@ -5,6 +5,7 @@ import type {
   ShiftItemsPrintData,
   ShiftReportPrintData,
 } from "./receipts";
+import { checkoutReceiptMethodLabel } from "./receipts";
 import {
   encodePrinterText,
   hasArabicText,
@@ -193,7 +194,7 @@ function kitchenLine(
     return;
   }
 
-  const fontSize = options.emphasis ? 30 : 26;
+  const fontSize = options.emphasis ? 34 : 30;
 
   parts.push(align("right"));
 
@@ -289,8 +290,13 @@ export function buildReportSummaryEscPos(data: ReportSummaryPrintData): Uint8Arr
   });
   fieldLine(parts, "الفواتير", String(data.invoiceCount));
   fieldLine(parts, "قطع مباعة", String(data.totalItems));
-  fieldLine(parts, "نقدي", money(data.cashTotal));
-  fieldLine(parts, "بطاقة", money(data.cardTotal));
+  if (data.paymentBreakdown.length === 0) {
+    fieldLine(parts, "لا مدفوعات", money(0));
+  } else {
+    for (const payment of data.paymentBreakdown) {
+      fieldLine(parts, payment.name, money(payment.total));
+    }
+  }
   fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
 
   reportSep(parts);
@@ -370,8 +376,13 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
     bold: true,
     fontSize: 32,
   });
-  fieldLine(parts, "نقدي", money(data.cashTotal));
-  fieldLine(parts, "بطاقة", money(data.cardTotal));
+  if (data.paymentBreakdown.length === 0) {
+    fieldLine(parts, "لا مدفوعات", money(0));
+  } else {
+    for (const payment of data.paymentBreakdown) {
+      fieldLine(parts, payment.name, money(payment.total));
+    }
+  }
   fieldLine(parts, "قطع مباعة", String(data.totalItems));
   fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
 
@@ -461,12 +472,7 @@ export function buildCheckoutEscPos(
   data: CheckoutReceiptData,
   logo: Uint8Array | null = null,
 ): Uint8Array {
-  const method =
-    data.paymentMethod === "preview"
-      ? "غير مدفوعة"
-      : data.paymentMethod === "cash"
-        ? "نقدي"
-        : "بطاقة";
+  const method = checkoutReceiptMethodLabel(data);
   const footer = data.footerMessage?.trim() || "شكراً لزيارتكم";
   const brand = receiptBrandBlock(data);
   const parts: Uint8Array[] = [init()];

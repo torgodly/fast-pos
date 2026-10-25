@@ -38,7 +38,12 @@ function summaryToPrintData(
     invoiceCount: summary.rows.length,
     totalSales: summary.totalSales,
     cashTotal: summary.cashTotal,
-    cardTotal: summary.cardTotal,
+    nonCashTotal: summary.nonCashTotal,
+    paymentBreakdown: summary.paymentBreakdown.map((item) => ({
+      name: item.name,
+      total: item.total,
+      count: item.count,
+    })),
     totalItems: summary.totalItems,
     tableSales: summary.tableSales,
     quickSales: summary.quickSales,

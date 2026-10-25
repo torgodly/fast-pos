@@ -40,6 +40,13 @@ import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import { consumeForPaidOrder } from "@/lib/inventory/service";
 import { insufficientWarningText } from "@/lib/inventory/rules";
 import { getOpenShift, OPEN_SHIFT_REQUIRED_ERROR } from "@/lib/shifts/core";
+import { getActivePaymentMethod, getPaymentMethod } from "@/lib/payments/store";
+import { paymentMethodLabel } from "@/lib/payments/core";
+
+function receiptPaymentMethodLabel(code: string) {
+  const method = getPaymentMethod(code);
+  return paymentMethodLabel(code, method ? [method] : []);
+}
 
 function recalcOrderTotal(orderId: number) {
   const lines = db
@@ -936,6 +943,7 @@ async function buildCheckoutReceiptForOrder(
       customerPhone: customer?.phone ?? null,
       cashierName: cashier?.name ?? "كاشير",
       paymentMethod: order.paymentMethod,
+      paymentMethodLabel: receiptPaymentMethodLabel(order.paymentMethod),
       paidAt: formatDateTime(order.paidAt ?? order.createdAt),
       total: order.total,
       lines: lines.map((line) => ({
@@ -1030,6 +1038,7 @@ export async function payOrder(
       printError?: string;
       browserPrint?: boolean;
       receiptHtml?: string;
+      held?: boolean;
       message: string;
     }
 > {
@@ -1046,14 +1055,9 @@ export async function payOrder(
     return { error: "فرع غير صالح" };
   }
 
-  const openShift = getOpenShift(order.venueId);
-  if (!openShift) {
-    return { error: OPEN_SHIFT_REQUIRED_ERROR };
-  }
-
-  const stationCtx = await getCashierStationContext(order.venueId);
-  if ("error" in stationCtx) {
-    return { error: stationCtx.error };
+  const method = getActivePaymentMethod(paymentMethod);
+  if (!method) {
+    return { error: "طريقة الدفع غير متاحة — حدّث الصفحة" };
   }
 
   const lines = db
@@ -1066,13 +1070,59 @@ export async function payOrder(
   }
 
   const total = recalcOrderTotal(orderId);
+
+  if (method.deferred) {
+    const heldAt = nowSqlTripoli();
+    db.update(orders)
+      .set({
+        paymentMethod: method.code,
+        heldAt,
+        heldBy: session.userId,
+        total,
+      })
+      .where(eq(orders.id, orderId))
+      .run();
+
+    recordSessionAudit(session, {
+      venueId: order.venueId,
+      kind: "hold",
+      orderId,
+      success: true,
+      detail: `تعليق الطلب على «${method.name}» (آجل)`,
+    });
+
+    revalidatePath(`/cashier/${order.venueId}`);
+    revalidatePath(`/waiter/${order.venueId}`);
+    revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
+
+    return {
+      ok: true,
+      nextUrl: `/cashier/${order.venueId}`,
+      printOk: true,
+      held: true,
+      message: `تم تعليق الطلب #${orderId} على «${method.name}» — استرجعها من الفواتير المفتوحة عند وصول العميل`,
+    };
+  }
+
+  const openShift = getOpenShift(order.venueId);
+  if (!openShift) {
+    return { error: OPEN_SHIFT_REQUIRED_ERROR };
+  }
+
+  const stationCtx = await getCashierStationContext(order.venueId);
+  if ("error" in stationCtx) {
+    return { error: stationCtx.error };
+  }
+
   const isQuickSale = order.tableId === null;
   const paidAt = nowSqlTripoli();
 
   db.update(orders)
     .set({
       status: "paid",
-      paymentMethod,
+      paymentMethod: method.code,
+      heldAt: null,
+      heldBy: null,
       cashierId: session.userId,
       shiftId: openShift.id,
       total,
@@ -1103,7 +1153,8 @@ export async function payOrder(
     customerName: customer?.name ?? null,
     customerPhone: customer?.phone ?? null,
     cashierName: session.name,
-    paymentMethod,
+    paymentMethod: method.code,
+    paymentMethodLabel: method.name,
     paidAt: formatDateTime(paidAt),
     total,
     lines: lines.map((line) => ({
@@ -1187,6 +1238,7 @@ export async function payQuickSale(
       browserPrint?: boolean;
       receiptHtml?: string;
       orderId: number;
+      held?: boolean;
       kitchenFailed: boolean;
       receiptFailed: boolean;
       inventoryWarning?: string;
@@ -1200,8 +1252,14 @@ export async function payQuickSale(
     return { error: "الفاتورة فارغة" };
   }
 
+  const method = getActivePaymentMethod(paymentMethod);
+  if (!method) {
+    return { error: "طريقة الدفع غير متاحة — حدّث الصفحة" };
+  }
+  const hold = method.deferred;
+
   const openShift = getOpenShift(venueId);
-  if (!openShift) {
+  if (!hold && !openShift) {
     return { error: OPEN_SHIFT_REQUIRED_ERROR };
   }
 
@@ -1252,9 +1310,12 @@ export async function payQuickSale(
           customerId: customerId ?? null,
           waiterId: null,
           cashierId: session.userId,
-          shiftId: openShift.id,
+          shiftId: hold ? null : openShift!.id,
           status: "open",
           total,
+          paymentMethod: hold ? method.code : null,
+          heldAt: hold ? nowSqlTripoli() : null,
+          heldBy: hold ? session.userId : null,
         })
         .returning()
         .get();
@@ -1340,11 +1401,36 @@ export async function payQuickSale(
     }
   }
 
+  if (hold) {
+    recordSessionAudit(session, {
+      venueId,
+      kind: "hold",
+      orderId: order.id,
+      success: true,
+      detail: `تعليق بيع سريع على «${method.name}» (آجل)`,
+    });
+    revalidatePath(`/cashier/${venueId}`);
+    revalidatePath(`/cashier/${venueId}/quick`);
+    revalidatePath(`/cashier/${venueId}/sales`);
+
+    return {
+      ok: true,
+      orderId: order.id,
+      held: true,
+      kitchenFailed,
+      receiptFailed: false,
+      printOk: !kitchenFailed,
+      printError: kitchenFailed ? kitchenError : undefined,
+    };
+  }
+
   const paidAt = nowSqlTripoli();
   db.update(orders)
     .set({
       status: "paid",
-      paymentMethod,
+      paymentMethod: method.code,
+      heldAt: null,
+      heldBy: null,
       paidAt,
     })
     .where(eq(orders.id, order.id))
@@ -1360,7 +1446,8 @@ export async function payQuickSale(
     customerName: customer?.name ?? null,
     customerPhone: customer?.phone ?? null,
     cashierName: session.name,
-    paymentMethod,
+    paymentMethod: method.code,
+    paymentMethodLabel: method.name,
     paidAt: formatDateTime(paidAt),
     total,
     lines: validLines.map((line) => ({

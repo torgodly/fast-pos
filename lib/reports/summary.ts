@@ -22,6 +22,11 @@ import {
   tables,
   users,
 } from "@/lib/db/schema";
+import {
+  buildPaymentBreakdown,
+  type PaymentBreakdownItem,
+} from "@/lib/payments/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 import type { VenueId } from "@/lib/types";
 import { getVenueName } from "@/lib/venues";
 import {
@@ -42,7 +47,7 @@ export type ReportSummary = {
   waiterId: number | null;
   cashierId: number | null;
   categoryId: number | null;
-  payment: "all" | "cash" | "card";
+  payment: string;
   saleType: "all" | "table" | "quick";
   rows: Array<{
     id: number;
@@ -72,7 +77,8 @@ export type ReportSummary = {
   totalSales: number;
   totalItems: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: PaymentBreakdownItem[];
   averageTicket: number;
   tableSales: number;
   quickSales: number;
@@ -91,7 +97,7 @@ export type ReportSummary = {
     invoices: number;
     sales: number;
     cash: number;
-    card: number;
+    nonCash: number;
   }>;
 };
 
@@ -103,7 +109,9 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
   const cashierId = parseId(input.cashier);
   const categoryId = parseId(input.category);
   const payment =
-    input.payment === "cash" || input.payment === "card" ? input.payment : "all";
+    input.payment && input.payment.trim() && input.payment !== "all"
+      ? input.payment
+      : "all";
   const saleType =
     input.saleType === "table" || input.saleType === "quick"
       ? input.saleType
@@ -116,6 +124,7 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
 
   const waiter = alias(users, "waiter");
   const cashier = alias(users, "cashier");
+  const methods = listPaymentMethods();
 
   const staff = db
     .select({
@@ -232,12 +241,13 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
 
   const totalSales = rows.reduce((s, r) => s + r.total, 0);
   const totalItems = itemSales.reduce((sum, row) => sum + row.qty, 0);
-  const cashTotal = rows
-    .filter((r) => r.paymentMethod === "cash")
-    .reduce((s, r) => s + r.total, 0);
-  const cardTotal = rows
-    .filter((r) => r.paymentMethod === "card")
-    .reduce((s, r) => s + r.total, 0);
+  const paymentTotals = buildPaymentBreakdown(
+    rows.map((row) => ({
+      paymentMethod: row.paymentMethod,
+      total: row.total,
+    })),
+    methods,
+  );
   const averageTicket = rows.length ? totalSales / rows.length : 0;
   const tableSalesCount = rows.filter((row) => row.tableId !== null).length;
   const quickSalesCount = rows.length - tableSalesCount;
@@ -280,17 +290,20 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
   const cashierPerformance = cashiers
     .map((person) => {
       const personRows = rows.filter((row) => row.cashierId === person.id);
+      const personPayment = buildPaymentBreakdown(
+        personRows.map((row) => ({
+          paymentMethod: row.paymentMethod,
+          total: row.total,
+        })),
+        methods,
+      );
       return {
         id: person.id,
         name: person.name,
         invoices: personRows.length,
         sales: personRows.reduce((sum, row) => sum + row.total, 0),
-        cash: personRows
-          .filter((row) => row.paymentMethod === "cash")
-          .reduce((sum, row) => sum + row.total, 0),
-        card: personRows
-          .filter((row) => row.paymentMethod === "card")
-          .reduce((sum, row) => sum + row.total, 0),
+        cash: personPayment.cashTotal,
+        nonCash: personPayment.nonCashTotal,
       };
     })
     .filter((person) => person.invoices > 0)
@@ -314,8 +327,9 @@ export function getReportSummary(input: ReportFiltersInput): ReportSummary {
     categorySales,
     totalSales,
     totalItems,
-    cashTotal,
-    cardTotal,
+    cashTotal: paymentTotals.cashTotal,
+    nonCashTotal: paymentTotals.nonCashTotal,
+    paymentBreakdown: paymentTotals.breakdown,
     averageTicket,
     tableSales: tableSalesCount,
     quickSales: quickSalesCount,

@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/sqlite-core";
 import {
   ArrowRight,
   Banknote,
+  Clock3,
   CreditCard,
   History,
   ReceiptText,
@@ -17,6 +18,8 @@ import { ReprintReceiptButton } from "@/components/ReprintReceiptButton";
 import { db } from "@/lib/db";
 import { orderItems, orders, tables, users } from "@/lib/db/schema";
 import { orderHasKitchenPending } from "@/lib/orders/rules";
+import { buildPaymentBreakdown, paymentMethodLabel } from "@/lib/payments/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 import { getOpenShift } from "@/lib/shifts/core";
 import { formatDateTime, formatMoney, isVenueId } from "@/lib/venues";
 
@@ -118,12 +121,9 @@ export default async function CashierSalesPage({
   });
 
   const totalAmount = sales.reduce((sum, row) => sum + row.total, 0);
-  const cashTotal = sales
-    .filter((row) => row.paymentMethod === "cash")
-    .reduce((sum, row) => sum + row.total, 0);
-  const cardTotal = sales
-    .filter((row) => row.paymentMethod === "card")
-    .reduce((sum, row) => sum + row.total, 0);
+  const methods = listPaymentMethods();
+  const methodByCode = new Map(methods.map((method) => [method.code, method]));
+  const paymentTotals = buildPaymentBreakdown(sales, methods);
 
   const dayLinks: Array<{ key: string; label: string; href: string }> = [
     {
@@ -198,20 +198,25 @@ export default async function CashierSalesPage({
               {sales.length} فاتورة
             </p>
           </div>
-          <div className="premium-card rounded-2xl p-4">
-            <p className="flex items-center gap-1 text-xs font-bold text-base-content/45">
-              <Banknote className="size-3.5" />
-              نقدي
-            </p>
-            <p className="mt-1 text-xl font-black">{formatMoney(cashTotal)}</p>
-          </div>
-          <div className="premium-card rounded-2xl p-4">
-            <p className="flex items-center gap-1 text-xs font-bold text-base-content/45">
-              <CreditCard className="size-3.5" />
-              بطاقة
-            </p>
-            <p className="mt-1 text-xl font-black">{formatMoney(cardTotal)}</p>
-          </div>
+          {paymentTotals.breakdown.map((item) => {
+            const Icon = item.cashDrawer
+              ? Banknote
+              : item.deferred
+                ? Clock3
+                : CreditCard;
+            return (
+              <div key={item.code ?? "unknown"} className="premium-card rounded-2xl p-4">
+                <p className="flex items-center gap-1 text-xs font-bold text-base-content/45">
+                  <Icon className="size-3.5" />
+                  {item.name}
+                </p>
+                <p className="mt-1 text-xl font-black">{formatMoney(item.total)}</p>
+                <p className="mt-1 text-xs text-base-content/40">
+                  {item.count} فاتورة
+                </p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="space-y-3">
@@ -238,12 +243,12 @@ export default async function CashierSalesPage({
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span
                       className={`badge badge-sm ${
-                        sale.paymentMethod === "cash"
+                        methodByCode.get(sale.paymentMethod ?? "")?.cashDrawer
                           ? "badge-success badge-soft"
                           : "badge-info badge-soft"
                       }`}
                     >
-                      {sale.paymentMethod === "cash" ? "نقدي" : "بطاقة"}
+                      {paymentMethodLabel(sale.paymentMethod, methods)}
                     </span>
                     {sale.kitchenPending ? (
                       <span className="badge badge-warning badge-sm badge-soft">

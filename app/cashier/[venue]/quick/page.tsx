@@ -11,6 +11,7 @@ import { categories, customers, items } from "@/lib/db/schema";
 import { isVenueId } from "@/lib/venues";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getOpenShift } from "@/lib/shifts/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 
 export default async function CashierQuickPage({
   params,
@@ -89,6 +90,7 @@ export default async function CashierQuickPage({
           categories={cats}
           items={menuItems}
           customers={customerOptions}
+          paymentMethods={listPaymentMethods(true)}
         />
       </main>
     </div>

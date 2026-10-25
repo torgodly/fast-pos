@@ -84,7 +84,7 @@ export default async function AdminShiftsPage({
               <th>الفواتير</th>
               <th>نقدي</th>
               <th>مصروفات</th>
-              <th>بطاقة</th>
+              <th>غير نقدي</th>
               <th>الإجمالي</th>
               <th>عهدة</th>
               <th>متوقع</th>
@@ -120,7 +120,9 @@ export default async function AdminShiftsPage({
                   <td className="tabular-nums text-warning">
                     {formatMoney(row.expenseTotal)}
                   </td>
-                  <td className="tabular-nums">{formatMoney(row.cardTotal)}</td>
+                  <td className="tabular-nums">
+                    {formatMoney(row.nonCashTotal)}
+                  </td>
                   <td className="font-black tabular-nums">
                     {formatMoney(row.totalSales)}
                   </td>

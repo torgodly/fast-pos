@@ -1,3 +1,4 @@
+import { paymentMethodLabel } from "@/lib/payments/core";
 import { receiptBrandBlock } from "./brand";
 
 export type ReceiptLine = {
@@ -16,7 +17,8 @@ export type ReportSummaryPrintData = {
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: Array<{ name: string; total: number; count: number }>;
   totalItems: number;
   tableSales: number;
   quickSales: number;
@@ -30,7 +32,7 @@ export type ReportSummaryPrintData = {
     name: string;
     invoices: number;
     cash: number;
-    card: number;
+    nonCash: number;
     sales: number;
   }>;
 };
@@ -49,7 +51,8 @@ export type ShiftReportPrintData = {
   invoiceCount: number;
   totalSales: number;
   cashTotal: number;
-  cardTotal: number;
+  nonCashTotal: number;
+  paymentBreakdown: Array<{ name: string; total: number; count: number }>;
   totalItems: number;
   tableSales: number;
   quickSales: number;
@@ -102,12 +105,22 @@ export type CheckoutReceiptData = {
   brandPhone?: string | null;
   brandAddress?: string | null;
   cashierName: string;
-  paymentMethod: "cash" | "card" | "preview";
+  paymentMethod: string;
+  /** Configured display name; falls back to legacy cash/card labels. */
+  paymentMethodLabel?: string | null;
   paidAt: string;
   total: number;
   footerMessage?: string;
   lines: Array<ReceiptLine & { unitPrice: number; lineTotal: number }>;
 };
+
+export function checkoutReceiptMethodLabel(
+  data: Pick<CheckoutReceiptData, "paymentMethod" | "paymentMethodLabel">,
+) {
+  if (data.paymentMethod === "preview") return "غير مدفوعة";
+  const configured = data.paymentMethodLabel?.trim();
+  return configured || paymentMethodLabel(data.paymentMethod, []);
+}
 
 function escapeHtml(value: string) {
   return value
@@ -430,12 +443,7 @@ export function buildCheckoutReceiptHtml(
   data: CheckoutReceiptData,
   logoDataUrl?: string | null,
 ) {
-  const method =
-    data.paymentMethod === "preview"
-      ? "غير مدفوعة"
-      : data.paymentMethod === "cash"
-        ? "نقداً"
-        : "بطاقة";
+  const method = checkoutReceiptMethodLabel(data);
   const logoHtml = logoDataUrl
     ? `<img class="logo" src="${logoDataUrl}" alt="الشعار" />`
     : "";
@@ -500,6 +508,13 @@ export function buildCheckoutReceiptHtml(
   );
 }
 
+function reportPaymentRows(
+  rows: Array<{ name: string; total: number }>,
+) {
+  if (rows.length === 0) return metaRow("لا مدفوعات", money(0));
+  return rows.map((row) => metaRow(row.name, money(row.total))).join("");
+}
+
 function reportSalesRows(
   rows: Array<{ name: string; qty: number; revenue: number }>,
 ) {
@@ -535,8 +550,7 @@ export function buildDetailedSalesReportHtml(data: ReportSummaryPrintData) {
       ${metaRow("طباعة", data.printedAt)}
       ${metaRow("فواتير", String(data.invoiceCount))}
       ${metaRow("قطع", String(data.totalItems))}
-      ${metaRow("نقدي", money(data.cashTotal))}
-      ${metaRow("بطاقة", money(data.cardTotal))}
+      ${reportPaymentRows(data.paymentBreakdown)}
     </table>
     <table class="total-row">
       <tr>

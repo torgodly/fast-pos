@@ -69,8 +69,11 @@ export function resolveKitchenPrinterForVenue(options: {
     if (linked) return linked;
   }
 
-  // Once a shared category has per-venue printers, do not auto-pick the other branch.
-  if (managed) return null;
+  // No printer for this category/venue (or its printer was removed/inactive):
+  // the ticket still has to reach the kitchen, so fall back to the main one.
+  // Keep the other venue's dedicated printer out of that fallback.
+  const otherVenuePrinterId =
+    venueId === "cafe" ? restaurantPrinterId : cafePrinterId;
 
   const sharedKitchenPrinters = db
     .select()
@@ -81,7 +84,8 @@ export function resolveKitchenPrinterForVenue(options: {
         kitchenPrinterRolesFilter,
       ),
     )
-    .all();
+    .all()
+    .filter((printer) => printer.id !== otherVenuePrinterId);
 
   const kind =
     categoryName && DISPLAY_PRINTER_GROUPS.has(categoryName)

@@ -180,8 +180,8 @@ export function CashierShiftPanel({
               <p className="font-black">{formatMoney(totals.cashTotal)}</p>
             </div>
             <div className="rounded-lg border border-base-300 px-2 py-1.5">
-              <p className="text-[11px] text-base-content/45">بطاقة</p>
-              <p className="font-black">{formatMoney(totals.cardTotal)}</p>
+              <p className="text-[11px] text-base-content/45">غير نقدي</p>
+              <p className="font-black">{formatMoney(totals.nonCashTotal)}</p>
             </div>
             <div className="rounded-lg border border-base-300 px-2 py-1.5">
               <p className="text-[11px] text-base-content/45">عهدة افتتاحية</p>

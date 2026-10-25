@@ -2,7 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, CreditCard, LoaderCircle } from "lucide-react";
+import {
+  Banknote,
+  Clock3,
+  CreditCard,
+  LoaderCircle,
+  Wallet,
+} from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
 import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
@@ -12,6 +18,7 @@ import {
   quickSalePayNotice,
   type PayNotice,
 } from "@/lib/orders/rules";
+import type { PaymentMethodLike } from "@/lib/payments/core";
 import {
   CategoryItemPicker,
   type MenuCategory,
@@ -29,17 +36,19 @@ export function QuickSaleBoard({
   categories,
   items,
   customers,
+  paymentMethods,
 }: {
   venueId: string;
   categories: MenuCategory[];
   items: MenuItem[];
   customers: CustomerOption[];
+  paymentMethods: PaymentMethodLike[];
 }) {
   const router = useRouter();
   const { showToast } = useToast();
   const [cart, setCart] = useState<QuickSaleLine[]>([]);
   const [customerId, setCustomerId] = useState<number | null>(null);
-  const [method, setMethod] = useState<"cash" | "card" | null>(null);
+  const [method, setMethod] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<PayNotice | null>(null);
 
@@ -118,7 +127,7 @@ export function QuickSaleBoard({
     );
   }
 
-  function askConfirm(selected: "cash" | "card") {
+  function askConfirm(selected: string) {
     if (cart.length === 0) {
       showToast("error", "أضف أصنافاً قبل الدفع");
       return;
@@ -167,7 +176,7 @@ export function QuickSaleBoard({
       setCart([]);
       setCustomerId(null);
 
-      let kitchenFailed = payResult.kitchenFailed;
+      const kitchenFailed = payResult.kitchenFailed;
       let receiptFailed = payResult.receiptFailed;
 
       if (payResult.browserPrint && payResult.receiptHtml) {
@@ -185,6 +194,7 @@ export function QuickSaleBoard({
           orderId: payResult.orderId,
           kitchenFailed,
           receiptFailed,
+          held: payResult.held,
         }),
       );
       if (payResult.inventoryWarning) {
@@ -194,7 +204,23 @@ export function QuickSaleBoard({
     });
   }
 
-  const methodLabel = method === "cash" ? "نقدي" : "بطاقة";
+  const selectedMethod = paymentMethods.find((item) => item.code === method) ?? null;
+  const methodLabel = selectedMethod?.name ?? "";
+  const holding = !!selectedMethod?.deferred;
+
+  function methodClass(item: PaymentMethodLike) {
+    if (item.cashDrawer) return "btn-success";
+    if (item.code === "card") return "btn-info";
+    if (item.deferred) return "btn-warning";
+    return "btn-neutral btn-outline";
+  }
+
+  function methodIcon(item: PaymentMethodLike) {
+    if (item.cashDrawer) return <Banknote className="size-3.5" />;
+    if (item.code === "card") return <CreditCard className="size-3.5" />;
+    if (item.deferred) return <Clock3 className="size-3.5" />;
+    return <Wallet className="size-3.5" />;
+  }
 
   const payFooter = (
     <div className="space-y-1">
@@ -206,24 +232,18 @@ export function QuickSaleBoard({
       />
       <div className="grid grid-cols-[1fr_auto] gap-1">
         <div className="grid grid-cols-2 gap-1">
-          <button
-            type="button"
-            className="btn btn-success btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
-            disabled={pending || cart.length === 0}
-            onClick={() => askConfirm("cash")}
-          >
-            <Banknote className="size-3.5" />
-            نقدي
-          </button>
-          <button
-            type="button"
-            className="btn btn-info btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs"
-            disabled={pending || cart.length === 0}
-            onClick={() => askConfirm("card")}
-          >
-            <CreditCard className="size-3.5" />
-            بطاقة
-          </button>
+          {paymentMethods.map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              className={`btn btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs ${methodClass(item)}`}
+              disabled={pending || cart.length === 0}
+              onClick={() => askConfirm(item.code)}
+            >
+              {methodIcon(item)}
+              {item.name}
+            </button>
+          ))}
         </div>
         <PreviewReceiptButton
           venueId={venueId}
@@ -269,10 +289,18 @@ export function QuickSaleBoard({
 
       <dialog id="quick-sale-confirm" className="modal modal-bottom sm:modal-middle">
         <div className="modal-box max-w-sm rounded-t-2xl p-4 sm:rounded-2xl">
-          <h3 className="text-base font-black">تأكيد الدفع</h3>
+          <h3 className="text-base font-black">
+            {holding ? "تأكيد تعليق الطلب" : "تأكيد الدفع"}
+          </h3>
           <p className="mt-1 text-sm text-base-content/60">
             {methodLabel} · {formatMoney(total)}
           </p>
+          {holding ? (
+            <p className="mt-2 rounded-lg bg-warning/10 px-2.5 py-2 text-xs leading-6 text-base-content/70">
+              سيُحفظ الطلب معلّقاً (آجل) دون تحصيل أو طباعة فاتورة، ويبقى في
+              الفواتير المفتوحة حتى وصول العميل واختيار طريقة الدفع الفعلية.
+            </p>
+          ) : null}
           <div className="modal-action mt-4 gap-2">
             <button
               type="button"
@@ -284,14 +312,14 @@ export function QuickSaleBoard({
             </button>
             <button
               type="button"
-              className={`btn btn-sm ${
-                method === "cash" ? "btn-success" : "btn-info"
-              }`}
+              className={`btn btn-sm ${holding ? "btn-warning" : "btn-primary"}`}
               onClick={confirmPay}
               disabled={pending || !method}
             >
               {pending ? (
                 <LoaderCircle className="size-4 animate-spin" />
+              ) : holding ? (
+                "تعليق الطلب"
               ) : (
                 "تأكيد"
               )}

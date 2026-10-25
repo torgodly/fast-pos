@@ -195,6 +195,31 @@ export const customers = sqliteTable("customers", {
     .default(sql`(datetime('now'))`),
 });
 
+export const paymentMethods = sqliteTable(
+  "payment_methods",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    /** Stable code stored on orders; generated for custom methods. */
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    /** آجل: holds the order instead of collecting payment. */
+    deferred: integer("deferred", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /** Counts toward the cash drawer / expected cash. */
+    cashDrawer: integer("cash_drawer", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    builtIn: integer("built_in", { mode: "boolean" }).notNull().default(false),
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(datetime('now'))`),
+  },
+  (table) => [uniqueIndex("payment_methods_code_idx").on(table.code)],
+);
+
 export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   venueId: text("venue_id")
@@ -208,7 +233,11 @@ export const orders = sqliteTable("orders", {
   status: text("status", { enum: ["open", "paid", "cancelled"] })
     .notNull()
     .default("open"),
-  paymentMethod: text("payment_method", { enum: ["cash", "card"] }),
+  /** Payment method code (built-in cash/card or a payment_methods row). */
+  paymentMethod: text("payment_method"),
+  /** Deferred (آجل) hold: order stays open until the customer settles. */
+  heldAt: text("held_at"),
+  heldBy: integer("held_by").references(() => users.id),
   total: real("total").notNull().default(0),
   createdAt: text("created_at")
     .notNull()

@@ -21,6 +21,7 @@ import {
   TableProperties,
   Truck,
   UsersRound,
+  WalletCards,
   Warehouse,
 } from "lucide-react";
 import { LogoutButton, LogoutIconButton } from "@/components/LogoutButton";
@@ -35,6 +36,7 @@ const links = [
   { href: "/admin/units", label: "وحدات القياس", icon: Ruler },
   { href: "/admin/suppliers", label: "الموردون", icon: Truck },
   { href: "/admin/customers", label: "العملاء", icon: Contact },
+  { href: "/admin/payment-methods", label: "طرق الدفع", icon: WalletCards },
   { href: "/admin/purchases", label: "فواتير المشتريات", icon: ShoppingCart },
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
   { href: "/admin/shifts", label: "الورديات", icon: Clock3 },

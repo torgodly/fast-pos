@@ -24,6 +24,7 @@ import {
 import { formatMoney, isVenueId } from "@/lib/venues";
 import { availableAtVenue } from "@/lib/menu/scope";
 import { getOpenShift } from "@/lib/shifts/core";
+import { listPaymentMethods } from "@/lib/payments/store";
 
 export default async function CashierOrderPage({
   params,
@@ -57,6 +58,9 @@ export default async function CashierOrderPage({
     : null;
   const waiter = order.waiterId
     ? db.select().from(users).where(eq(users.id, order.waiterId)).get()
+    : null;
+  const heldBy = order.heldBy
+    ? db.select().from(users).where(eq(users.id, order.heldBy)).get()
     : null;
 
   const cats = db
@@ -123,6 +127,12 @@ export default async function CashierOrderPage({
                 · {waiter.name}
               </span>
             ) : null}
+            {order.heldAt ? (
+              <span className="ms-1.5 badge badge-warning badge-sm align-middle font-bold">
+                آجل
+                {heldBy ? ` · ${heldBy.name}` : ""}
+              </span>
+            ) : null}
           </p>
           <div className="flex shrink-0 gap-0.5">
             <Link
@@ -180,6 +190,8 @@ export default async function CashierOrderPage({
                 orderId={orderId}
                 totalLabel={formatMoney(order.total)}
                 shiftOpen={shiftOpen}
+                held={!!order.heldAt}
+                paymentMethods={listPaymentMethods(true)}
               />
             </div>
           }
