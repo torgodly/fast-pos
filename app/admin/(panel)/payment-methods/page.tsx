@@ -50,8 +50,7 @@ export default async function AdminPaymentMethodsPage() {
         <div>
           <h2 className="text-2xl font-black sm:text-3xl">طرق الدفع</h2>
           <p className="text-sm text-base-content/45">
-            أضف طرق الدفع المتاحة وحدد أيها آجل يحجز الطلب، وأيها يُحتسب في
-            نقدية الدرج
+            أضف طرق الدفع المتاحة وحدد أيها يؤثر على النقد المتوقع في الوردية
           </p>
         </div>
       </div>

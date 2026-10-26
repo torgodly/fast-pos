@@ -16,43 +16,43 @@
     "license": "node scripts/license.mjs",
     "license:gui": "python desktop/license-generator/license_generator.py",
     "license:gui:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-license-gui.ps1",
-    "installer:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1"
+    "installer:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1 -SkipNpm"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^1.0.3",
+    "@napi-rs/canvas": "^1.0.13",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.4.1",
-    "drizzle-orm": "^0.45.2",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
     "exceljs": "^4.4.0",
     "iconv-lite": "^0.7.3",
-    "jose": "^6.2.5",
+    "jose": "^6.2.13",
     "jszip": "^3.10.2",
-    "lucide-react": "^1.27.0",
-    "next": "^16.3.0",
+    "lucide-react": "^1.61.0",
+    "next": "^16.4.3",
     "pngjs": "^7.0.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.3",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/bcryptjs": "^3.0.0",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24.19.2",
     "@types/pngjs": "^6.0.5",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@vitejs/plugin-react": "^6.0.5",
-    "daisyui": "^5.7.7",
-    "drizzle-kit": "^0.18.1",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.12",
-    "jsdom": "^30.0.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "daisyui": "^5.7.50",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^10.13.0",
+    "eslint-config-next": "^16.4.3",
+    "jsdom": "^30.1.3",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.1.10"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
   },
   "ignoreScripts": [
     "sharp",
@@ -63,5 +63,8 @@
     "better-sqlite3",
     "sharp",
     "unrs-resolver"
-  ]
+  ],
+  "overrides": {
+    "uuid": "^11.1.0"
+  }
 }

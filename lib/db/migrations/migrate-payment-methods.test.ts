@@ -49,6 +49,15 @@ describe("migratePaymentMethods", () => {
         active: 1,
         sort_order: 20,
       },
+      {
+        code: "phone",
+        name: "طلبات هاتف",
+        deferred: 1,
+        cash_drawer: 0,
+        built_in: 1,
+        active: 1,
+        sort_order: 30,
+      },
     ]);
 
     const columns = (
@@ -70,11 +79,14 @@ describe("migratePaymentMethods", () => {
     sqlite
       .prepare(
         `INSERT INTO payment_methods (code, name, deferred, cash_drawer, built_in, active, sort_order)
-         VALUES ('presto', 'بريستو', 1, 0, 0, 1, 30)`,
+         VALUES ('presto', 'بريستو', 1, 0, 0, 1, 40)`,
       )
       .run();
     sqlite
       .prepare(`UPDATE payment_methods SET name = 'كاش' WHERE code = 'cash'`)
+      .run();
+    sqlite
+      .prepare(`UPDATE payment_methods SET name = 'هاتف' WHERE code = 'phone'`)
       .run();
 
     migratePaymentMethods(sqlite);
@@ -90,7 +102,14 @@ describe("migratePaymentMethods", () => {
         .get(),
     ).toEqual({ name: "كاش" });
     expect(
+      sqlite
+        .prepare(
+          `SELECT name, deferred, cash_drawer FROM payment_methods WHERE code = 'phone'`,
+        )
+        .get(),
+    ).toEqual({ name: "هاتف", deferred: 1, cash_drawer: 0 });
+    expect(
       sqlite.prepare(`SELECT COUNT(*) AS n FROM payment_methods`).get(),
-    ).toEqual({ n: 3 });
+    ).toEqual({ n: 4 });
   });
 });

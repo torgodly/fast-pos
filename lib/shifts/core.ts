@@ -42,7 +42,11 @@ export type ShiftExpenseItem = {
   createdAt: string;
 };
 
-export type ShiftItemSale = { name: string; qty: number };
+export type ShiftItemSale = {
+  name: string;
+  qty: number;
+  categoryName: string;
+};
 
 export type ShiftReportKind = "summary" | "close" | "reprint";
 
@@ -229,16 +233,38 @@ function itemSalesForShift(shiftId: number): ShiftItemSale[] {
   return db
     .select({
       name: orderItems.itemName,
+      categoryName: sql<string>`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
       qty: sql<number>`coalesce(sum(${orderItems.qty}), 0)`.mapWith(Number),
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))
+    .leftJoin(items, eq(orderItems.itemId, items.id))
+    .leftJoin(categories, eq(items.categoryId, categories.id))
     .where(and(eq(orders.shiftId, shiftId), eq(orders.status, "paid")))
-    .groupBy(orderItems.itemName)
+    .groupBy(
+      orderItems.itemName,
+      sql`coalesce(
+        nullif(trim(${orderItems.categoryName}), ''),
+        ${categories.name},
+        'غير مصنف'
+      )`,
+    )
     .all()
-    .sort(
-      (a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ar"),
-    );
+    .sort((a, b) => {
+      if (a.categoryName === "غير مصنف") {
+        return b.categoryName === "غير مصنف" ? 0 : 1;
+      }
+      if (b.categoryName === "غير مصنف") return -1;
+      return (
+        a.categoryName.localeCompare(b.categoryName, "ar") ||
+        b.qty - a.qty ||
+        a.name.localeCompare(b.name, "ar")
+      );
+    });
 }
 
 export function getShiftExpenseTotal(shiftId: number): number {
@@ -343,6 +369,7 @@ export function getShiftTotals(venueId: VenueId, shiftId: number): ShiftTotals {
     qty: byName.get(name)?.qty ?? 0,
     revenue: byName.get(name)?.revenue ?? 0,
   }));
+  const items = itemSalesForShift(shiftId);
 
   return {
     invoiceCount: paidOrders.length,
@@ -350,11 +377,11 @@ export function getShiftTotals(venueId: VenueId, shiftId: number): ShiftTotals {
     cashTotal: payment.cashTotal,
     nonCashTotal: payment.nonCashTotal,
     paymentBreakdown: payment.breakdown,
-    totalItems: groups.reduce((sum, group) => sum + group.qty, 0),
+    totalItems: items.reduce((sum, item) => sum + item.qty, 0),
     tableSales,
     quickSales: paidOrders.length - tableSales,
     groups,
-    items: itemSalesForShift(shiftId),
+    items,
     expenseTotal: getShiftExpenseTotal(shiftId),
   };
 }

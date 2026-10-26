@@ -9,11 +9,11 @@ import { checkoutReceiptMethodLabel } from "./receipts";
 import {
   encodePrinterText,
   hasArabicText,
+  isArabicRasterEnabled,
   normalizePrinterText,
   printerInitBytes,
   printerProfile,
   restorePrinterTextMode,
-  useArabicRaster,
 } from "./encoding";
 import { appendLogo } from "./logo";
 import { receiptBrandBlock } from "./brand";
@@ -99,7 +99,7 @@ function printLine(
 
   const alignMode = options.center ? "center" : "right";
 
-  if (useArabicRaster() && hasArabicText(normalized)) {
+  if (isArabicRasterEnabled() && hasArabicText(normalized)) {
     parts.push(align(alignMode));
     parts.push(
       textToEscPosRaster(normalized, {
@@ -198,7 +198,7 @@ function kitchenLine(
 
   parts.push(align("right"));
 
-  if (useArabicRaster() && hasArabicText(normalized)) {
+  if (isArabicRasterEnabled() && hasArabicText(normalized)) {
     parts.push(
       textToEscPosRaster(normalized, {
         bold: options.emphasis,
@@ -371,6 +371,7 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   }
   reportSep(parts);
 
+  printLine(parts, "التحصيل", { bold: true, fontSize: 30 });
   fieldLine(parts, "الفواتير", String(data.invoiceCount));
   printLine(parts, `الإجمالي: ${money(data.totalSales)}`, {
     bold: true,
@@ -387,21 +388,8 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   fieldLine(parts, "طاولات / سريع", `${data.tableSales} / ${data.quickSales}`);
 
   reportSep(parts);
-  printLine(parts, "المبيعات حسب المجموعة", { bold: true });
-  if (data.groups.length === 0) {
-    printLine(parts, "لا مبيعات في هذه الوردية");
-  } else {
-    for (const group of data.groups) {
-      printLine(
-        parts,
-        `${group.name}: ${group.qty} = ${money(group.revenue)}`,
-      );
-    }
-  }
-
-  reportSep(parts);
+  printLine(parts, "العهدة والمصروفات", { bold: true, fontSize: 30 });
   fieldLine(parts, "العهدة الافتتاحية", money(data.openingFloat));
-  printLine(parts, "المصروفات", { bold: true });
   if (data.expenses.length === 0) {
     printLine(parts, "لا مصروفات في هذه الوردية");
   } else {
@@ -410,7 +398,9 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
     }
   }
   fieldLine(parts, "إجمالي المصروفات", money(data.expenseTotal));
+
   reportSep(parts);
+  printLine(parts, "مطابقة النقد", { bold: true, fontSize: 30 });
   fieldLine(parts, "النقد المتوقع", money(data.expectedCash));
   fieldLine(
     parts,
@@ -439,9 +429,28 @@ export function buildShiftReportEscPos(data: ShiftReportPrintData): Uint8Array {
   return concat(...parts);
 }
 
+function itemQuantityRow(parts: Uint8Array[], name: string, qty: number) {
+  const normalized = normalizePrinterText(name);
+  if (!normalized) {
+    printLine(parts, String(qty));
+    return;
+  }
+  const rows = wrapText(normalized, 20);
+  const last = rows.pop()!;
+  for (const row of rows) {
+    printLine(parts, row);
+  }
+  const leader = ".".repeat(Math.max(3, 24 - last.length));
+  printLine(parts, `${last} ${leader} ${qty}`);
+}
+
 export function buildShiftItemsEscPos(data: ShiftItemsPrintData): Uint8Array {
   const parts: Uint8Array[] = [init()];
-  headerBlock(parts, `أصناف وردية #${data.shiftNumber}`, data.venueName);
+  headerBlock(
+    parts,
+    `تقرير أصناف الوردية #${data.shiftNumber}`,
+    data.venueName,
+  );
   reportSep(parts);
   fieldLine(parts, "اليوم", data.workDate);
   fieldLine(parts, "طباعة", data.printedAt);
@@ -452,14 +461,45 @@ export function buildShiftItemsEscPos(data: ShiftItemsPrintData): Uint8Array {
   if (data.items.length === 0) {
     printLine(parts, "لا أصناف مبيعة في هذه الوردية");
   } else {
+    const groups: Array<{
+      name: string;
+      qty: number;
+      items: typeof data.items;
+    }> = [];
     for (const item of data.items) {
-      fieldLine(parts, item.name, String(item.qty));
+      let group = groups.find((row) => row.name === item.categoryName);
+      if (!group) {
+        group = { name: item.categoryName, qty: 0, items: [] };
+        groups.push(group);
+      }
+      group.items.push(item);
+      group.qty += item.qty;
     }
+
+    fieldLine(parts, "المجموعات", String(groups.length));
+    fieldLine(parts, "الأصناف", String(data.items.length));
+    printLine(parts, `إجمالي القطع: ${data.totalItems}`, { bold: true });
+
+    for (const group of groups) {
+      reportSep(parts);
+      printLine(parts, `— ${group.name} —`, {
+        bold: true,
+        center: true,
+        fontSize: 30,
+      });
+      for (const item of group.items) {
+        itemQuantityRow(parts, item.name, item.qty);
+      }
+      printLine(parts, `إجمالي المجموعة: ${group.qty} قطعة`);
+    }
+
+    reportSep(parts);
+    printLine(parts, `الإجمالي العام: ${data.totalItems} قطعة`, {
+      bold: true,
+      fontSize: 30,
+    });
   }
 
-  reportSep(parts);
-  fieldLine(parts, "إجمالي الأصناف", String(data.items.length));
-  fieldLine(parts, "إجمالي القطع", String(data.totalItems));
   reportSep(parts);
   parts.push(align("center"));
   printLine(parts, "نهاية تقرير الأصناف", { center: true, bold: true });

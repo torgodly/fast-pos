@@ -8,7 +8,8 @@ function hasColumn(sqlite: Database.Database, table: string, column: string) {
 
 /**
  * Payment methods are configurable; legacy databases only knew cash/card.
- * Seed those two as built-ins and add the hold columns used by آجل orders.
+ * Seed the built-ins — including the deferred phone method — and add the
+ * hold columns used while a phone order waits for its real payment method.
  */
 export function migratePaymentMethods(sqlite: Database.Database) {
   sqlite.exec(`
@@ -32,7 +33,8 @@ export function migratePaymentMethods(sqlite: Database.Database) {
       `INSERT OR IGNORE INTO payment_methods
          (code, name, deferred, cash_drawer, built_in, active, sort_order)
        VALUES ('cash', 'نقدي', 0, 1, 1, 1, 10),
-              ('card', 'بطاقة', 0, 0, 1, 1, 20)`,
+              ('card', 'بطاقة', 0, 0, 1, 1, 20),
+              ('phone', 'طلبات هاتف', 1, 0, 1, 1, 30)`,
     )
     .run();
 

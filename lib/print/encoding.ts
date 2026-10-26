@@ -64,7 +64,7 @@ export const printerProfile = getPrinterProfile();
 export const PRINTER_CODE_PAGE = printerProfile.codePage;
 export const PRINTER_CHARSET = printerProfile.charset;
 
-export function useArabicRaster() {
+export function isArabicRasterEnabled() {
   return printerProfile.arabicRaster;
 }
 

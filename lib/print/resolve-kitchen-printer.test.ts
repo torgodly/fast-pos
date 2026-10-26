@@ -46,7 +46,6 @@ function addPrinter(row: {
 
 function resolve(options: {
   venueId: "restaurant" | "cafe";
-  categoryName?: string;
   categoryPrinterId?: number | null;
   restaurantPrinterId?: number | null;
   cafePrinterId?: number | null;
@@ -54,7 +53,6 @@ function resolve(options: {
 }) {
   return resolveKitchenPrinterForVenue({
     venueId: options.venueId,
-    categoryName: options.categoryName ?? "بيتزا",
     categoryPrinterId: options.categoryPrinterId ?? null,
     restaurantPrinterId: options.restaurantPrinterId ?? null,
     cafePrinterId: options.cafePrinterId ?? null,
@@ -67,60 +65,13 @@ beforeEach(() => {
 });
 
 describe("resolveKitchenPrinterForVenue", () => {
-  it("falls back to the main kitchen printer when the category has none", () => {
+  it("returns null when the category has no printer (line must be skipped)", () => {
     addPrinter({ id: 1, name: "Main Kitchen" });
 
-    expect(resolve({ venueId: "restaurant" })?.id).toBe(1);
+    expect(resolve({ venueId: "restaurant" })).toBeNull();
   });
 
-  it("keeps printing when only the other venue has a category printer", () => {
-    addPrinter({ id: 1, name: "Main Kitchen" });
-    addPrinter({ id: 2, name: "مطبخ المطعم" });
-
-    const printer = resolve({
-      venueId: "cafe",
-      restaurantPrinterId: 2,
-    });
-
-    expect(printer?.id).toBe(1);
-  });
-
-  it("falls back when the linked printer is inactive", () => {
-    addPrinter({ id: 1, name: "Main Kitchen" });
-    addPrinter({ id: 2, name: "Old Kitchen", active: false });
-
-    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 2 })?.id).toBe(
-      1,
-    );
-  });
-
-  it("ignores a removed linked printer", () => {
-    addPrinter({ id: 1, name: "Main Kitchen" });
-
-    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 99 })?.id).toBe(
-      1,
-    );
-  });
-
-  it("uses the venue-linked printer when it is active", () => {
-    addPrinter({ id: 1, name: "Main Kitchen" });
-    addPrinter({ id: 2, name: "مطبخ المطعم" });
-
-    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 2 })?.id).toBe(
-      2,
-    );
-  });
-
-  it("routes display groups to a display printer", () => {
-    addPrinter({ id: 1, name: "Main Kitchen" });
-    addPrinter({ id: 2, name: "شاشة المشروبات" });
-
-    expect(
-      resolve({ venueId: "restaurant", categoryName: "مشروبات باردة" })?.id,
-    ).toBe(2);
-  });
-
-  it("never sends a venue to the other venue's dedicated printer", () => {
+  it("returns null when only the other venue has a printer", () => {
     addPrinter({ id: 2, name: "مطبخ المطعم" });
 
     expect(
@@ -128,8 +79,44 @@ describe("resolveKitchenPrinterForVenue", () => {
     ).toBeNull();
   });
 
-  it("returns null when no active kitchen printer exists", () => {
+  it("returns null when the linked printer is inactive", () => {
+    addPrinter({ id: 2, name: "Old Kitchen", active: false });
+
+    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 2 })).toBeNull();
+  });
+
+  it("returns null when the linked printer no longer exists", () => {
+    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 99 })).toBeNull();
+  });
+
+  it("returns null for a checkout-only printer", () => {
     addPrinter({ id: 1, name: "Cashier", role: "checkout" });
+
+    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 1 })).toBeNull();
+  });
+
+  it("uses the active venue-linked printer", () => {
+    addPrinter({ id: 2, name: "مطبخ المطعم" });
+
+    expect(resolve({ venueId: "restaurant", restaurantPrinterId: 2 })?.id).toBe(
+      2,
+    );
+  });
+
+  it("uses an active category printer when the venue has none", () => {
+    addPrinter({ id: 3, name: "مطبخ البيتزا" });
+
+    expect(resolve({ venueId: "restaurant", categoryPrinterId: 3 })?.id).toBe(3);
+  });
+
+  it("uses the item printer when neither venue nor category has one", () => {
+    addPrinter({ id: 4, name: "Grill" });
+
+    expect(resolve({ venueId: "restaurant", itemPrinterId: 4 })?.id).toBe(4);
+  });
+
+  it("does not auto-route to an unassigned display printer", () => {
+    addPrinter({ id: 2, name: "شاشة المشروبات" });
 
     expect(resolve({ venueId: "restaurant" })).toBeNull();
   });

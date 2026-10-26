@@ -3,7 +3,7 @@ import {
   buildPaymentBreakdown,
   generatePaymentMethodCode,
   paymentMethodLabel,
-  validatePaymentMethodFlags,
+  resolvePaymentMethodFlags,
   validatePaymentMethodName,
   type PaymentMethodLike,
 } from "./core";
@@ -22,6 +22,10 @@ describe("payment method labels", () => {
   it("keeps legacy cash and card labels when no row exists", () => {
     expect(paymentMethodLabel("cash", [])).toBe("نقدي");
     expect(paymentMethodLabel("card", [])).toBe("بطاقة");
+  });
+
+  it("labels the predefined phone method without a database row", () => {
+    expect(paymentMethodLabel("phone", [])).toBe("طلبات هاتف");
   });
 
   it("falls back to the raw code for an unknown method", () => {
@@ -124,14 +128,51 @@ describe("payment method validation", () => {
 
   it("does not allow a deferred method to count as drawer cash", () => {
     expect(
-      validatePaymentMethodFlags({ deferred: true, cashDrawer: true }),
-    ).toBe("طريقة الآجل لا تدخل في نقدية الدرج");
+      resolvePaymentMethodFlags({
+        builtIn: false,
+        currentDeferred: true,
+        currentCashDrawer: false,
+        submittedCashDrawer: true,
+      }),
+    ).toEqual({ deferred: true, cashDrawer: false });
+  });
+
+  it("keeps predefined method flags fixed", () => {
     expect(
-      validatePaymentMethodFlags({ deferred: true, cashDrawer: false }),
-    ).toBeNull();
+      resolvePaymentMethodFlags({
+        builtIn: true,
+        currentDeferred: true,
+        currentCashDrawer: false,
+        submittedCashDrawer: true,
+      }),
+    ).toEqual({ deferred: true, cashDrawer: false });
     expect(
-      validatePaymentMethodFlags({ deferred: false, cashDrawer: true }),
-    ).toBeNull();
+      resolvePaymentMethodFlags({
+        builtIn: true,
+        currentDeferred: false,
+        currentCashDrawer: true,
+        submittedCashDrawer: false,
+      }),
+    ).toEqual({ deferred: false, cashDrawer: true });
+  });
+
+  it("lets custom methods follow the submitted cash-expectation choice", () => {
+    expect(
+      resolvePaymentMethodFlags({
+        builtIn: false,
+        currentDeferred: false,
+        currentCashDrawer: false,
+        submittedCashDrawer: true,
+      }),
+    ).toEqual({ deferred: false, cashDrawer: true });
+    expect(
+      resolvePaymentMethodFlags({
+        builtIn: false,
+        currentDeferred: false,
+        currentCashDrawer: true,
+        submittedCashDrawer: false,
+      }),
+    ).toEqual({ deferred: false, cashDrawer: false });
   });
 
   it("generates stable, unique method codes", () => {

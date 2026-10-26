@@ -197,9 +197,45 @@ describe("shift totals with expenses", () => {
       },
     ]);
     expect(totals.items).toEqual([
-      { name: "شاي", qty: 2 },
-      { name: "قهوة", qty: 1 },
+      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
+      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
     ]);
+  });
+
+  it("groups sold items under their category names", () => {
+    sqlite().exec(`
+      INSERT INTO categories (id, name) VALUES (2, 'مشروبات باردة');
+      INSERT INTO items (id, category_id, name) VALUES (3, 2, 'كولا');
+      INSERT INTO order_items (order_id, item_id, item_name, category_name, unit_price, qty, line_total)
+      VALUES (2, 3, 'كولا', 'مشروبات باردة', 10, 3, 30);
+    `);
+
+    const totals = getShiftTotals("restaurant", 1);
+
+    expect(totals.items).toEqual([
+      { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
+      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
+      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+    ]);
+    expect(totals.totalItems).toBe(6);
+  });
+
+  it("counts items from categories outside the report group list", () => {
+    sqlite().exec(`
+      INSERT INTO categories (id, name) VALUES (3, 'البيتزا');
+      INSERT INTO items (id, category_id, name) VALUES (4, 3, 'بيتزا');
+      INSERT INTO order_items (order_id, item_id, item_name, category_name, unit_price, qty, line_total)
+      VALUES (1, 4, 'بيتزا', 'البيتزا', 30, 4, 120);
+    `);
+
+    const totals = getShiftTotals("restaurant", 1);
+
+    expect(totals.items).toContainEqual({
+      name: "بيتزا",
+      qty: 4,
+      categoryName: "البيتزا",
+    });
+    expect(totals.totalItems).toBe(7);
   });
 
   it("uses expenses in the report's expected cash and expense lines", () => {

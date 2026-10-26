@@ -2,37 +2,16 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { printers } from "@/lib/db/schema";
 import { kitchenPrinterRolesFilter } from "@/lib/printers";
-import { DISPLAY_PRINTER_GROUPS } from "@/lib/reports/groups";
 import type { VenueId } from "@/lib/types";
 
 type PrinterRow = typeof printers.$inferSelect;
 
-function pickByKind(
-  rows: PrinterRow[],
-  kind: "kitchen" | "display",
-): PrinterRow | null {
-  if (rows.length === 0) return null;
-  if (kind === "display") {
-    const display = rows.find(
-      (p) =>
-        p.name.includes("دسبلي") ||
-        p.name.includes("ديسبلي") ||
-        p.name.toLowerCase().includes("display") ||
-        p.name.includes("مشروبات"),
-    );
-    if (display) return display;
-    return rows.length > 1 ? rows[rows.length - 1]! : rows[0]!;
-  }
-  const kitchen = rows.find(
-    (p) => p.name.includes("مطبخ") && !p.name.includes("مشروبات"),
-  );
-  return kitchen ?? rows[0]!;
-}
-
-/** Kitchen printers are shared — venue on the printer is only for cashier/both. */
+/**
+ * Only an explicitly linked kitchen printer is used. A category with no
+ * usable printer resolves to null and its lines are skipped by the caller.
+ */
 export function resolveKitchenPrinterForVenue(options: {
   venueId: VenueId;
-  categoryName: string | null | undefined;
   categoryPrinterId: number | null | undefined;
   restaurantPrinterId?: number | null;
   cafePrinterId?: number | null;
@@ -40,22 +19,17 @@ export function resolveKitchenPrinterForVenue(options: {
 }): PrinterRow | null {
   const {
     venueId,
-    categoryName,
     categoryPrinterId,
     restaurantPrinterId,
     cafePrinterId,
     itemPrinterId,
   } = options;
-  const venueLinked =
-    venueId === "cafe" ? cafePrinterId : restaurantPrinterId;
-  const managed =
-    restaurantPrinterId != null || cafePrinterId != null;
-  const candidateId = managed
-    ? (venueLinked ?? null)
-    : (venueLinked ?? categoryPrinterId ?? itemPrinterId ?? null);
+  const venueLinked = venueId === "cafe" ? cafePrinterId : restaurantPrinterId;
+  const candidateId = venueLinked ?? categoryPrinterId ?? itemPrinterId ?? null;
+  if (!candidateId) return null;
 
-  if (candidateId) {
-    const linked = db
+  return (
+    db
       .select()
       .from(printers)
       .where(
@@ -65,32 +39,6 @@ export function resolveKitchenPrinterForVenue(options: {
           kitchenPrinterRolesFilter,
         ),
       )
-      .get();
-    if (linked) return linked;
-  }
-
-  // No printer for this category/venue (or its printer was removed/inactive):
-  // the ticket still has to reach the kitchen, so fall back to the main one.
-  // Keep the other venue's dedicated printer out of that fallback.
-  const otherVenuePrinterId =
-    venueId === "cafe" ? restaurantPrinterId : cafePrinterId;
-
-  const sharedKitchenPrinters = db
-    .select()
-    .from(printers)
-    .where(
-      and(
-        eq(printers.active, true),
-        kitchenPrinterRolesFilter,
-      ),
-    )
-    .all()
-    .filter((printer) => printer.id !== otherVenuePrinterId);
-
-  const kind =
-    categoryName && DISPLAY_PRINTER_GROUPS.has(categoryName)
-      ? "display"
-      : "kitchen";
-
-  return pickByKind(sharedKitchenPrinters, kind);
+      .get() ?? null
+  );
 }

@@ -22,6 +22,12 @@ export const UNKNOWN_PAYMENT_METHOD_NAME = "غير محدد";
 const LEGACY_METHODS: Record<string, PaymentMethodLike> = {
   cash: { code: "cash", name: "نقدي", deferred: false, cashDrawer: true },
   card: { code: "card", name: "بطاقة", deferred: false, cashDrawer: false },
+  phone: {
+    code: "phone",
+    name: "طلبات هاتف",
+    deferred: true,
+    cashDrawer: false,
+  },
 };
 
 function roundMoney(value: number) {
@@ -98,14 +104,22 @@ export function validatePaymentMethodName(name: string): string | null {
   return null;
 }
 
-export function validatePaymentMethodFlags(input: {
-  deferred: boolean;
-  cashDrawer: boolean;
-}): string | null {
-  if (input.deferred && input.cashDrawer) {
-    return "طريقة الآجل لا تدخل في نقدية الدرج";
+export function resolvePaymentMethodFlags(input: {
+  builtIn: boolean;
+  currentDeferred: boolean;
+  currentCashDrawer: boolean;
+  submittedCashDrawer: boolean;
+}): { deferred: boolean; cashDrawer: boolean } {
+  if (input.builtIn) {
+    return {
+      deferred: input.currentDeferred,
+      cashDrawer: input.currentCashDrawer,
+    };
   }
-  return null;
+  if (input.currentDeferred) {
+    return { deferred: true, cashDrawer: false };
+  }
+  return { deferred: false, cashDrawer: input.submittedCashDrawer };
 }
 
 export function generatePaymentMethodCode(): string {

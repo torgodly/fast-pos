@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { orders, paymentMethods } from "@/lib/db/schema";
 import {
   generatePaymentMethodCode,
-  validatePaymentMethodFlags,
+  resolvePaymentMethodFlags,
   validatePaymentMethodName,
 } from "@/lib/payments/core";
 
@@ -50,8 +50,7 @@ export async function upsertPaymentMethod(
   const rawId = Number(formData.get("id"));
   const id = Number.isInteger(rawId) && rawId > 0 ? rawId : null;
   const name = String(formData.get("name") ?? "").trim();
-  let deferred = submittedFlag(formData, "deferred");
-  let cashDrawer = submittedFlag(formData, "cashDrawer");
+  const submittedCashDrawer = submittedFlag(formData, "cashDrawer");
 
   const nameError = validatePaymentMethodName(name);
   if (nameError) return { error: nameError };
@@ -78,13 +77,12 @@ export async function upsertPaymentMethod(
       .get();
     if (!existing) return { error: "طريقة الدفع غير موجودة" };
 
-    if (existing.builtIn) {
-      deferred = existing.deferred;
-      cashDrawer = existing.cashDrawer;
-    } else {
-      const flagError = validatePaymentMethodFlags({ deferred, cashDrawer });
-      if (flagError) return { error: flagError };
-    }
+    const { deferred, cashDrawer } = resolvePaymentMethodFlags({
+      builtIn: existing.builtIn,
+      currentDeferred: existing.deferred,
+      currentCashDrawer: existing.cashDrawer,
+      submittedCashDrawer,
+    });
 
     db.update(paymentMethods)
       .set({ name, deferred, cashDrawer })
@@ -96,9 +94,6 @@ export async function upsertPaymentMethod(
       detail: `تعديل طريقة دفع «${name}»${deferred ? " — آجل" : ""}`,
     });
   } else {
-    const flagError = validatePaymentMethodFlags({ deferred, cashDrawer });
-    if (flagError) return { error: flagError };
-
     const last = db
       .select({ sortOrder: paymentMethods.sortOrder })
       .from(paymentMethods)
@@ -109,8 +104,8 @@ export async function upsertPaymentMethod(
       .values({
         code: generatePaymentMethodCode(),
         name,
-        deferred,
-        cashDrawer,
+        deferred: false,
+        cashDrawer: submittedCashDrawer,
         builtIn: false,
         active: true,
         sortOrder: (last?.sortOrder ?? 0) + 10,
@@ -119,7 +114,7 @@ export async function upsertPaymentMethod(
     recordSessionAudit(session, {
       kind: "settings",
       success: true,
-      detail: `إضافة طريقة دفع «${name}»${deferred ? " — آجل" : ""}`,
+      detail: `إضافة طريقة دفع «${name}»`,
     });
   }
 

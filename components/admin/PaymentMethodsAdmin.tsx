@@ -45,11 +45,10 @@ export function PaymentMethodsAdmin({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<MethodModal>(null);
-  const [deferred, setDeferred] = useState(false);
   const [cashDrawer, setCashDrawer] = useState(false);
 
   const editing = modal?.mode === "edit" ? modal.method : null;
-  const flagsLocked = !!editing?.builtIn;
+  const cashLocked = !!editing && (editing.builtIn || editing.deferred);
 
   function closeModal() {
     if (pending) return;
@@ -59,14 +58,12 @@ export function PaymentMethodsAdmin({
 
   function openCreate() {
     setError(null);
-    setDeferred(false);
     setCashDrawer(false);
     setModal({ mode: "create" });
   }
 
   function openEdit(method: PaymentMethodAdminRow) {
     setError(null);
-    setDeferred(method.deferred);
     setCashDrawer(method.cashDrawer);
     setModal({ mode: "edit", method });
   }
@@ -136,10 +133,10 @@ export function PaymentMethodsAdmin({
           </div>
 
           <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs leading-6 text-base-content/70">
-            <span className="font-black text-warning">طريقة «آجل»:</span> تُبقي
-            الفاتورة مفتوحة ولا تُحصّل المبلغ. تُستخدم لطلبات الهاتف وتطبيقات
-            التوصيل مثل <span className="font-black">بريستو</span> — يستلم
-            الكاشير الطلب لاحقاً ويختار طريقة الدفع الفعلية عند وصول العميل.
+            <span className="font-black text-warning">طريقة «طلبات هاتف»:</span>{" "}
+            طريقة أساسية آجلة تُبقي الفاتورة مفتوحة ولا تُحصّل المبلغ. تُستخدم
+            لطلبات الهاتف والتوصيل — يستلم الكاشير الطلب لاحقاً ويختار طريقة
+            الدفع الفعلية عند وصول العميل.
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-base-300/60">
@@ -148,7 +145,7 @@ export function PaymentMethodsAdmin({
                 <tr>
                   <th>طريقة الدفع</th>
                   <th>النوع</th>
-                  <th>نقدية الدرج</th>
+                  <th>النقد المتوقع</th>
                   <th>الاستخدام</th>
                   <th>الحالة</th>
                   <th></th>
@@ -185,7 +182,7 @@ export function PaymentMethodsAdmin({
                       {method.cashDrawer ? (
                         <span className="badge badge-success badge-soft badge-sm gap-1">
                           <Banknote className="size-3" />
-                          تُحتسب
+                          تؤثر
                         </span>
                       ) : (
                         <span className="text-xs text-base-content/40">—</span>
@@ -274,38 +271,15 @@ export function PaymentMethodsAdmin({
             <input
               name="name"
               defaultValue={editing?.name ?? ""}
-              placeholder="نقدي، بطاقة، بريستو، تحويل بنكي…"
+              placeholder="نقدي، بطاقة، تحويل بنكي…"
               className="input input-bordered w-full"
               required
             />
           </label>
 
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-warning/30 bg-warning/5 p-3">
-            <input
-              type="checkbox"
-              name="deferred"
-              className="checkbox checkbox-warning checkbox-sm mt-0.5"
-              checked={deferred}
-              disabled={flagsLocked}
-              onChange={(event) => {
-                setDeferred(event.target.checked);
-                if (event.target.checked) setCashDrawer(false);
-              }}
-            />
-            <span>
-              <span className="block text-sm font-black">آجل — يحجز الطلب</span>
-              <span className="mt-0.5 block text-xs leading-5 text-base-content/55">
-                لا تُسجّل الفاتورة مدفوعة ولا تُطبع فاتورة دفع. تُغلق لاحقاً عند
-                استلام العميل واختيار طريقة الدفع الفعلية.
-              </span>
-            </span>
-          </label>
-
           <label
             className={`flex items-start gap-3 rounded-xl border border-base-300 p-3 ${
-              deferred || flagsLocked
-                ? "cursor-not-allowed opacity-55"
-                : "cursor-pointer"
+              cashLocked ? "cursor-not-allowed opacity-55" : "cursor-pointer"
             }`}
           >
             <input
@@ -313,34 +287,34 @@ export function PaymentMethodsAdmin({
               name="cashDrawer"
               className="checkbox checkbox-success checkbox-sm mt-0.5"
               checked={cashDrawer}
-              disabled={deferred || flagsLocked}
+              disabled={cashLocked}
               onChange={(event) => setCashDrawer(event.target.checked)}
             />
             <span>
               <span className="block text-sm font-black">
-                تُحتسب ضمن نقدية الدرج
+                تؤثر على النقد المتوقع
               </span>
               <span className="mt-0.5 block text-xs leading-5 text-base-content/55">
-                فعّلها فقط للطرق التي تصل نقداً إلى الدرج — تؤثر على النقد
-                المتوقع في إغلاق الوردية.
+                فعّلها فقط للطرق التي يصل مبلغها نقداً إلى الدرج — تُحتسب ضمن
+                النقد المتوقع عند إغلاق الوردية.
               </span>
             </span>
           </label>
 
-          {flagsLocked ? (
-            <div className="rounded-xl bg-base-200/70 px-3 py-2 text-xs text-base-content/60">
-              النوع ونقدية الدرج لطريقة الدفع الأساسية ثابتة لحماية تقارير
-              الورديات — يمكنك تعديل الاسم فقط.
+          {cashLocked ? (
+            <div className="rounded-xl bg-base-200/70 px-3 py-2 text-xs leading-6 text-base-content/60">
+              {editing?.builtIn
+                ? "طريقة الدفع الأساسية محمية لحماية تقارير الورديات — إعداد النقد المتوقع ثابت، ويمكنك تعديل الاسم فقط."
+                : "هذه طريقة آجلة محفوظة من إصدار سابق — لا تُحصّل المبلغ فوراً، لذا لا يمكن احتسابها ضمن النقد المتوقع. يمكنك تعديل الاسم فقط."}
             </div>
           ) : null}
 
-          {deferred ? (
-            <div className="rounded-xl bg-warning/10 px-3 py-2 text-xs leading-6 text-base-content/65">
-              عند اختيار هذه الطريقة سيبقى الطلب مفتوحاً باسم «آجل» في الشاشة
-              الرئيسية، ويستطيع الكاشير استلامه لاحقاً واختيار نقدي أو بطاقة أو
-              أي طريقة أخرى.
+          {editing ? null : (
+            <div className="rounded-xl bg-base-200/70 px-3 py-2 text-xs leading-6 text-base-content/65">
+              الطرق المضافة هنا تُحصّل الدفع مباشرة. الحجز («آجل») مخصص لطريقة
+              «طلبات هاتف» الأساسية.
             </div>
-          ) : null}
+          )}
 
           <ActionFeedback tone="error" message={error} />
           <div className="modal-action mt-2">

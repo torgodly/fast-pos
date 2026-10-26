@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { FLOOR_TABLES } from "./floor-tables";
+import { FLOOR_TABLES } from "../floor-tables";
 
 type TableRow = { id: number; name: string; venue_id: string };
 

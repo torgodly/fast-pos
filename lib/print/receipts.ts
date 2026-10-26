@@ -56,8 +56,7 @@ export type ShiftReportPrintData = {
   totalItems: number;
   tableSales: number;
   quickSales: number;
-  groups: Array<{ name: string; qty: number; revenue: number }>;
-  items: Array<{ name: string; qty: number }>;
+  items: Array<{ name: string; qty: number; categoryName: string }>;
   openingFloat: number;
   expenseTotal: number;
   expenses: Array<{

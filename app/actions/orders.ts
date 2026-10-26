@@ -577,7 +577,6 @@ async function printKitchenVoidTicket(options: {
       : null;
     printer = resolveKitchenPrinterForVenue({
       venueId: options.venueId,
-      categoryName: category?.name,
       categoryPrinterId: category?.kitchenPrinterId,
       restaurantPrinterId: category?.restaurantKitchenPrinterId,
       cafePrinterId: category?.cafeKitchenPrinterId,
@@ -637,7 +636,7 @@ type KitchenSendResult =
       failed: Array<PrintTargetResult & { reason: string }>;
       message: string;
     }
-  | { error: string };
+  | { error: string; noPrinter?: boolean };
 
 /** Print kitchen tickets for lines not yet sent; updates kitchenSentQty on success. */
 async function sendPendingKitchenTickets(options: {
@@ -671,6 +670,7 @@ async function sendPendingKitchenTickets(options: {
   };
 
   const pending: Pending[] = [];
+  const withoutPrinter: string[] = [];
 
   for (const line of lines) {
     const qty = line.qty - (line.kitchenSentQty ?? 0);
@@ -691,10 +691,9 @@ async function sendPendingKitchenTickets(options: {
       .where(eq(categories.id, item.categoryId))
       .get();
 
-    // Category printer wins when it belongs to this venue; otherwise auto-pick
+    // Only explicit category/venue/item links print; unassigned lines are skipped.
     const printer = resolveKitchenPrinterForVenue({
       venueId: options.venueId,
-      categoryName: category?.name,
       categoryPrinterId: category?.kitchenPrinterId,
       restaurantPrinterId: category?.restaurantKitchenPrinterId,
       cafePrinterId: category?.cafeKitchenPrinterId,
@@ -702,9 +701,8 @@ async function sendPendingKitchenTickets(options: {
     });
 
     if (!printer) {
-      return {
-        error: `لا توجد طابعة مربوطة للصنف "${line.itemName}" — اربط التصنيف من الإدارة ← الأصناف`,
-      };
+      withoutPrinter.push(line.itemName);
+      continue;
     }
 
     pending.push({
@@ -719,7 +717,15 @@ async function sendPendingKitchenTickets(options: {
     });
   }
 
+  const skippedNames = Array.from(new Set(withoutPrinter));
+
   if (pending.length === 0) {
+    if (skippedNames.length > 0) {
+      return {
+        error: `لا توجد طابعة مربوطة لـ: ${skippedNames.join("، ")} — لن تُطبع في المطبخ`,
+        noPrinter: true,
+      };
+    }
     return options.requirePending
       ? { error: "لا توجد أصناف جديدة لإرسالها للمطبخ" }
       : { ok: true, skipped: true };
@@ -793,11 +799,17 @@ async function sendPendingKitchenTickets(options: {
     }
   }
 
+  const skipNote =
+    skippedNames.length > 0
+      ? ` — بدون طابعة (لم تُطبع): ${skippedNames.join("، ")}`
+      : "";
+
   if (printedTo.length === 0) {
     return {
-      error: failed
-        .map((f) => `${f.printerName} (${f.host}): ${f.reason}`)
-        .join(" — "),
+      error:
+        failed
+          .map((f) => `${f.printerName} (${f.host}): ${f.reason}`)
+          .join(" — ") + skipNote,
     };
   }
 
@@ -807,6 +819,7 @@ async function sendPendingKitchenTickets(options: {
       .map((f) => `${f.printerName} (${f.host})`)
       .join("، ")}`;
   }
+  message += skipNote;
 
   return { ok: true, skipped: false, printedTo, failed, message };
 }
@@ -866,7 +879,9 @@ export async function confirmKitchenOrder(orderId: number): Promise<
       detail: result.error,
     });
     return {
-      error: `${result.error} — الفاتورة محفوظة، أعد المحاولة لاحقاً`,
+      error: result.noPrinter
+        ? result.error
+        : `${result.error} — الفاتورة محفوظة، أعد المحاولة لاحقاً`,
     };
   }
 

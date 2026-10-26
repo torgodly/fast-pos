@@ -37,10 +37,9 @@ const base: ShiftReportPrintData = {
   totalItems: 3,
   tableSales: 1,
   quickSales: 1,
-  groups: [{ name: "مشروبات ساخنة", qty: 3, revenue: 30 }],
   items: [
-    { name: "شاي", qty: 2 },
-    { name: "قهوة", qty: 1 },
+    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
+    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
   ],
   openingFloat: 30,
   expenseTotal: 12.5,
@@ -109,25 +108,58 @@ describe("shift report payment methods", () => {
   });
 });
 
+describe("shift report financial sections", () => {
+  it("prints only financial records and keeps sales counts", () => {
+    const text = reportText(base);
+
+    expect(text).toContain("التحصيل");
+    expect(text).toContain("العهدة والمصروفات");
+    expect(text).toContain("مطابقة النقد");
+    expect(text).toContain("الفواتير: 2");
+    expect(text).toContain("قطع مباعة: 3");
+    expect(text).toContain("طاولات / سريع: 1 / 1");
+    expect(text).not.toContain("المبيعات حسب المجموعة");
+    expect(text).not.toContain("مشروبات ساخنة");
+  });
+});
+
 describe("shift items ticket", () => {
-  it("lists item quantities and totals on a separate ticket", () => {
-    const text = iconv.decode(
-      Buffer.from(buildShiftItemsEscPos(base)),
+  function itemsText(items: ShiftReportPrintData["items"], totalItems: number) {
+    return iconv.decode(
+      Buffer.from(buildShiftItemsEscPos({ ...base, items, totalItems })),
       "win1256",
     );
+  }
 
-    expect(text).toContain("أصناف وردية #3");
-    expect(text).toContain("شاي: 2");
-    expect(text).toContain("قهوة: 1");
-    expect(text).toContain("إجمالي القطع: 3");
+  it("groups items under bold category headers with subtotals", () => {
+    const text = itemsText(
+      [
+        { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
+        { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
+        { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+      ],
+      6,
+    );
+
+    expect(text).toContain("تقرير أصناف الوردية #3");
+    expect(text).toContain("المجموعات: 2");
+    expect(text).toContain("الأصناف: 3");
+    expect(text).toContain("إجمالي القطع: 6");
+    expect(text).toContain("— مشروبات باردة —");
+    expect(text).toContain("— مشروبات ساخنة —");
+    expect(text.indexOf("— مشروبات باردة —")).toBeLessThan(
+      text.indexOf("— مشروبات ساخنة —"),
+    );
+    expect(text).toMatch(/كولا\s+\.+\s+3/);
+    expect(text).toMatch(/شاي\s+\.+\s+2/);
+    expect(text).toMatch(/قهوة\s+\.+\s+1/);
+    expect(text).toContain("إجمالي المجموعة: 3 قطعة");
+    expect(text).toContain("الإجمالي العام: 6 قطعة");
     expect(text).toContain("نهاية تقرير الأصناف");
   });
 
   it("prints an empty-sales line instead of a blank list", () => {
-    const text = iconv.decode(
-      Buffer.from(buildShiftItemsEscPos({ ...base, items: [], totalItems: 0 })),
-      "win1256",
-    );
+    const text = itemsText([], 0);
 
     expect(text).toContain("لا أصناف مبيعة في هذه الوردية");
   });
