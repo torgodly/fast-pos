@@ -96,6 +96,8 @@ export type KitchenReceiptData = {
 export type CheckoutReceiptData = {
   venueName: string;
   orderId: number;
+  /** Per-shift invoice sequence; omitted on unpaid previews and legacy rows. */
+  orderNo?: number | null;
   tableName: string;
   waiterName: string | null;
   customerName?: string | null;
@@ -476,6 +478,7 @@ export function buildCheckoutReceiptHtml(
     </div>
     <hr class="divider" />
     <table class="meta">
+      ${data.orderNo ? metaRow("رقم الطلب", String(data.orderNo)) : ""}
       ${metaRow("رقم الفاتورة", data.orderId > 0 ? `#${data.orderId}` : "—")}
       ${metaRow("الطاولة", data.tableName)}
       ${data.waiterName ? metaRow("السفرادجي", data.waiterName) : ""}

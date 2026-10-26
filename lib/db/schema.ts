@@ -230,6 +230,8 @@ export const orders = sqliteTable("orders", {
   waiterId: integer("waiter_id").references(() => users.id),
   cashierId: integer("cashier_id").references(() => users.id),
   shiftId: integer("shift_id").references(() => shifts.id),
+  /** Invoice sequence inside the paying shift; resets to 1 on every shift. */
+  orderNo: integer("order_no"),
   status: text("status", { enum: ["open", "paid", "cancelled"] })
     .notNull()
     .default("open"),
@@ -243,7 +245,9 @@ export const orders = sqliteTable("orders", {
     .notNull()
     .default(sql`(datetime('now'))`),
   paidAt: text("paid_at"),
-});
+}, (table) => [
+  uniqueIndex("orders_shift_order_no_idx").on(table.shiftId, table.orderNo),
+]);
 
 export const orderItems = sqliteTable("order_items", {
   id: integer("id").primaryKey({ autoIncrement: true }),

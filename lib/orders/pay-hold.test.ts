@@ -156,6 +156,7 @@ vi.mock("@/lib/db", async () => {
       waiter_id INTEGER,
       cashier_id INTEGER,
       shift_id INTEGER,
+      order_no INTEGER,
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
       held_at TEXT,

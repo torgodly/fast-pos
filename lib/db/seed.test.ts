@@ -75,6 +75,7 @@ function createMemoryDb() {
       waiter_id INTEGER REFERENCES users(id),
       cashier_id INTEGER REFERENCES users(id),
       shift_id INTEGER,
+      order_no INTEGER,
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
       total REAL NOT NULL DEFAULT 0,

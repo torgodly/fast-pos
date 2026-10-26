@@ -40,6 +40,7 @@ import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import { consumeForPaidOrder } from "@/lib/inventory/service";
 import { insufficientWarningText } from "@/lib/inventory/rules";
 import { getOpenShift, OPEN_SHIFT_REQUIRED_ERROR } from "@/lib/shifts/core";
+import { nextOrderNumber } from "@/lib/shifts/order-number";
 import { getActivePaymentMethod, getPaymentMethod } from "@/lib/payments/store";
 import { paymentMethodLabel } from "@/lib/payments/core";
 
@@ -952,6 +953,7 @@ async function buildCheckoutReceiptForOrder(
     receipt: {
       venueName: getVenueName(order.venueId),
       orderId: order.id,
+      orderNo: order.orderNo,
       tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
       waiterName: waiter?.name ?? null,
       customerName: customer?.name ?? null,
@@ -1132,19 +1134,24 @@ export async function payOrder(
   const isQuickSale = order.tableId === null;
   const paidAt = nowSqlTripoli();
 
-  db.update(orders)
-    .set({
-      status: "paid",
-      paymentMethod: method.code,
-      heldAt: null,
-      heldBy: null,
-      cashierId: session.userId,
-      shiftId: openShift.id,
-      total,
-      paidAt,
-    })
-    .where(eq(orders.id, orderId))
-    .run();
+  const orderNo = getSqlite().transaction(() => {
+    const next = nextOrderNumber(openShift.id);
+    db.update(orders)
+      .set({
+        status: "paid",
+        paymentMethod: method.code,
+        heldAt: null,
+        heldBy: null,
+        cashierId: session.userId,
+        shiftId: openShift.id,
+        orderNo: next,
+        total,
+        paidAt,
+      })
+      .where(eq(orders.id, orderId))
+      .run();
+    return next;
+  })();
 
   const inventory = consumePaidOrderInventory(
     session,
@@ -1163,6 +1170,7 @@ export async function payOrder(
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(order.venueId),
     orderId: order.id,
+    orderNo,
     tableName: table?.name ?? (isQuickSale ? "بيع سريع" : "بدون طاولة"),
     waiterName: waiter?.name ?? null,
     customerName: customer?.name ?? null,
@@ -1440,22 +1448,29 @@ export async function payQuickSale(
   }
 
   const paidAt = nowSqlTripoli();
-  db.update(orders)
-    .set({
-      status: "paid",
-      paymentMethod: method.code,
-      heldAt: null,
-      heldBy: null,
-      paidAt,
-    })
-    .where(eq(orders.id, order.id))
-    .run();
+  const orderNo = getSqlite().transaction(() => {
+    const next = nextOrderNumber(openShift!.id);
+    db.update(orders)
+      .set({
+        status: "paid",
+        paymentMethod: method.code,
+        heldAt: null,
+        heldBy: null,
+        shiftId: openShift!.id,
+        orderNo: next,
+        paidAt,
+      })
+      .where(eq(orders.id, order.id))
+      .run();
+    return next;
+  })();
 
   const inventory = consumePaidOrderInventory(session, venueId, order.id);
 
   const receipt: CheckoutReceiptData = {
     venueName: getVenueName(venueId),
     orderId: order.id,
+    orderNo,
     tableName: "بيع سريع",
     waiterName: null,
     customerName: customer?.name ?? null,

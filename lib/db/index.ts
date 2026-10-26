@@ -7,6 +7,7 @@ import * as schema from "./schema";
 import { venues } from "./schema";
 import { migrateDeduplicateKitchenPrinters } from "./migrations/migrate-deduplicate-kitchen-printers";
 import { migrateNullableMenuVenue } from "./migrations/migrate-nullable-menu-venue";
+import { migrateOrderNumbers } from "./migrations/migrate-order-numbers";
 import { migratePaymentMethods } from "./migrations/migrate-payment-methods";
 import { migratePrinterAutoPrint } from "./migrations/migrate-printer-auto-print";
 import { migratePrinterVenueNullable } from "./migrations/migrate-printer-venue-nullable";
@@ -113,6 +114,7 @@ function createDb() {
     migrateDeduplicateKitchenPrinters(sqlite);
     migrateNullableMenuVenue(sqlite);
     migrateSharedStaff(sqlite);
+    migrateOrderNumbers(sqlite);
     runSeedSafely(db);
     return db;
   } catch (error) {
@@ -271,6 +273,7 @@ function ensureSchema(sqlite: Database.Database) {
       waiter_id INTEGER REFERENCES users(id),
       cashier_id INTEGER REFERENCES users(id),
       shift_id INTEGER REFERENCES shifts(id),
+      order_no INTEGER,
       status TEXT NOT NULL DEFAULT 'open',
       payment_method TEXT,
       held_at TEXT,

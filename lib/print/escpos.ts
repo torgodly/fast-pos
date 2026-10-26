@@ -519,6 +519,9 @@ export function buildCheckoutEscPos(
   appendLogo(parts, logo);
   headerBlock(parts, brand.title, brand.subtitle, brand.contacts);
   parts.push(separator());
+  if (data.orderNo) {
+    fieldLine(parts, "رقم الطلب", String(data.orderNo));
+  }
   fieldLine(parts, "فاتورة", data.orderId > 0 ? `#${data.orderId}` : "—");
   fieldLine(parts, "الطاولة", data.tableName);
 

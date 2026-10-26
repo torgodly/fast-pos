@@ -81,6 +81,7 @@ vi.mock("@/lib/db", async () => {
       payment_method TEXT,
       total REAL NOT NULL DEFAULT 0,
       shift_id INTEGER REFERENCES shifts(id),
+      order_no INTEGER,
       held_at TEXT,
       held_by INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
