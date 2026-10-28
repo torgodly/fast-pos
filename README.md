@@ -45,9 +45,9 @@ npm run installer:build
 npm run installer:build -- -ISCCPath "C:\Program Files\Inno Setup 7\ISCC.exe"
 ```
 
-الناتج: `release\installer\Fast-POS-Setup-<version>.exe`. السكربت يشغّل `npm ci` و`npm run build`، ويجمع الحمولة في `build\installer-payload` (لا يُضمَّن `data/`)، وينزّل Node المحمول إن لم تمرّر `-NodeDir`.
+الناتج: `release\installer\Fast-POS-Setup-<version>.exe`. السكربت يشغّل `npm ci` و`npm run build`، ويجمع الحمولة في `build\installer-payload` (لا يُضمَّن `data/`)، وينزّل Node المحمول إن لم تمرّر `-NodeDir`. ضع `cloudflared.exe` في `build\downloads\cloudflared\` قبل البناء — يرفض السكربت التغليف إذا لم يطابق بصمة SHA-256 المثبّتة في `scripts\build-installer.ps1`.
 
-**ماذا يفعل المثبّت:** يثبّت في `C:\Program Files\Fast POS` (المسار قابل للتغيير)، ويضيف مجلد `bin` إلى PATH، ويفتح منفذ 3000 في جدار الحماية، ويثبّت خدمة Windows باسم `FastPOS` ويشغّلها. بعد التثبيت تتوفر أوامر: `fast-pos-start`، `fast-pos-stop`، `fast-pos-restart`، `fast-pos-status`، `fast-pos-console`، `fast-pos-open`.
+**ماذا يفعل المثبّت:** يثبّت في `C:\Program Files\Fast POS` (المسار قابل للتغيير)، ويضيف مجلد `bin` إلى PATH، ويفتح منفذ 3000 في جدار الحماية، ويثبّت خدمة Windows باسم `FastPOS` ويشغّلها. بعد التثبيت تتوفر أوامر: `fast-pos-start`، `fast-pos-stop`، `fast-pos-restart`، `fast-pos-status`، `fast-pos-console`، `fast-pos-open`، `fast-pos-remote`.
 
 **الترقية:** شغّل المثبّت الجديد فوق التثبيت الحالي — يكتشفه، يتخطى صفحة الوضع، ويحافظ على `server\data\` (قاعدة البيانات، الشعار، الترخيص). إذا كانت كلمة مرور المدير ما زالت الافتراضية القديمة، تُرقّى تلقائياً إلى `123` عند أول تشغيل؛ كلمات المرور المخصّصة لا تتغير.
 
@@ -59,6 +59,15 @@ npm run installer:build -- -ISCCPath "C:\Program Files\Inno Setup 7\ISCC.exe"
 - **كاونتر (Counter):** مطعم فقط، كاشير وبيع سريع فقط — بلا طاولات أو سفرادجي أو كافيه.
 
 يُحفظ الاختيار في `data\deployment.json`؛ تغييره لاحقاً يتطلب إعادة تثبيت. التثبيت الجديد يزرع المستخدمين فقط: `admin/123` وكاشير رئيسي رمزه `2580` — بدون أصناف أو طابعات أو طاولات أو موظفين أو فواتير تجريبية. تُضاف الأصناف والطابعات لاحقاً من لوحة الإدارة.
+
+## الوصول المؤقت من الإنترنت
+
+`fast-pos-remote` (أو اختصار **Fast POS Remote Access** في قائمة ابدأ) يفتح نفق Cloudflare سريعاً إلى التطبيق المحلي ويطبع رابط `https://*.trycloudflare.com` وينسخه للحافظة. لا يحتاج نطاقاً ولا حساب Cloudflare، والرابط يتغير في كل تشغيل.
+
+- يبقى النفق حياً ما دامت نافذة الأمر مفتوحة فقط؛ إغلاقها أو الضغط على Ctrl+C يقتل `cloudflared` فوراً (Windows Job Object)، فلا يبقى منفذ مفتوح بالخطأ. إن بقي نفق قديم معلّقاً استخدم `fast-pos-remote stop`.
+- أرقام الدخول لا تُعرض في الرابط: من يملك الرابط يصل إلى صفحة الدخول فقط، ويحتاج رمز موظف أو بيانات مدير. رمز الكاشير الافتراضي `2580` — غيّره قبل استخدام الوصول الخارجي.
+- محاولات الدخول محدودة: 8 محاولات فاشلة خلال 15 دقيقة تقفل المصدر 5 دقائق (429) على مسارات PIN والإدارة.
+- السجلات وحالة النفق في `%LOCALAPPDATA%\FastPOS`.
 
 ## تفعيل النظام
 

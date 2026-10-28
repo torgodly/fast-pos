@@ -1,6 +1,6 @@
 # PROJECT INDEX — fast-pos
 
-> Agent-generated map (2026-10-25, updated 2026-10-26 after payment-method phone seed and the `lib/db/migrations/` refactor). Trust code over this file; update it after major changes. Paths are relative to repo root.
+> Agent-generated map (2026-10-25, updated 2026-10-28 after remote access, login throttling, and per-shift order numbers). Trust code over this file; update it after major changes. Paths are relative to repo root.
 
 ## Identity
 
@@ -58,8 +58,8 @@ Guards: `requireSession/requireAdmin/requireWaiter/requireCashier/requireMainCas
 
 ## API routes (`app/api/`)
 
-- `auth/pin` POST — staff login; duplicate-PIN → `needUserPick` candidates list; 423 when not activated.
-- `auth/admin` POST — admin login. `auth/logout` POST — clears cookie.
+- `auth/pin` POST — staff login; duplicate-PIN → `needUserPick` candidates list; 423 when not activated. Throttled per client IP + venue: 8 failures / 15 min → 429 with `Retry-After` (5 min lock); a successful login clears the bucket.
+- `auth/admin` POST — admin login. Throttled per client IP only (username rotation cannot bypass it), same 8/15 min → 5 min lock. `auth/logout` POST — clears cookie.
 - `settings/receipt-logo` GET/POST/DELETE — logo upload (PNG/JPG/WebP/GIF ≤5MB → `data/receipt-logo.png`, canvas-normalized).
 - `admin/backup` GET — streams a `.fastpos` ZIP (SQLite online-backup snapshot + logo + manifest) for admins.
 - `admin/backup/restore` POST — admin password + same-origin; validates the uploaded `.fastpos`/`.db`, writes a `pre-restore` safety snapshot (keep 5), hot-swaps `data/pos.db`, reopens via `getSqlite()`, auto-rolls back on reopen failure; applies/removes the archived logo for archive restores.
@@ -72,7 +72,7 @@ Guards: `requireSession/requireAdmin/requireWaiter/requireCashier/requireMainCas
 - **`deployment-mode.ts`** (pure): mode parsing/labels, `data/deployment.json` path/read, `FACTORY_CASHIER_PIN`, `staffLandingPath`. **`deployment.ts`** (DB): cached `getDeploymentMode()` bootstrapped from the file, `isCounterMode()`, active venues, landing path.
 - **`inventory/`**: `rules.ts` (pure grams math/consumption/insufficiency/labels), `core.ts` (injectable `{db,sqlite}` ledger: purchase receive, consume on pay, cancel return, restore reconsume, invoice-edit deltas, manual adjust — all transactional), `service.ts` (binds core to app DB), `rules.test.ts`, `core.test.ts`.
 - **`payments/`**: `core.ts` (pure `buildPaymentBreakdown(rows, methods)` — per-method total/count, `cashTotal` for `cashDrawer` methods, `nonCashTotal`; `resolvePaymentMethodFlags` fixes built-in flags and forces deferred methods off expected cash; `PaymentMethodLike` type), `store.ts` (`listPaymentMethods`, `getPaymentMethod`, fallback labels for historical codes), `core.test.ts`.
-- **`auth/`**: `token.ts` (jose HS256 JWT, 7d), `cookie.ts`/`cookie-options.ts` (httpOnly, lax, `COOKIE_SECURE` opt-in), `session.ts` (`getSession` — revalidates user + license gate), `pin.ts` (normalize Arabic digits, bcrypt, duplicate checks), `rate-limit.ts` (**dead code** — rate limiting removed in commit 2547d4e).
+- **`auth/`**: `token.ts` (jose HS256 JWT, 7d), `cookie.ts`/`cookie-options.ts` (httpOnly, lax, `COOKIE_SECURE` opt-in), `session.ts` (`getSession` — revalidates user + license gate), `pin.ts` (normalize Arabic digits, bcrypt, duplicate checks), `rate-limit.ts` (in-memory failure buckets; `clientIp` reads the first `x-forwarded-for` hop or `x-real-ip`, `clientRateLimitKey` = `pin:<ip>:<venue>`, `adminRateLimitKey` = `admin:<ip>`; wired into both login routes and tested at the route level).
 - **`activation/`**: `service.ts` (`getActivationStatus` — states trial/licensed/expired/invalid/unlicensed; `canOperate` gate; `pos_activation` table created lazily), `license-core.mjs` (payload/token create+verify, Ed25519, strict shape), `license.test.ts`.
 - **`print/`**: `network.ts` (raw TCP :9100, wake-up pre-connection, 3 retries, chunked writes), `windows-raw.ts` (PowerShell/winspool RAW to an explicit Windows queue), `checkout-print-mode.ts` (browser/windows/network routing + explicit-queue validation), `report-print.ts` (shift-report routing), `escpos.ts` (all ticket builders incl. shift report + separate items ticket; Arabic→raster via `text-raster.ts` + `encoding.ts`), `receipts.ts` (data types + HTML receipts), `checkout-bytes.ts`, `logo.ts` (ESC/POS raster logo), `resolve-kitchen-printer.ts` (explicit venue→category→item link only; unassigned returns null and is skipped), `test-bytes.ts`, `finish-checkout-print.ts` (client, browser print).
 - **`orders/`**: `rules.ts` (pure business rules — kitchen-pending math, cancel permissions, pay notices), `workflow.test.ts`, `kitchen-skip.test.ts`, `category-snapshot.ts`.
@@ -116,9 +116,19 @@ Checkout receipt prints «رقم الطلب» (per-shift `orders.order_no`) abov
 
 - Mode lives in `data/deployment.json` and is mirrored in `app_settings.deployment_mode`; resolved by `lib/deployment.ts` (cached, file bootstraps DB). `full` = restaurant + cafe + tables/waiters; `counter` = restaurant only, cashier-only quick sales, no tables/waiters/cafe. Changing mode requires reinstall.
 - Factory seed (`lib/db/seed.ts`): when `data/deployment.json` exists (installed systems), seeds only venues + users — admin/123 and main cashier `كاشير` PIN `2580`; no menu, printers, stations, tables, demo staff, or orders. Admin configures menu/printers from the panel. Without the file, dev falls back to full mode with the rich demo seed. Login PINs 1111…6666 are dev-only. `seedIfNeeded` also upgrades the seeded admin's untouched legacy password to `123` on existing databases; custom passwords are preserved.
-- Installer assets: `installer/fast-pos.iss` (Inno Setup 6+ script, Arabic wizard, mode page, upgrade detection), `scripts/build-installer.ps1` (standalone build + payload assembly + ISCC), `installer/service/FastPOS-service.xml` (WinSW), `installer/vendor/winsw/FastPOS-service.exe`, `installer/bin/*.cmd` (start/stop/restart/status/console/open/install-service), `installer/README-FIRST.txt`.
-- Payload layout: `{app}\server` (standalone `server.js`, `.next`, static, public), `{app}\node` (portable Node 24 x64), `{app}\bin`, `{app}\service`, `{app}\fast-pos.env`, license public key only. WinSW runs `{app}\node\node.exe server.js` with cwd `{app}\server` (DB at `{app}\server\data\pos.db`), PORT 3000, logs in `{app}\logs`. Installer adds `{app}\bin` to HKLM PATH, opens firewall TCP 3000, installs/starts the service. Upgrades skip the mode page and preserve `data\`.
-- Build: `npm run installer:build` (options `-ISCCPath`, `-NodeDir`, `-NodeVersion`, `-SkipNpm`). Output `release\installer\Fast-POS-Setup-<version>.exe`. `.next/standalone` tracing excludes `data/**` (`next.config.ts`). Verified on Windows 10 with Inno Setup 7 (2026-10-22): compile, silent install (full mode), WinSW service startup, admin/PIN login, upgrade preserving `data/`, and uninstall cleanup. Run a final smoke test in a clean VM before shipping.
+- Installer assets: `installer/fast-pos.iss` (Inno Setup 6+ script, Arabic wizard, mode page, upgrade detection), `scripts/build-installer.ps1` (standalone build + payload assembly + ISCC), `installer/service/FastPOS-service.xml` (WinSW), `installer/vendor/winsw/FastPOS-service.exe`, `installer/bin/*.cmd` (start/stop/restart/status/console/open/install-service/remote), `installer/remote/remote.ps1` (temporary internet tunnel), `installer/README-FIRST.txt`.
+- Payload layout: `{app}\server` (standalone `server.js`, `.next`, static, public), `{app}\node` (portable Node 24 x64), `{app}\bin`, `{app}\remote`, `{app}\cloudflared\cloudflared.exe`, `{app}\service`, `{app}\fast-pos.env`, license public key only. WinSW runs `{app}\node\node.exe server.js` with cwd `{app}\server` (DB at `{app}\server\data\pos.db`), PORT 3000, logs in `{app}\logs`. Installer adds `{app}\bin` to HKLM PATH, opens firewall TCP 3000, installs/starts the service. Upgrades skip the mode page and preserve `data\`.
+- Build: `npm run installer:build` runs `npm ci` + `npm run build` first (the npm script no longer passes `-SkipNpm`), then `scripts/build-installer.ps1` (options `-ISCCPath`, `-NodeDir`, `-NodeVersion`, `-SkipNpm` if invoked directly). Output `release\installer\Fast-POS-Setup-<version>.exe`. The build requires `build\downloads\cloudflared\cloudflared.exe` and refuses to package it unless its SHA-256 matches the pinned hash in the script. `.next/standalone` tracing excludes `data/**` (`next.config.ts`). Verified on Windows 10 with Inno Setup 7 (2026-10-22 install/upgrade/uninstall; 2026-10-28 remote access + build): compile, silent install (full mode), WinSW service startup, admin/PIN login, upgrade preserving `data/`, and uninstall cleanup. Run a final smoke test in a clean VM before shipping.
+
+## Remote access (temporary internet tunnel)
+
+- `fast-pos-remote` (`installer/bin/fast-pos-remote.cmd` → `installer/remote/remote.ps1`, Start Menu "Fast POS Remote Access") exposes the LAN app through a **Cloudflare quick tunnel**: no domain, no Cloudflare account, a new random `https://<slug>.trycloudflare.com` URL on every run, printed and copied to the clipboard.
+- Flow: check `127.0.0.1:3000` answers → reuse/resolve `cloudflared.exe` (`{app}\cloudflared`, dev fallback `build\downloads\cloudflared`) → kill a stale tunnel recorded in state → start `cloudflared tunnel --url http://127.0.0.1:3000 --no-autoupdate --logfile <log>` hidden → poll the log for the URL (up to ~45 s) → write `%LOCALAPPDATA%\FastPOS\remote-tunnel.json` → block until the window closes/Ctrl+C → kill the child and remove state.
+- The child is assigned to a Windows Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, so closing the console (even via the X button) always kills `cloudflared` — remote access cannot outlive the window. `fast-pos-remote stop` is the fallback and works after a crash because the PID is in the state file.
+- The cloudflared log is opened for polling with `FileShare.ReadWrite` (Go keeps it open for writing); plain `ReadAllText` fails. Console output uses `Write-Output` — `Write-Host` disappears when stdout is redirected.
+- Cloudflare rewrites `Host` to the tunnel hostname, but `Origin`/`Host` stay consistent, so the existing same-origin checks in the backup-restore and logo-upload routes still pass; `x-forwarded-proto: https` is set.
+- There is deliberately no Access gate, session timer, DB preflight, or default-password refusal — the owner opens the tunnel only while a staff member keeps the window open, and it dies with the window. Staff PIN `2580` grants remote POS access; README-FIRST tells the owner to change it.
+- Both login routes are throttled (`lib/auth/rate-limit.ts`): `auth/pin` per client IP + venue, `auth/admin` per IP only, 8 failures / 15 min → 429 + `Retry-After` (5 min lock) — this is the brute-force defence that matters once the app is publicly reachable.
 
 ## Inventory (BOM)
 
@@ -143,7 +153,8 @@ Checkout receipt prints «رقم الطلب» (per-shift `orders.order_no`) abov
 
 ## Gotchas
 
-- Dead code: `lib/auth/rate-limit.ts` (+ its test) — throttling deliberately removed from PIN/admin login.
+- `lib/auth/rate-limit.ts` is live: in-memory buckets wired into `/api/auth/pin` (per IP + venue) and `/api/auth/admin` (per IP); nothing persists across restarts. When the app is exposed by a quick tunnel every request looks local at the app level — the limiter relies on `x-forwarded-for` from cloudflared.
+- `fast-pos-remote` must not be installed as a service: the tunnel is meant to die with its console window (Job Object kill-on-close).
 - Next.js is modified — check `node_modules/next/dist/docs/` (01-app/02-pages/03-architecture) before API usage.
 - All timestamps are Tripoli SQL strings compared as strings (`lib/time/tripoli.ts`, `formatPrintTimestamp`).
 - Report group names are hardcoded in `lib/reports/groups.ts` (cafe vs restaurant lists).
