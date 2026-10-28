@@ -90,11 +90,21 @@ export function clearAuthFailures(key: string) {
   buckets.delete(key);
 }
 
-export function clientRateLimitKey(request: Request, venueId: string): string {
+/** Client IP as seen through the local service or a Cloudflare tunnel. */
+export function clientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
-  const ip =
+  return (
     forwarded?.split(",")[0]?.trim() ||
     request.headers.get("x-real-ip")?.trim() ||
-    "local";
-  return `pin:${ip}:${venueId}`;
+    "local"
+  );
+}
+
+export function clientRateLimitKey(request: Request, venueId: string): string {
+  return `pin:${clientIp(request)}:${venueId}`;
+}
+
+/** Keyed by IP only, so rotating usernames cannot bypass the admin lockout. */
+export function adminRateLimitKey(request: Request): string {
+  return `admin:${clientIp(request)}`;
 }

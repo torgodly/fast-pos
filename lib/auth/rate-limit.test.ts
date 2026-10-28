@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  adminRateLimitKey,
   checkRateLimit,
   clearAuthFailures,
+  clientIp,
   clientRateLimitKey,
   recordAuthFailure,
   resetRateLimitStore,
@@ -48,5 +50,30 @@ describe("PIN rate limit", () => {
       headers: { "x-forwarded-for": "10.0.0.8, 10.0.0.1" },
     });
     expect(clientRateLimitKey(request, "cafe")).toBe("pin:10.0.0.8:cafe");
+  });
+
+  it("falls back to x-real-ip and local for the client IP", () => {
+    const realIp = new Request("http://localhost/api/auth/admin", {
+      headers: { "x-real-ip": "192.168.1.20" },
+    });
+    expect(clientIp(realIp)).toBe("192.168.1.20");
+
+    const local = new Request("http://localhost/api/auth/admin");
+    expect(clientIp(local)).toBe("local");
+  });
+
+  it("keys admin logins by client IP only", () => {
+    const request = new Request("http://localhost/api/auth/admin", {
+      headers: { "x-forwarded-for": "203.0.113.7" },
+    });
+    expect(adminRateLimitKey(request)).toBe("admin:203.0.113.7");
+  });
+
+  it("locks admin logins after max failures", () => {
+    const key = "admin:203.0.113.9";
+    for (let i = 0; i < 8; i++) {
+      recordAuthFailure(key);
+    }
+    expect(checkRateLimit(key).ok).toBe(false);
   });
 });

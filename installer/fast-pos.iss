@@ -52,6 +52,7 @@ Type: files; Name: "{app}\app_icon.ico"
 [Icons]
 Name: "{group}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"
 Name: "{group}\Fast POS Console"; Filename: "{app}\bin\fast-pos-console.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"
+Name: "{group}\Fast POS Remote Access"; Filename: "{app}\bin\fast-pos-remote.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"
 Name: "{group}\Fast POS README"; Filename: "{app}\README-FIRST.txt"
 Name: "{autodesktop}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"; Tasks: desktopicon
 

@@ -131,9 +131,23 @@ try {
     Copy-DirectoryContents $extracted $nodeTarget
   }
 
-  # 4) Launchers, service wrapper, env
+  # 4) Launchers, remote tunnel, service wrapper, env
   Copy-DirectoryContents (Join-Path $Project "installer\bin") (Join-Path $Payload "bin")
   Copy-Item (Join-Path $Project "installer\README-FIRST.txt") (Join-Path $Payload "README-FIRST.txt") -Force
+
+  Copy-DirectoryContents (Join-Path $Project "installer\remote") (Join-Path $Payload "remote")
+
+  $cloudflaredSource = Join-Path $Downloads "cloudflared\cloudflared.exe"
+  if (-not (Test-Path $cloudflaredSource)) {
+    Fail "Missing $cloudflaredSource — download cloudflared.exe there before building (remote access needs it)."
+  }
+  $cloudflaredSha256 = "83E726ED18EA78C5AD5213C4C3A3A27051393950D2BC8ED4DE69BEC12D14EAAE"
+  $actualHash = (Get-FileHash $cloudflaredSource -Algorithm SHA256).Hash
+  if ($actualHash -ne $cloudflaredSha256) {
+    Fail "cloudflared.exe checksum mismatch. Expected $cloudflaredSha256, got $actualHash. Update the expected hash only after verifying the new binary."
+  }
+  New-Item -ItemType Directory -Force -Path (Join-Path $Payload "cloudflared") | Out-Null
+  Copy-Item $cloudflaredSource (Join-Path $Payload "cloudflared\cloudflared.exe") -Force
 
   $sessionSecret = [Convert]::ToBase64String(
     (1..32 | ForEach-Object { Get-Random -Maximum 256 })

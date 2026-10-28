@@ -16,7 +16,7 @@
     "license": "node scripts/license.mjs",
     "license:gui": "python desktop/license-generator/license_generator.py",
     "license:gui:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-license-gui.ps1",
-    "installer:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1 -SkipNpm"
+    "installer:build": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.13",

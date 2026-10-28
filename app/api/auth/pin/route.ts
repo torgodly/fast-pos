@@ -2,6 +2,12 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { sessionCookieValue } from "@/lib/auth/cookie";
 import { findStaffMatchingPin, isValidPinFormat, normalizePinDigits } from "@/lib/auth/pin";
+import {
+  checkRateLimit,
+  clearAuthFailures,
+  clientRateLimitKey,
+  recordAuthFailure,
+} from "@/lib/auth/rate-limit";
 import { signSessionToken } from "@/lib/auth/token";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
@@ -41,10 +47,25 @@ export async function POST(request: Request) {
     );
   }
 
+  const limitKey = clientRateLimitKey(request, venueId);
+  const limited = checkRateLimit(limitKey);
+  if (!limited.ok) {
+    return NextResponse.json(
+      {
+        error: `محاولات دخول كثيرة. حاول مرة أخرى بعد ${limited.retryAfterSec} ثانية.`,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limited.retryAfterSec) },
+      },
+    );
+  }
+
   const staff = db.select().from(users).where(eq(users.active, true)).all();
   const matches = findStaffMatchingPin(staff, pin);
 
   if (matches.length === 0) {
+    recordAuthFailure(limitKey);
     return NextResponse.json(
       { error: "رمز الدخول غير صحيح" },
       { status: 401 },
@@ -81,6 +102,8 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   }
+
+  clearAuthFailures(limitKey);
 
   const token = await signSessionToken({
     userId: match.id,
