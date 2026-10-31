@@ -1,5 +1,21 @@
-import { describe, expect, it } from "vitest";
-import { buildKitchenEscPos } from "./escpos";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/settings", () => ({
+  getSettingValue: () => null,
+  setSettingValue: () => {},
+  deleteSettingValue: () => {},
+  getBrandDetails: () => ({ name: "", phone: "", address: "" }),
+  getReceiptFooterMessage: () => "",
+}));
+import { DEFAULT_REPORT_TEMPLATES } from "./templates/defaults";
+
+type BuildFn = typeof import("./templates/build").buildKitchenEscPos;
+let buildKitchenEscPos: BuildFn;
+
+beforeAll(async () => {
+  process.env.PRINTER_ARABIC_RASTER = "0";
+  ({ buildKitchenEscPos } = await import("./templates/build"));
+});
 
 function cutTail(bytes: Uint8Array) {
   const cut = [0x1d, 0x56, 0x00];
@@ -20,16 +36,19 @@ function cutTail(bytes: Uint8Array) {
 }
 
 describe("kitchen ticket cut clearance", () => {
-  it("feeds enough blank lines to clear the last note before cutting", () => {
-    const bytes = buildKitchenEscPos({
-      venueName: "مطعم",
-      orderId: 7,
-      tableName: "T1",
-      waiterName: "Ali",
-      createdAt: "12:30",
-      kind: "order",
-      lines: [{ name: "Pizza", qty: 1, note: "no onion no pepper" }],
-    });
+  it("feeds enough blank lines to clear the last note before cutting", async () => {
+    const bytes = await buildKitchenEscPos(
+      {
+        venueName: "مطعم",
+        orderId: 7,
+        tableName: "T1",
+        waiterName: "Ali",
+        createdAt: "12:30",
+        kind: "order",
+        lines: [{ name: "Pizza", qty: 1, note: "no onion no pepper" }],
+      },
+      { template: DEFAULT_REPORT_TEMPLATES.kitchen, logo: null },
+    );
 
     const tail = cutTail(bytes);
     expect(tail).not.toBeNull();

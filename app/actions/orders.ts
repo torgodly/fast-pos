@@ -26,7 +26,8 @@ import {
 import { nowSqlTripoli } from "@/lib/time/tripoli";
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
-import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
+import { chunkKitchenLines } from "@/lib/print/escpos";
+import { buildKitchenEscPos } from "@/lib/print/templates/build";
 import { printToPrinter } from "@/lib/print/network";
 import { resolveCheckoutPrintMode } from "@/lib/print/checkout-print-mode";
 import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
@@ -594,7 +595,7 @@ async function printKitchenVoidTicket(options: {
     .replace(/[\u200e\u200f\u061c]/g, "");
 
   try {
-    const data = buildKitchenEscPos({
+    const data = await buildKitchenEscPos({
       venueName: getVenueName(options.venueId),
       orderId: options.orderId,
       tableName: table?.name ?? "بيع سريع",
@@ -766,7 +767,7 @@ async function sendPendingKitchenTickets(options: {
     const chunks = chunkKitchenLines(itemLines);
     try {
       for (let i = 0; i < chunks.length; i++) {
-        const payload = buildKitchenEscPos({
+        const payload = await buildKitchenEscPos({
           venueName: getVenueName(options.venueId),
           orderId: options.orderId,
           tableName: options.tableName,

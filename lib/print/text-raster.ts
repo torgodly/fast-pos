@@ -1,7 +1,7 @@
 import { createCanvas } from "@napi-rs/canvas";
 import { PNG } from "pngjs";
 import { pngToEscPosRaster } from "./logo";
-import { normalizePrinterText } from "./encoding";
+import { normalizePrinterText, hasArabicText } from "./encoding";
 
 const RASTER_WIDTH = 384;
 const SIDE_PAD = 8;
@@ -56,7 +56,7 @@ export function textToEscPosRaster(
   options: {
     bold?: boolean;
     fontSize?: number;
-    align?: "right" | "center";
+    align?: "right" | "center" | "left";
   } = {},
 ): Uint8Array {
   const value = normalizePrinterText(text);
@@ -81,9 +81,121 @@ export function textToEscPosRaster(
   ctx.textAlign = align;
   ctx.textBaseline = "middle";
 
-  const x = align === "center" ? RASTER_WIDTH / 2 : RASTER_WIDTH - SIDE_PAD;
+  const x =
+    align === "center"
+      ? RASTER_WIDTH / 2
+      : align === "left"
+        ? SIDE_PAD
+        : RASTER_WIDTH - SIDE_PAD;
   rows.forEach((row, index) => {
     ctx.fillText(row, x, index * lineHeight + lineHeight / 2);
+  });
+
+  const png = PNG.sync.read(canvas.toBuffer("image/png"));
+  return pngToEscPosRaster(png, RASTER_WIDTH);
+}
+
+export type ColumnCell = {
+  text: string;
+  align: "left" | "center" | "right";
+  bold?: boolean;
+  fontSize?: number;
+};
+
+const COLUMN_FONT_FAMILY = 'Tahoma, "Segoe UI", Arial, sans-serif';
+
+function fitCell(
+  text: string,
+  width: number,
+  align: "left" | "center" | "right",
+): string {
+  if (width <= 0) return "";
+  const value =
+    text.length > width ? `${text.slice(0, Math.max(0, width - 1))}…` : text;
+  const pad = Math.max(0, width - value.length);
+  if (align === "left") return value + " ".repeat(pad);
+  if (align === "center") {
+    const left = Math.floor(pad / 2);
+    return " ".repeat(left) + value + " ".repeat(pad - left);
+  }
+  return " ".repeat(pad) + value;
+}
+
+/** Text fallback: the first template column is printed at the right edge. */
+export function columnsToText(
+  cells: Array<{ text: string; align?: "left" | "center" | "right" }>,
+  widths: number[],
+): string {
+  let line = "";
+  for (let index = cells.length - 1; index >= 0; index -= 1) {
+    const cell = cells[index]!;
+    line += fitCell(cell.text, widths[index] ?? 0, cell.align ?? "right");
+  }
+  return line;
+}
+
+export function columnsToEscPos(
+  cells: ColumnCell[],
+  widths: number[],
+): Uint8Array {
+  const largest = Math.max(...cells.map((cell) => cell.fontSize ?? 26), 20);
+  const lineHeight = largest + 10;
+  const canvas = createCanvas(RASTER_WIDTH, lineHeight);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, RASTER_WIDTH, lineHeight);
+  ctx.fillStyle = "#000000";
+  ctx.textBaseline = "middle";
+
+  const bounds: Array<{ left: number; right: number; width: number }> = [];
+  let offset = 0;
+  for (const width of widths) {
+    const right = Math.min(RASTER_WIDTH, Math.max(0, RASTER_WIDTH - offset));
+    offset += width;
+    const left = Math.min(right, Math.max(0, right - width));
+    bounds.push({ left, right, width: Math.max(0, right - left) });
+  }
+
+  cells.forEach((cell, index) => {
+    const bound = bounds[index];
+    if (!bound || bound.width <= 0) return;
+
+    const alignMode = cell.align ?? "right";
+    let fontSize = Math.max(20, cell.fontSize ?? 26);
+    let text = normalizePrinterText(cell.text);
+    const font = () =>
+      `${cell.bold ? "bold " : ""}${fontSize}px ${COLUMN_FONT_FAMILY}`;
+
+    ctx.font = font();
+    while (fontSize > 20 && ctx.measureText(text).width > bound.width - 4) {
+      fontSize -= 2;
+      ctx.font = font();
+    }
+    if (ctx.measureText(text).width > bound.width) {
+      while (
+        text.length > 1 &&
+        ctx.measureText(`${text}…`).width > bound.width
+      ) {
+        text = text.slice(0, -1);
+      }
+      text = `${text}…`;
+    }
+
+    ctx.direction = hasArabicText(text) ? "rtl" : "ltr";
+    ctx.textAlign = alignMode;
+    const x = Math.min(
+      RASTER_WIDTH,
+      Math.max(
+        0,
+        alignMode === "left"
+          ? bound.left + 2
+          : alignMode === "center"
+            ? bound.left + bound.width / 2
+            : bound.right - 2,
+      ),
+    );
+    ctx.fillText(text, x, lineHeight / 2);
   });
 
   const png = PNG.sync.read(canvas.toBuffer("image/png"));

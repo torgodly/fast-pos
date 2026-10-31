@@ -1,15 +1,23 @@
 import iconv from "iconv-lite";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/settings", () => ({
+  getSettingValue: () => null,
+  setSettingValue: () => {},
+  deleteSettingValue: () => {},
+  getBrandDetails: () => ({ name: "", phone: "", address: "" }),
+  getReceiptFooterMessage: () => "",
+}));
 import type { CheckoutReceiptData } from "./receipts";
+import { DEFAULT_REPORT_TEMPLATES } from "./templates/defaults";
 
-type BuildFn = typeof import("./escpos").buildCheckoutEscPos;
+type BuildFn = typeof import("./templates/build").buildReceiptEscPos;
 
-let buildCheckoutEscPos: BuildFn;
+let buildReceiptEscPos: BuildFn;
 
 beforeAll(async () => {
-  // Keep the test in text mode; no raster rendering needed for ASCII values.
   process.env.PRINTER_ARABIC_RASTER = "0";
-  ({ buildCheckoutEscPos } = await import("./escpos"));
+  ({ buildReceiptEscPos } = await import("./templates/build"));
 });
 
 const base: CheckoutReceiptData = {
@@ -24,14 +32,25 @@ const base: CheckoutReceiptData = {
   lines: [{ name: "Tea", qty: 1, unitPrice: 10, lineTotal: 10 }],
 };
 
-function receiptText(data: CheckoutReceiptData) {
-  return iconv.decode(Buffer.from(buildCheckoutEscPos(data)), "win1256");
+function receiptText(
+  data: CheckoutReceiptData,
+  settings: Record<string, string | boolean> = {},
+) {
+  return buildReceiptEscPos(data, {
+    template: DEFAULT_REPORT_TEMPLATES.receipt,
+    settings: { logoAvailable: false, ...settings },
+    logo: null,
+  }).then((bytes) => iconv.decode(Buffer.from(bytes), "win1256"));
 }
 
-describe("buildCheckoutEscPos — brand header", () => {
-  it("prints the brand name, venue subtitle, phone and address", () => {
-    const text = receiptText({
+describe("receipt brand header", () => {
+  it("prints the brand name, venue subtitle, phone and address", async () => {
+    const text = await receiptText({
       ...base,
+      brandName: "Acme Corner",
+      brandPhone: "0911234567",
+      brandAddress: "Tripoli Main Street",
+    }, {
       brandName: "Acme Corner",
       brandPhone: "0911234567",
       brandAddress: "Tripoli Main Street",
@@ -44,9 +63,12 @@ describe("buildCheckoutEscPos — brand header", () => {
     expect(text).toContain("Tripoli Main Street");
   });
 
-  it("keeps the venue name as title when the brand name is empty", () => {
-    const text = receiptText({
+  it("keeps the venue name as title when the brand name is empty", async () => {
+    const text = await receiptText({
       ...base,
+      brandName: "  ",
+      brandPhone: "0911234567",
+    }, {
       brandName: "  ",
       brandPhone: "0911234567",
     });

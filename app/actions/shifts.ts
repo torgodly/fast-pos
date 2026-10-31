@@ -9,7 +9,7 @@ import { printers, users } from "@/lib/db/schema";
 import {
   buildShiftItemsEscPos,
   buildShiftReportEscPos,
-} from "@/lib/print/escpos";
+} from "@/lib/print/templates/build";
 import { printToPrinter } from "@/lib/print/network";
 import {
   resolveShiftReportPrintMode,
@@ -106,7 +106,7 @@ async function printShiftReportData(
   try {
     await sendShiftReport(
       stationCtx.printer,
-      buildShiftReportEscPos(data),
+      await buildShiftReportEscPos(data),
       printMode,
     );
   } catch (error) {
@@ -119,7 +119,7 @@ async function printShiftReportData(
   try {
     await sendShiftReport(
       stationCtx.printer,
-      buildShiftItemsEscPos(data),
+      await buildShiftItemsEscPos(data),
       printMode,
     );
     return { ok: true, printerName: stationCtx.printer.name };

@@ -28,6 +28,19 @@ function setSetting(key: string, value: string) {
     .run(key, value);
 }
 
+export function getSettingValue(key: string): string | null {
+  return getSetting(key);
+}
+
+export function setSettingValue(key: string, value: string): void {
+  setSetting(key, value);
+}
+
+export function deleteSettingValue(key: string): void {
+  const sqlite = getSqlite();
+  sqlite.prepare("DELETE FROM app_settings WHERE key = ?").run(key);
+}
+
 export function getReceiptFooterMessage(): string {
   return getSetting(SETTING_RECEIPT_FOOTER) || DEFAULT_FOOTER;
 }

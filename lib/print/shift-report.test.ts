@@ -1,9 +1,18 @@
 import iconv from "iconv-lite";
-import { beforeAll, describe, expect, it } from "vitest";
-import type { ShiftReportPrintData } from "./receipts";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
-type BuildReport = typeof import("./escpos").buildShiftReportEscPos;
-type BuildItems = typeof import("./escpos").buildShiftItemsEscPos;
+vi.mock("@/lib/settings", () => ({
+  getSettingValue: () => null,
+  setSettingValue: () => {},
+  deleteSettingValue: () => {},
+  getBrandDetails: () => ({ name: "", phone: "", address: "" }),
+  getReceiptFooterMessage: () => "",
+}));
+import type { ShiftReportPrintData } from "./receipts";
+import { DEFAULT_REPORT_TEMPLATES } from "./templates/defaults";
+
+type BuildReport = typeof import("./templates/build").buildShiftReportEscPos;
+type BuildItems = typeof import("./templates/build").buildShiftItemsEscPos;
 
 let buildShiftReportEscPos: BuildReport;
 let buildShiftItemsEscPos: BuildItems;
@@ -11,7 +20,7 @@ let buildShiftItemsEscPos: BuildItems;
 beforeAll(async () => {
   process.env.PRINTER_ARABIC_RASTER = "0";
   ({ buildShiftReportEscPos, buildShiftItemsEscPos } = await import(
-    "./escpos"
+    "./templates/build"
   ));
 });
 
@@ -51,13 +60,26 @@ const base: ShiftReportPrintData = {
   difference: 2.5,
 };
 
-function reportText(data: ShiftReportPrintData) {
-  return iconv.decode(Buffer.from(buildShiftReportEscPos(data)), "win1256");
+const reportOverrides = {
+  template: DEFAULT_REPORT_TEMPLATES.shift,
+  logo: null,
+};
+
+const itemsOverrides = {
+  template: DEFAULT_REPORT_TEMPLATES.items,
+  logo: null,
+};
+
+async function reportText(data: ShiftReportPrintData) {
+  return iconv.decode(
+    Buffer.from(await buildShiftReportEscPos(data, reportOverrides)),
+    "win1256",
+  );
 }
 
 describe("shift report expenses", () => {
-  it("itemizes expenses and prints the deducted expected cash", () => {
-    const text = reportText(base);
+  it("itemizes expenses and prints the deducted expected cash", async () => {
+    const text = await reportText(base);
 
     expect(text).toContain("المصروفات");
     expect(text).toContain("شراء ثلج");
@@ -67,8 +89,8 @@ describe("shift report expenses", () => {
     expect(text).toContain("زيادة 2.50");
   });
 
-  it("prints an empty-expenses line when none were recorded", () => {
-    const text = reportText({
+  it("prints an empty-expenses line when none were recorded", async () => {
+    const text = await reportText({
       ...base,
       expenses: [],
       expenseTotal: 0,
@@ -80,8 +102,8 @@ describe("shift report expenses", () => {
 });
 
 describe("shift report payment methods", () => {
-  it("prints every configured payment method total, including custom ones", () => {
-    const text = reportText({
+  it("prints every configured payment method total, including custom ones", async () => {
+    const text = await reportText({
       ...base,
       paymentBreakdown: [
         { name: "نقدي", total: 20, count: 1 },
@@ -94,8 +116,8 @@ describe("shift report payment methods", () => {
     expect(text).toContain("10.00");
   });
 
-  it("prints a no-payments line when nothing was collected", () => {
-    const text = reportText({
+  it("prints a no-payments line when nothing was collected", async () => {
+    const text = await reportText({
       ...base,
       paymentBreakdown: [],
       invoiceCount: 0,
@@ -109,8 +131,8 @@ describe("shift report payment methods", () => {
 });
 
 describe("shift report financial sections", () => {
-  it("prints only financial records and keeps sales counts", () => {
-    const text = reportText(base);
+  it("prints only financial records and keeps sales counts", async () => {
+    const text = await reportText(base);
 
     expect(text).toContain("التحصيل");
     expect(text).toContain("العهدة والمصروفات");
@@ -124,15 +146,23 @@ describe("shift report financial sections", () => {
 });
 
 describe("shift items ticket", () => {
-  function itemsText(items: ShiftReportPrintData["items"], totalItems: number) {
+  async function itemsText(
+    items: ShiftReportPrintData["items"],
+    totalItems: number,
+  ) {
     return iconv.decode(
-      Buffer.from(buildShiftItemsEscPos({ ...base, items, totalItems })),
+      Buffer.from(
+        await buildShiftItemsEscPos(
+          { ...base, items, totalItems },
+          itemsOverrides,
+        ),
+      ),
       "win1256",
     );
   }
 
-  it("groups items under bold category headers with subtotals", () => {
-    const text = itemsText(
+  it("groups items under bold category headers with subtotals", async () => {
+    const text = await itemsText(
       [
         { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
         { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
@@ -150,16 +180,16 @@ describe("shift items ticket", () => {
     expect(text.indexOf("— مشروبات باردة —")).toBeLessThan(
       text.indexOf("— مشروبات ساخنة —"),
     );
-    expect(text).toMatch(/كولا\s+\.+\s+3/);
-    expect(text).toMatch(/شاي\s+\.+\s+2/);
-    expect(text).toMatch(/قهوة\s+\.+\s+1/);
+    expect(text).toMatch(/3\s+كولا/);
+    expect(text).toMatch(/2\s+شاي/);
+    expect(text).toMatch(/1\s+قهوة/);
     expect(text).toContain("إجمالي المجموعة: 3 قطعة");
     expect(text).toContain("الإجمالي العام: 6 قطعة");
-    expect(text).toContain("نهاية تقرير الأصناف");
+    expect(text).toContain("— نهاية التقرير —");
   });
 
-  it("prints an empty-sales line instead of a blank list", () => {
-    const text = itemsText([], 0);
+  it("prints an empty-sales line instead of a blank list", async () => {
+    const text = await itemsText([], 0);
 
     expect(text).toContain("لا أصناف مبيعة في هذه الوردية");
   });

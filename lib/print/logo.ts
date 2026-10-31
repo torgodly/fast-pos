@@ -9,8 +9,7 @@ const LOGO_PATHS = [
   path.join(process.cwd(), "public", "receipt-logo.png"),
 ];
 
-let cachedLogo: Uint8Array | null | undefined;
-let cachedEscPosLogoKey: string | undefined;
+const escposCache = new Map<string, Uint8Array | null>();
 
 function getLogoCacheKey(): string {
   for (const logoPath of LOGO_PATHS) {
@@ -87,27 +86,26 @@ function isInkPixel(
 }
 
 export function clearReceiptLogoCache() {
-  cachedLogo = undefined;
-  cachedEscPosLogoKey = undefined;
+  escposCache.clear();
 }
 
-export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
-  const logoKey = getLogoCacheKey();
-  if (cachedLogo !== undefined && cachedEscPosLogoKey === logoKey) {
-    return cachedLogo;
-  }
-  cachedEscPosLogoKey = logoKey;
+export async function getReceiptLogoEscPos(
+  maxWidth = MAX_WIDTH,
+): Promise<Uint8Array | null> {
+  const cacheKey = `${getLogoCacheKey()}:${maxWidth}`;
+  if (escposCache.has(cacheKey)) return escposCache.get(cacheKey) ?? null;
 
   try {
     const png = readLogoPixels();
     if (!png) {
-      cachedLogo = null;
+      escposCache.set(cacheKey, null);
       return null;
     }
-    cachedLogo = pngToEscPosRaster(png, MAX_WIDTH);
-    return cachedLogo;
+    const bytes = pngToEscPosRaster(png, maxWidth);
+    escposCache.set(cacheKey, bytes);
+    return bytes;
   } catch {
-    cachedLogo = null;
+    escposCache.set(cacheKey, null);
     return null;
   }
 }
@@ -148,11 +146,16 @@ export function pngToEscPosRaster(png: PNG, maxWidth: number): Uint8Array {
   return out;
 }
 
-export function appendLogo(parts: Uint8Array[], logo: Uint8Array | null) {
+export function appendLogo(
+  parts: Uint8Array[],
+  logo: Uint8Array | null,
+  align: "left" | "center" | "right" = "center",
+) {
   if (!logo) return;
   const ESC = 0x1b;
+  const mode = align === "left" ? 0 : align === "center" ? 1 : 2;
 
-  parts.push(new Uint8Array([ESC, 0x61, 0x01])); // center logo
+  parts.push(new Uint8Array([ESC, 0x61, mode]));
   parts.push(logo);
   parts.push(new Uint8Array([0x0a]));
   parts.push(restorePrinterTextMode("right"));

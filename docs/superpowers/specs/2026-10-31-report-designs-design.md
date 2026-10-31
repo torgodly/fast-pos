@@ -83,10 +83,11 @@ type ReportTemplate = {
   header: {
     logo: { show: boolean; align?: Align; maxWidth?: number }; // 64..384, default 256
     lines: TemplateLine[];                 // max 6
+    separator?: boolean;                   // divider after the header block
   };
   fields: {
     show: string[];                       // ordered whitelisted field ids
-    separator?: boolean;
+    separator?: boolean;                   // divider after the fields block
   };
   items: {
     show: boolean;
@@ -94,6 +95,7 @@ type ReportTemplate = {
     header?: boolean;                     // print the column header row
     showNote?: boolean;                   // note under the item row
     columns: TemplateColumn[];            // max 6
+    separator?: boolean;                   // divider after the items block
   };
   sections: Array<{
     id: string;                           // whitelisted per document
@@ -105,6 +107,7 @@ type ReportTemplate = {
   summary: {
     show: boolean;
     label: string;                        // "الإجمالي" etc.
+    separator?: boolean;                  // divider before the summary
   };
   labels: Record<string, string>;         // field ids and static section row ids
   footer: {
@@ -123,6 +126,7 @@ Placeholders and where they are allowed:
 | --- | --- | --- |
 | `{{title}}` | Document title for this print (brand name on receipts, `طلبات المطبخ`, `إغلاق وردية #4`, …) | all |
 | `{{venue}}` | Venue display name | all |
+| `{{subtitle}}` | Receipt subtitle — `${venue} · إيصال الدفع`, or `إيصال الدفع` when no brand name is set | `receipt` |
 | `{{brand.phone}}` | Brand phone (empty → line skipped) | `receipt` |
 | `{{brand.address}}` | Brand address (empty → line skipped) | `receipt` |
 | `{{footer}}` | Receipt footer message from settings | `receipt` |
@@ -137,23 +141,26 @@ brand fields do not leave gaps.
 | --- | --- | --- | --- | --- |
 | `receipt` | `orderNo`, `invoiceId`, `table`, `waiter`, `customer`, `phone`, `cashier`, `payment`, `time` | `name`, `qty`, `unitPrice`, `lineTotal` | — | allowed |
 | `kitchen` | `orderNo`, `table`, `waiter`, `time`, `ticketPart` | `name`, `qty` | — | off |
-| `shift` | `workDate`, `openedAt`, `closedAt`, `printedAt`, `printedByName`, `openedByName`, `closedByName` | — | `collection`, `cash` | off |
+| `shift` | `workDate`, `openedAt`, `closedAt`, `printedAt`, `printedByName`, `openedByName`, `closedByName` | — | `collection`, `expenses`, `reconciliation` | off |
 | `items` | `workDate`, `printedAt`, `printedByName` | — | `overview`, `groups` | allowed |
 | `sales` | `from`, `to`, `printedAt` | — | `totals`, `categories`, `itemsList` | allowed |
 
 Section types and row ids (static row ids are also keys in `labels`):
 
 - `collection` (key/value): `invoiceCount`, `total` (bold), payment rows (dynamic, no id),
-  `totalItems`, `tableQuick`.
-- `cash` (key/value): `openingFloat`, expense rows (dynamic reason), `expenseTotal`,
-  `expectedCash`, `countedCash`, `difference` (bold).
+  `noPayments`, `totalItems`, `tableQuick`.
+- `expenses` (key/value, `shift`): `openingFloat`, expense rows (dynamic reason),
+  `expenseTotal`; when no expense was recorded the adapter inserts a label-only
+  `لا مصروفات في هذه الوردية` row between the opening float and the total.
+- `reconciliation` (key/value, `shift`): `expectedCash`, `countedCash`,
+  `difference` (bold).
 - `overview` (key/value, `items` document): `categoryCount`, `itemCount`,
   `totalItems` (bold).
 - `groups` (grouped table, `items` document): category heading rows (dynamic), item rows
   with columns `name`/`qty`, and a per-group subtotal labelled `labels.groupTotal`.
-- `totals` (key/value, `sales`): `invoiceCount`, `totalItems`, `tableQuick`, payment rows
-  (dynamic).
-- `categories` / `itemsList` (table, `sales`): columns `name`, `qty`, `revenue`.
+- `totals` (key/value, `sales`): `total` (bold), `invoiceCount`, `totalItems`,
+  `tableQuick`, payment rows (dynamic), `noPayments`.
+- `categories` / `itemsList` (table, `sales`): columns `index`, `name`, `qty`, `revenue`.
 
 Table and grouped-table sections carry their own column list in the template, so their
 labels, widths, alignment, and styles are customizable the same way as the item table.
@@ -168,6 +175,12 @@ no Node or DB imports, so the admin page runs the identical code for previews.
 ```ts
 type DocumentData = {
   title: string;
+  subtitle: string;                                   // receipt only; empty elsewhere
+  venue: string;
+  brandPhone: string;
+  brandAddress: string;
+  footer: string;                                     // receipt footer message
+  status: string;                                     // shift close/open status
   logoAvailable: boolean;
   fields: Record<string, string | null>;               // values for whitelisted ids
   items: Array<Record<string, string>>;                // cell text per column key
@@ -183,7 +196,7 @@ type DocumentData = {
         rows: Array<Record<string, string>>;
         total: string;
       }>;                                              // groupedTable only
-      emptyText?: string;                              // centered when table/groups are empty
+      emptyText?: string;                              // centered when the section is empty
     }
   >;
   summary: string | null;                              // pre-formatted value or null
@@ -193,8 +206,8 @@ type LayoutLine =
   | { kind: "text"; text: string; align: Align; bold: boolean; size: TextSize }
   | { kind: "separator" }
   | { kind: "logo"; align: Align; maxWidth: number }
-  | { kind: "columns"; widths: number[]; cells: Array<{ text: string; align: Align; bold: boolean; size: TextSize }> }
-  | { kind: "kv"; label: string; value: string; bold?: boolean };
+  | { kind: "columns"; widths: number[]; cells: Array<{ text: string; align: Align; bold: boolean; size: TextSize }> };
+// `widths` are normalized character counts summing to `paper.columns`.
 ```
 
 Rules:
@@ -207,17 +220,22 @@ Rules:
   line whenever the name cell needs more than one line; continuation lines carry the
   name only. Cells use the column `bold`/`size`/`align`. Notes render as a separate small
   right-aligned line (`• note`) when `showNote` is true.
-- Sections: in the template's order; `kv` rows render as `label: value`; `table` sections
+- Sections: in the template's order; `kv` rows render as `label: value` (a row with an
+  empty value renders the label alone); `table` sections
   render a header row and one `columns` line per row using the section's `columns`;
   `groupedTable` renders, per group, a centered bold heading (`— name —`), its rows using
-  the section's `columns`, and its subtotal line, separated from the next group. An empty
-  table or group set renders `emptyText` centered when provided.
+  the section's `columns`, and its subtotal line, separated from the next group. A section
+  with no rows or groups renders `emptyText` centered when provided; otherwise an empty
+  `kv` section is skipped.
 - Summary: a bold `xlarge` text line `label: value`, when `show` and a value exists. The
   value is preformatted by the adapter (`money()` for money totals, `N قطعة` for the items
   ticket).
 - Footer: optional separator, then lines.
-- Every band is separated by a single separator when its `separator` flag is true; the
-  design keeps the current visual rhythm (header | fields | items | summary | footer).
+- Separator flags are trailing for `header`, `fields`, and `items` (divider after the
+  band), and leading for a section, the summary, and the footer (divider before it). A
+  divider is emitted only when the adjacent band actually produced lines, so empty
+  optional fields never leave double rules. The defaults keep the current visual rhythm
+  (header | fields | items | sections | summary | footer).
 
 Column widths are weights. `lib/print/templates/columns.ts` normalizes them to the paper
 width and exposes:
@@ -225,6 +243,14 @@ width and exposes:
 - `charWidths(widths, columns)` — integer character counts summing to `paper.columns`,
   used by the text fallback.
 - `pixelWidths(widths, 384)` — integer pixel widths summing to the raster width.
+
+`lib/print/templates/layout.ts` applies a label-minimum rule on top of the weights: a
+table column may never be narrower than its own header label (the header prints those
+labels verbatim, so a short weight such as a 4-character quantity column could not hold
+`الكمية`). `tableWidths(columns, paper)` reserves each label's length first, then shares
+the remaining width by each column's extra weight. Widths still sum to the paper width;
+only columns whose label exceeds their weight grow, at the expense of their neighbors.
+With the default receipt template on 32 columns this yields `[10, 7, 6, 9]`.
 
 Columns are placed right-to-left, matching Arabic reading order: the first column in the
 template (`الصنف`) sits at the right edge. The text fallback builds the row by reversing
@@ -238,16 +264,20 @@ existing primitives:
 
 - Shared helpers (`concat`, `cmd`, `textLine`, `money`, `init`, `align`, `bold`,
   `doubleSize`, `cut`, `separator`, `printLine`) move to `lib/print/primitives.ts`;
-  `lib/print/escpos.ts` imports from there and keeps only `buildTestEscPos`.
-- `text` / `kv` → `printLine` (Arabic raster when enabled, text otherwise).
+  `lib/print/escpos.ts` imports from there and keeps `buildTestEscPos` with its local
+  helpers.
+- `text` / `kv` → `printLine` (Arabic raster when enabled, text otherwise). Both modes
+  support right/center/left; the raster path draws left-aligned text at x = 0, so
+  `textToEscPosRaster` gains a `"left"` alignment value.
 - `separator` → the existing 32-dash separator.
 - `logo` → `getReceiptLogoEscPos(maxWidth)`; the helper gains an optional `maxWidth`
   argument (default 384) and its cache key includes the width.
 - `columns` → new `columnsToEscPos` in `lib/print/text-raster.ts`:
   - Raster enabled: one canvas per row, 384 px wide, cells drawn at measured x offsets
     (`align` right/center/left inside the cell), RTL direction for right-aligned text,
-    LTR for numeric cells. If a cell exceeds its width, the row font is reduced from its
-    configured size in 2 px steps down to 20 px before the text is clipped with `…`.
+    LTR for numeric cells. Cells share a baseline using the row's largest configured
+    size. If a cell exceeds its width, the row font is reduced from its configured size
+    in 2 px steps down to 20 px before the text is clipped with `…`.
   - Raster disabled: `columnsToText(cells, charWidths)` pads with spaces; numeric cells
     that exceed their width are truncated only as a last resort.
 - Text sizes map to pixels 22/26/30/34; the text mode maps `large`/`xlarge` (≥ 32 px) to
@@ -297,9 +327,11 @@ buildSalesReportEscPos(data: ReportSummaryPrintData): Promise<Uint8Array>
 - `buildTestEscPos` stays as the raw printer diagnostic and is not template-driven.
 - The old document builders and their private helpers in `escpos.ts`
   (`buildCheckoutEscPos`, `buildKitchenEscPos`, `buildReportSummaryEscPos`,
-  `buildShiftReportEscPos`, `buildShiftItemsEscPos`, `headerBlock`, `printWrappedName`,
-  `kitchenLine`, `printSalesRow`, `itemQuantityRow`) are removed once no caller remains.
-  Update every import (tests included) in the same change.
+  `buildShiftReportEscPos`, `buildShiftItemsEscPos`, `printWrappedName`, `kitchenLine`,
+  `printSalesRow`, `itemQuantityRow`) are removed once no caller remains.
+  `headerBlock`/`reportSep` stay because `buildTestEscPos` still uses them, and
+  `chunkKitchenLines`/`KITCHEN_ITEMS_PER_TICKET` stay exported. Update every import
+  (tests included) in the same change.
 
 Print builders read the stored template synchronously through better-sqlite3; a template
 read is a primary-key lookup and adds no meaningful latency to a print.
@@ -315,6 +347,7 @@ The default receipt (`receipt`) produces:
 ```
         [logo]
         {{title}}                 (center, bold, xlarge)
+        {{subtitle}}              (center)
         {{brand.phone}}           (center, small)
         {{brand.address}}         (center, small)
 --------------------------------
@@ -349,16 +382,19 @@ Default shapes for the other documents preserve today's layouts:
 
 - `kitchen`: logo off; `{{title}}` center xlarge bold; order/table/waiter/time/ticket part
   fields; items title off; name (bold, large, weight 26) and qty (weight 6); no summary;
-  footer empty. Ticket chunking (`KITCHEN_ITEMS_PER_TICKET = 18`) stays in the caller.
-- `shift`: logo off; `{{title}}` header + venue; fields listed above; `collection` and
-  `cash` sections with the existing labels; summary off; footer line
-  `تم إغلاق الوردية` / `الوردية ما زالت مفتوحة`.
+  footer empty; no divider between the title and the fields block (one divider follows
+  the fields and another follows the items). Ticket chunking
+  (`KITCHEN_ITEMS_PER_TICKET = 18`) stays in the caller.
+- `shift`: logo off; `{{title}}` header + venue; fields listed above; `collection`,
+  `expenses`, and `reconciliation` sections with the existing labels; summary off; footer
+  line `تم إغلاق الوردية` / `الوردية ما زالت مفتوحة`.
 - `items`: `{{title}}` + venue header; date/print fields; `overview` counts; `groups`
   grouped table (`name` weight 26, `qty` weight 6) with per-category subtotals; summary
   `الإجمالي العام`; footer `— نهاية التقرير —`.
 - `sales`: `{{title}}` + venue; from/to/printed fields; `totals` section (`invoiceCount`,
   `totalItems`, `tableQuick`, payment rows); `categories` and `itemsList` table sections
-  with `name/qty/revenue` columns; summary total on; footer `— نهاية التقرير —`.
+  with `index` weight 3, `name` weight 17, `qty` weight 5, `revenue` weight 9; summary
+  total on; footer `— نهاية التقرير —`.
 
 ### 8. Storage
 
@@ -394,6 +430,10 @@ deleteReportTemplate(doc): void                  // DELETE the app_settings row
   line ≤ 200 characters.
 - Field ids, column keys, section ids, and label keys must belong to the document's
   whitelist; section order follows the template but may be reordered, not invented.
+- `table`/`groupedTable` sections require at least one whitelisted column `columns`;
+  `kv` sections must omit `columns`.
+- `labels` must define every field listed in `fields.show` and every static row id of an
+  enabled `kv` section; unused extra labels are allowed.
 - Placeholders must be whitelisted for the document; an unknown `{{…}}` is an error with
   the offending token in the message.
 - `kitchen` and `shift` must have `summary.show = false`; `receipt` and `kitchen` must
@@ -417,19 +457,21 @@ sample per document, the venue name, and whether a receipt logo exists, then ren
 
 Layout: document tabs, then three panes.
 
-- **Left — عناصر التصميم**: element tree (header lines, fields with checkboxes and
-  reorder buttons, items band, sections, summary, footer lines). Add/remove text lines;
-  enable/reorder whitelisted item columns; toggle bands.
-- **Middle — المعاينة**: an 80 mm white strip (384 px scaled to fit) with black Tahoma
-  text. It renders `layoutTemplate(currentTemplate, sampleData[doc])`; logo comes from
-  `/api/settings/receipt-logo`, hidden when `logo.show` is false. Line breaks, alignment,
-  and column placement mirror the raster renderer.
-- **Right — الخصائص**: properties of the selected element (text, align, bold, size;
-  column label/width/align/bold/size; band toggles and separators).
+- **Left — عناصر التصميم**: element tree (header, fields, items, sections, summary,
+  footer) that selects which element the properties pane edits.
+- **Middle — الخصائص**: properties of the selected element — header text lines and logo
+  toggle; field labels; items header toggle plus column label/width; per-section toggle,
+  title and column labels; summary toggle and label; footer text lines. Adding or
+  removing lines, enabling/reordering columns, and editing separator flags are done
+  through the JSON editor rather than dedicated buttons.
+- **Right — المعاينة**: an 80 mm white strip (384 px scaled to fit) with black Tahoma
+  text. It renders `layoutTemplate(currentTemplate, sampleData[doc])`; a logo line is
+  shown as a `[شعار]` placeholder, hidden when `logo.show` is false. Line breaks,
+  alignment, and column placement mirror the raster renderer.
 
-Toolbar: **حفظ** (save), **إعادة التعيين** (reset with confirmation), **استيراد**
+Toolbar: **حفظ** (save), **استعادة الافتراضي** (reset with confirmation), **استيراد**
 (`<input type="file" accept=".fprep,application/json">`), **تصدير** (Blob download named
-`fastpos-<doc>.fprep`), **محرر JSON**, and **طباعة تجريبية** with a printer select.
+`fastpos-<doc>.fprep`), **JSON** editor tab, and **طباعة تجريبية** with a printer select.
 
 Behavior:
 
@@ -444,7 +486,7 @@ Behavior:
 - Test print validates the current editor JSON, builds the document with sample data,
   routes to the selected printer (Windows system → `printRawToWindowsPrinter`,
   network → `printToPrinter`), and reports Arabic success/failure. Default printer:
-  the first checkout-capable printer.
+  the first active printer.
 
 Sample data (`lib/print/templates/sample.ts`) is fixed and realistic for all five
 documents (three receipt items with a note, customer, several payment methods, category
@@ -459,7 +501,7 @@ admin-action pattern):
 | Action | Behavior |
 | --- | --- |
 | `saveReportTemplate(doc, json)` | Validate (size, schema, document match), persist, `revalidatePath("/admin/reports/design")`, audit |
-| `resetReportTemplate(doc)` | Delete the stored row, return the default JSON, audit |
+| `resetReportTemplate(doc)` | Delete the stored row and audit |
 | `testPrintReportTemplate(doc, json, printerId)` | Validate, build with sample data, resolve the printer and print, audit with the failure detail |
 
 Auditing uses `recordSessionAudit` with kind `settings` for save/reset and kind `test`
@@ -514,6 +556,10 @@ Component test:
    right preview; toggling a field removes it from the preview; changing a label updates
    the preview; invalid raw JSON blocks save and shows paths; import loads a file;
    export produces a `<doc>.fprep` download; reset confirmation; unsaved-change prompt.
+
+Existing print tests (`escpos.brand.test.ts`, `escpos-cut.test.ts`, `kitchen-font.test.ts`,
+`order-number.test.ts`, `shift-report.test.ts`, `receipts.test.ts`) are ported to the new
+builders in the same change; none may be deleted to make the suite pass.
 
 Regression and manual verification:
 

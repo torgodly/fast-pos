@@ -1,16 +1,25 @@
 import iconv from "iconv-lite";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/settings", () => ({
+  getSettingValue: () => null,
+  setSettingValue: () => {},
+  deleteSettingValue: () => {},
+  getBrandDetails: () => ({ name: "", phone: "", address: "" }),
+  getReceiptFooterMessage: () => "",
+}));
 import { nowSqlTripoli } from "@/lib/time/tripoli";
 import { formatDateTime } from "@/lib/venues";
 import type { CheckoutReceiptData } from "./receipts";
+import { DEFAULT_REPORT_TEMPLATES } from "./templates/defaults";
 
-type BuildFn = typeof import("./escpos").buildCheckoutEscPos;
+type BuildFn = typeof import("./templates/build").buildReceiptEscPos;
 
-let buildCheckoutEscPos: BuildFn;
+let buildReceiptEscPos: BuildFn;
 
 beforeAll(async () => {
   process.env.PRINTER_ARABIC_RASTER = "0";
-  ({ buildCheckoutEscPos } = await import("./escpos"));
+  ({ buildReceiptEscPos } = await import("./templates/build"));
 });
 
 const base: CheckoutReceiptData = {
@@ -25,23 +34,32 @@ const base: CheckoutReceiptData = {
   lines: [{ name: "شاي", qty: 1, unitPrice: 10, lineTotal: 10 }],
 };
 
-function receiptText(data: CheckoutReceiptData) {
-  return iconv.decode(Buffer.from(buildCheckoutEscPos(data)), "win1256");
+const overrides = {
+  template: DEFAULT_REPORT_TEMPLATES.receipt,
+  settings: { logoAvailable: false },
+  logo: null,
+};
+
+async function receiptText(data: CheckoutReceiptData) {
+  return iconv.decode(
+    Buffer.from(await buildReceiptEscPos(data, overrides)),
+    "win1256",
+  );
 }
 
 describe("checkout receipt text", () => {
-  it("prints the Libya wall clock, not UTC", () => {
+  it("prints the Libya wall clock, not UTC", async () => {
     const paidAt = formatDateTime(
       nowSqlTripoli(new Date("2026-10-25T12:13:22Z")),
     );
-    const text = receiptText({ ...base, paidAt });
+    const text = await receiptText({ ...base, paidAt });
 
     expect(text).toContain("2:13");
     expect(text).not.toContain("12:13");
   });
 
-  it("prints the customer name and phone when attached", () => {
-    const text = receiptText({
+  it("prints the customer name and phone when attached", async () => {
+    const text = await receiptText({
       ...base,
       customerName: "محمد سالم",
       customerPhone: "0910000000",
@@ -51,15 +69,15 @@ describe("checkout receipt text", () => {
     expect(text).toContain("الهاتف: 0910000000");
   });
 
-  it("omits customer rows when no customer is attached", () => {
-    const text = receiptText(base);
+  it("omits customer rows when no customer is attached", async () => {
+    const text = await receiptText(base);
 
     expect(text).not.toContain("العميل:");
     expect(text).not.toContain("الهاتف:");
   });
 
-  it("prints the configured payment method label", () => {
-    const text = receiptText({
+  it("prints the configured payment method label", async () => {
+    const text = await receiptText({
       ...base,
       paymentMethod: "custom",
       paymentMethodLabel: "آجل",

@@ -39,13 +39,15 @@ vi.mock("@/lib/print/network", () => ({
     holder.printed.push({ host: options.host, port: options.port });
   },
 }));
-vi.mock("@/lib/print/escpos", () => ({
-  buildKitchenEscPos: (options: {
+vi.mock("@/lib/print/templates/build", () => ({
+  buildKitchenEscPos: async (options: {
     lines: Array<{ name: string; qty: number }>;
   }) => {
     holder.tickets.push({ lines: options.lines });
     return new Uint8Array();
   },
+}));
+vi.mock("@/lib/print/escpos", () => ({
   chunkKitchenLines: (lines: unknown[]) => [lines],
 }));
 vi.mock("@/lib/inventory/service", () => ({

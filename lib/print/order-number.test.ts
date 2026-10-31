@@ -1,14 +1,23 @@
 import iconv from "iconv-lite";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/settings", () => ({
+  getSettingValue: () => null,
+  setSettingValue: () => {},
+  deleteSettingValue: () => {},
+  getBrandDetails: () => ({ name: "", phone: "", address: "" }),
+  getReceiptFooterMessage: () => "",
+}));
 import type { CheckoutReceiptData } from "./receipts";
+import { DEFAULT_REPORT_TEMPLATES } from "./templates/defaults";
 
-type BuildFn = typeof import("./escpos").buildCheckoutEscPos;
+type BuildFn = typeof import("./templates/build").buildReceiptEscPos;
 
-let buildCheckoutEscPos: BuildFn;
+let buildReceiptEscPos: BuildFn;
 
 beforeAll(async () => {
   process.env.PRINTER_ARABIC_RASTER = "0";
-  ({ buildCheckoutEscPos } = await import("./escpos"));
+  ({ buildReceiptEscPos } = await import("./templates/build"));
 });
 
 const base: CheckoutReceiptData = {
@@ -23,10 +32,18 @@ const base: CheckoutReceiptData = {
   lines: [{ name: "Tea", qty: 1, unitPrice: 10, lineTotal: 10 }],
 };
 
+const overrides = {
+  template: DEFAULT_REPORT_TEMPLATES.receipt,
+  settings: { logoAvailable: false },
+  logo: null,
+};
+
 describe("order number on the checkout receipt", () => {
-  it("prints the order number in the ESC/POS receipt", () => {
+  it("prints the order number in the ESC/POS receipt", async () => {
     const text = iconv.decode(
-      Buffer.from(buildCheckoutEscPos({ ...base, orderNo: 7 })),
+      Buffer.from(
+        await buildReceiptEscPos({ ...base, orderNo: 7 }, overrides),
+      ),
       "win1256",
     );
 
@@ -35,9 +52,9 @@ describe("order number on the checkout receipt", () => {
     expect(text.indexOf("رقم الطلب")).toBeLessThan(text.indexOf("فاتورة:"));
   });
 
-  it("omits the order number line in the ESC/POS receipt when absent", () => {
+  it("omits the order number line in the ESC/POS receipt when absent", async () => {
     const text = iconv.decode(
-      Buffer.from(buildCheckoutEscPos(base)),
+      Buffer.from(await buildReceiptEscPos(base, overrides)),
       "win1256",
     );
 

@@ -47,8 +47,10 @@ vi.mock("@/lib/print/windows-raw", () => ({
 vi.mock("@/lib/print/network", () => ({
   printToPrinter: async () => {},
 }));
+vi.mock("@/lib/print/templates/build", () => ({
+  buildKitchenEscPos: async () => new Uint8Array(),
+}));
 vi.mock("@/lib/print/escpos", () => ({
-  buildKitchenEscPos: () => new Uint8Array(),
   chunkKitchenLines: (lines: unknown[]) => [lines],
 }));
 vi.mock("@/lib/print/resolve-kitchen-printer", () => ({

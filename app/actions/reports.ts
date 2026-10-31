@@ -5,7 +5,7 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { printers } from "@/lib/db/schema";
 import { recordSessionAudit } from "@/lib/audit";
-import { buildReportSummaryEscPos } from "@/lib/print/escpos";
+import { buildSalesReportEscPos } from "@/lib/print/templates/build";
 import { printToPrinter } from "@/lib/print/network";
 import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
 import type { ReportSummaryPrintData } from "@/lib/print/receipts";
@@ -91,7 +91,7 @@ export async function printReportSummary(
   const data = summaryToPrintData(summary);
 
   try {
-    const bytes = buildReportSummaryEscPos(data);
+    const bytes = await buildSalesReportEscPos(data);
     if (printer.connectionType === "local") {
       await printRawToWindowsPrinter(printer.host, bytes);
     } else {
