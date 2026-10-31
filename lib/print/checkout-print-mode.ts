@@ -1,4 +1,4 @@
-export type CheckoutPrintMode = "browser" | "windows" | "network";
+export type CheckoutPrintMode = "windows" | "network";
 
 export function isExplicitWindowsPrinterName(host: string | null | undefined) {
   const name = host?.trim() ?? "";
@@ -7,31 +7,15 @@ export function isExplicitWindowsPrinterName(host: string | null | undefined) {
 
 export function resolveCheckoutPrintMode(printer: {
   connectionType: string;
-  autoPrint: boolean;
-  host: string;
 }): CheckoutPrintMode {
-  if (printer.connectionType !== "local") return "network";
-  if (!printer.autoPrint) return "browser";
-  // Fast POS runs as a Windows service (LocalSystem); its "default" queue is not
-  // the logged-in cashier's default and may be a kitchen printer.
-  return isExplicitWindowsPrinterName(printer.host) ? "windows" : "browser";
+  // Fast POS runs as a Windows service (LocalSystem); a "default" queue is not
+  // the cashier's default, so local rows must carry an explicit queue name.
+  return printer.connectionType === "local" ? "windows" : "network";
 }
 
-export function resolvePrinterAutoPrint(
-  role: string,
-  connectionType: string,
-  requested: boolean,
-): boolean {
-  if (connectionType !== "local") return false;
-  return role === "checkout" || role === "both" ? requested : false;
-}
-
-export function validateAutoPrintHost(
-  connectionType: string,
-  autoPrint: boolean,
-  host: string,
+export function validateSystemPrinterName(
+  host: string | null | undefined,
 ): string | null {
-  if (!autoPrint || connectionType !== "local") return null;
   if (isExplicitWindowsPrinterName(host)) return null;
-  return "اختر طابعة Windows محددة للطباعة التلقائية — الطابعة الافتراضية تتبع حساب الخدمة وقد تطبع على طابعة أخرى";
+  return "اختر طابعة Windows محددة — الطابعة الافتراضية تتبع حساب الخدمة وقد تطبع على طابعة أخرى";
 }

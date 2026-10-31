@@ -4,7 +4,6 @@ import { useEffect, useState, useTransition } from "react";
 import { LoaderCircle, Printer } from "lucide-react";
 import { printReportSummary } from "@/app/actions/reports";
 import { useToast } from "@/components/ToastProvider";
-import { printHtmlReceipt } from "@/lib/print/receipts";
 import type { ReportFiltersInput } from "@/lib/reports/filters";
 
 type PrinterChoice = {
@@ -42,18 +41,6 @@ export function PrintReportButton({
         showToast("error", result.error);
         return;
       }
-      if ("browserPrint" in result && result.browserPrint) {
-        try {
-          await printHtmlReceipt(result.receiptHtml);
-          showToast("success", result.message);
-        } catch (error) {
-          showToast(
-            "error",
-            error instanceof Error ? error.message : "تعذر فتح نافذة الطباعة",
-          );
-        }
-        return;
-      }
       showToast("success", result.message);
     });
   }
@@ -61,7 +48,7 @@ export function PrintReportButton({
   if (printers.length === 0) {
     return (
       <p className="rounded-xl bg-white/10 px-3 py-2 text-xs text-white/75">
-        أضف طابعة شبكة من الإدارة ← الطابعات
+        أضف طابعة من الإدارة ← الطابعات
       </p>
     );
   }
@@ -77,7 +64,6 @@ export function PrintReportButton({
         {printers.map((printer) => (
           <option key={printer.id} value={printer.id} className="text-neutral">
             {printer.name}
-            {printer.connectionType === "local" ? " · متصفح" : ""}
           </option>
         ))}
       </select>

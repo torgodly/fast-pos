@@ -7,10 +7,8 @@ import { printers } from "@/lib/db/schema";
 import { recordSessionAudit } from "@/lib/audit";
 import { buildReportSummaryEscPos } from "@/lib/print/escpos";
 import { printToPrinter } from "@/lib/print/network";
-import {
-  buildDetailedSalesReportHtml,
-  type ReportSummaryPrintData,
-} from "@/lib/print/receipts";
+import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
+import type { ReportSummaryPrintData } from "@/lib/print/receipts";
 import { type ReportFiltersInput } from "@/lib/reports/filters";
 import { getReportSummary } from "@/lib/reports/summary";
 import { formatPrintTimestamp } from "@/lib/venues";
@@ -68,16 +66,7 @@ function summaryToPrintData(
 export async function printReportSummary(
   filters: ReportFiltersInput,
   printerId: number,
-): Promise<
-  | { error: string }
-  | { ok: true; message: string }
-  | {
-      ok: true;
-      message: string;
-      browserPrint: true;
-      receiptHtml: string;
-    }
-> {
+): Promise<{ error: string } | { ok: true; message: string }> {
   let session;
   try {
     session = await assertAdmin();
@@ -101,28 +90,17 @@ export async function printReportSummary(
   const summary = getReportSummary(filters);
   const data = summaryToPrintData(summary);
 
-  if (printer.connectionType === "local") {
-    recordSessionAudit(session, {
-      venueId: summary.venue,
-      kind: "report",
-      printerName: printer.name,
-      success: true,
-      detail: `تقرير أصناف/مجموعات ${summary.fromSql} — ${summary.toSql} (متصفح)`,
-    });
-    return {
-      ok: true,
-      browserPrint: true,
-      receiptHtml: buildDetailedSalesReportHtml(data),
-      message: `اختر «${printer.name}» في نافذة الطباعة`,
-    };
-  }
-
   try {
-    await printToPrinter({
-      host: printer.host,
-      port: printer.port,
-      data: buildReportSummaryEscPos(data),
-    });
+    const bytes = buildReportSummaryEscPos(data);
+    if (printer.connectionType === "local") {
+      await printRawToWindowsPrinter(printer.host, bytes);
+    } else {
+      await printToPrinter({
+        host: printer.host,
+        port: printer.port,
+        data: bytes,
+      });
+    }
     recordSessionAudit(session, {
       venueId: summary.venue,
       kind: "report",

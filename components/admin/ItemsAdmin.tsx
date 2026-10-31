@@ -385,7 +385,7 @@ export function ItemsAdmin({
                 value={`local:${printer.name}`}
                 disabled
               >
-                {printer.name} · USB — غير مدعومة لطباعة المطبخ
+                {printer.name} · USB — أضفها من الإدارة ← الطابعات كـ«طابعة النظام»
               </option>
             );
           }
@@ -419,8 +419,8 @@ export function ItemsAdmin({
     if (systemPrinters.filter((printer) => printer.host).length === 0) {
       return (
         <p className="text-xs text-base-content/45">
-          لا توجد طابعات شبكة مثبتة على السيرفر — طابعات USB لا تصلح لطباعة
-          المطبخ.
+          لا توجد طابعات شبكة مثبتة على السيرفر — أضف طابعة USB من الإدارة ←
+          الطابعات كـ«طابعة النظام».
         </p>
       );
     }

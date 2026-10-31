@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const holder = vi.hoisted(() => ({
   sqlite: null as import("better-sqlite3").Database | null,
   printed: [] as Array<{ host: string; port: number }>,
+  raw: [] as Array<{ name: string; data: Uint8Array }>,
   tickets: [] as Array<{ lines: Array<{ name: string; qty: number }> }>,
 }));
 
@@ -25,14 +26,13 @@ vi.mock("@/lib/settings", () => ({
   getBrandDetails: () => ({ name: "Fast POS", phone: "", address: "" }),
   getReceiptFooterMessage: () => "",
 }));
-vi.mock("@/lib/print/logo", () => ({
-  getReceiptLogoPrintDataUrl: () => null,
-}));
 vi.mock("@/lib/print/checkout-bytes", () => ({
   buildCheckoutPrintBytes: async () => new Uint8Array(),
 }));
 vi.mock("@/lib/print/windows-raw", () => ({
-  printRawToWindowsPrinter: async () => {},
+  printRawToWindowsPrinter: async (name: string, data: Uint8Array) => {
+    holder.raw.push({ name, data });
+  },
 }));
 vi.mock("@/lib/print/network", () => ({
   printToPrinter: async (options: { host: string; port: number }) => {
@@ -173,6 +173,7 @@ function reset() {
            (2, 1, 2, 'شاي مثلج', 'مشروبات باردة', 7, 1, 7, 0);
   `);
   holder.printed.length = 0;
+  holder.raw.length = 0;
   holder.tickets.length = 0;
 }
 
@@ -229,5 +230,24 @@ describe("confirmKitchenOrder with unassigned categories", () => {
     expect(audit).toHaveLength(1);
     expect(audit[0]).toMatchObject({ success: 0 });
     expect(audit[0]!.detail).toContain("لا توجد طابعة مربوطة");
+  });
+
+  it("prints a local kitchen printer through the Windows worker", async () => {
+    sqlite().exec(
+      `UPDATE printers SET host = 'XP-80C', port = 0, connection_type = 'local' WHERE id = 3`,
+    );
+
+    const result = await confirmKitchenOrder(1);
+
+    if ("error" in result) throw new Error(result.error);
+    expect(holder.raw).toEqual([
+      { name: "XP-80C", data: expect.any(Uint8Array) },
+    ]);
+    expect(holder.printed).toHaveLength(0);
+
+    const sent = sqlite()
+      .prepare(`SELECT kitchen_sent_qty FROM order_items WHERE id = 1`)
+      .get() as { kitchen_sent_qty: number };
+    expect(sent.kitchen_sent_qty).toBe(1);
   });
 });

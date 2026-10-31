@@ -79,17 +79,10 @@ export function recordAudit(input: {
 export function auditPrintOutcome(
   printResult: {
     printOk?: boolean;
-    browserPrint?: boolean;
     printError?: string;
   },
   printerName: string,
 ) {
-  if (printResult.browserPrint) {
-    return {
-      success: true,
-      detail: `طباعة من المتصفح — ${printerName}`,
-    };
-  }
   if (printResult.printOk) {
     return {
       success: true,

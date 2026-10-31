@@ -7,7 +7,6 @@ import {
   printQuickSalePreview,
   type QuickSaleLine,
 } from "@/app/actions/orders";
-import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 
 export function PreviewReceiptButton({
@@ -42,19 +41,10 @@ export function PreviewReceiptButton({
         return;
       }
 
-      let printOk = result.printOk;
-      let message = result.message;
-
-      if (result.browserPrint && result.receiptHtml) {
-        const printed = await finishCheckoutPrint({
-          browserPrint: true,
-          receiptHtml: result.receiptHtml,
-        });
-        printOk = printed.printOk;
-        message = printed.printOk ? "تمت طباعة الفاتورة للعميل" : printed.message;
-      }
-
-      showToast(printOk ? "success" : "warning", message);
+      showToast(
+        result.printOk ? "success" : "warning",
+        result.message,
+      );
     });
   }
 

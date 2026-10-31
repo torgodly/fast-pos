@@ -25,16 +25,13 @@ import {
 } from "@/lib/venues";
 import { nowSqlTripoli } from "@/lib/time/tripoli";
 import type { CheckoutReceiptData } from "@/lib/print/receipts";
-import { buildCheckoutReceiptHtml } from "@/lib/print/receipts";
 import { buildCheckoutPrintBytes } from "@/lib/print/checkout-bytes";
 import { buildKitchenEscPos, chunkKitchenLines } from "@/lib/print/escpos";
-import { getReceiptLogoPrintDataUrl } from "@/lib/print/logo";
 import { printToPrinter } from "@/lib/print/network";
 import { resolveCheckoutPrintMode } from "@/lib/print/checkout-print-mode";
 import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
 import { resolveKitchenPrinterForVenue } from "@/lib/print/resolve-kitchen-printer";
 import { availableAtVenue } from "@/lib/menu/scope";
-import { getBrandDetails, getReceiptFooterMessage } from "@/lib/settings";
 import { auditPrintOutcome, recordSessionAudit } from "@/lib/audit";
 import { categoryNameForItem } from "@/lib/orders/category-snapshot";
 import { consumeForPaidOrder } from "@/lib/inventory/service";
@@ -597,19 +594,24 @@ async function printKitchenVoidTicket(options: {
     .replace(/[\u200e\u200f\u061c]/g, "");
 
   try {
-    await printToPrinter({
-      host: printer.host,
-      port: printer.port,
-      data: buildKitchenEscPos({
-        venueName: getVenueName(options.venueId),
-        orderId: options.orderId,
-        tableName: table?.name ?? "بيع سريع",
-        waiterName: options.staffName,
-        createdAt,
-        kind: "void",
-        lines: [{ name: options.itemName, qty: options.qty }],
-      }),
+    const data = buildKitchenEscPos({
+      venueName: getVenueName(options.venueId),
+      orderId: options.orderId,
+      tableName: table?.name ?? "بيع سريع",
+      waiterName: options.staffName,
+      createdAt,
+      kind: "void",
+      lines: [{ name: options.itemName, qty: options.qty }],
     });
+    if (resolveCheckoutPrintMode(printer) === "windows") {
+      await printRawToWindowsPrinter(printer.host, data);
+    } else {
+      await printToPrinter({
+        host: printer.host,
+        port: printer.port,
+        data,
+      });
+    }
     return { ok: true, printerName: printer.name };
   } catch (error) {
     return {
@@ -668,6 +670,7 @@ async function sendPendingKitchenTickets(options: {
     printerName: string;
     host: string;
     port: number;
+    connectionType: string;
   };
 
   const pending: Pending[] = [];
@@ -715,6 +718,7 @@ async function sendPendingKitchenTickets(options: {
       printerName: printer.name,
       host: printer.host,
       port: printer.port,
+      connectionType: printer.connectionType,
     });
   }
 
@@ -772,11 +776,15 @@ async function sendPendingKitchenTickets(options: {
             chunks.length > 1 ? `${i + 1}/${chunks.length}` : undefined,
           lines: chunks[i]!,
         });
-        await printToPrinter({
-          host: sample.host,
-          port: sample.port,
-          data: payload,
-        });
+        if (resolveCheckoutPrintMode(sample) === "windows") {
+          await printRawToWindowsPrinter(sample.host, payload);
+        } else {
+          await printToPrinter({
+            host: sample.host,
+            port: sample.port,
+            data: payload,
+          });
+        }
       }
       printedTo.push(target);
       for (const g of group) succeededLineIds.add(g.lineId);
@@ -973,72 +981,31 @@ async function buildCheckoutReceiptForOrder(
   };
 }
 
-function buildBrowserCheckoutPrint(receipt: CheckoutReceiptData) {
-  const footerMessage = getReceiptFooterMessage();
-  const brand = getBrandDetails();
-  const logoDataUrl = getReceiptLogoPrintDataUrl();
-  return {
-    printOk: false as const,
-    browserPrint: true as const,
-    receiptHtml: buildCheckoutReceiptHtml(
-      {
-        ...receipt,
-        footerMessage,
-        brandName: brand.name,
-        brandPhone: brand.phone,
-        brandAddress: brand.address,
-      },
-      logoDataUrl,
-    ),
-  };
-}
+type CheckoutPrintResult =
+  | { printOk: true }
+  | { printOk: false; printError: string };
 
 async function printCheckoutReceipt(
   receipt: CheckoutReceiptData,
   printer: typeof printers.$inferSelect,
-): Promise<
-  | { printOk: true }
-  | {
-      printOk: false;
-      printError: string;
-    }
-  | {
-      printOk: false;
-      browserPrint: true;
-      receiptHtml: string;
-    }
-> {
-  const mode = resolveCheckoutPrintMode(printer);
-
+): Promise<CheckoutPrintResult> {
   try {
-    if (mode === "browser") {
-      return buildBrowserCheckoutPrint(receipt);
-    }
-
-    if (mode === "windows") {
-      try {
-        const data = await buildCheckoutPrintBytes(receipt);
-        await printRawToWindowsPrinter(printer.host, data);
-        return { printOk: true };
-      } catch {
-        return buildBrowserCheckoutPrint(receipt);
-      }
-    }
-
     const data = await buildCheckoutPrintBytes(receipt);
-    await printToPrinter({
-      host: printer.host,
-      port: printer.port,
-      data,
-    });
+    if (resolveCheckoutPrintMode(printer) === "windows") {
+      await printRawToWindowsPrinter(printer.host, data);
+    } else {
+      await printToPrinter({
+        host: printer.host,
+        port: printer.port,
+        data,
+      });
+    }
     return { printOk: true };
   } catch (error) {
     return {
       printOk: false,
       printError:
-        error instanceof Error
-          ? error.message
-          : "تعذر طباعة فاتورة الدفع",
+        error instanceof Error ? error.message : "تعذر طباعة فاتورة الدفع",
     };
   }
 }
@@ -1053,8 +1020,6 @@ export async function payOrder(
       nextUrl: string;
       printOk: boolean;
       printError?: string;
-      browserPrint?: boolean;
-      receiptHtml?: string;
       held?: boolean;
       message: string;
     }
@@ -1207,17 +1172,6 @@ export async function payOrder(
   revalidatePath(`/waiter/${order.venueId}`);
   revalidatePath(`/cashier/${order.venueId}/order/${orderId}`);
 
-  if ("browserPrint" in printResult && printResult.browserPrint) {
-    return {
-      ok: true,
-      nextUrl: `/cashier/${order.venueId}`,
-      printOk: false,
-      browserPrint: true,
-      receiptHtml: printResult.receiptHtml,
-      message: `تم الدفع — اختر الطابعة في نافذة Chrome${inventory.note}`,
-    };
-  }
-
   if (printResult.printOk) {
     return {
       ok: true,
@@ -1258,8 +1212,6 @@ export async function payQuickSale(
       ok: true;
       printOk: boolean;
       printError?: string;
-      browserPrint?: boolean;
-      receiptHtml?: string;
       orderId: number;
       held?: boolean;
       kitchenFailed: boolean;
@@ -1507,9 +1459,7 @@ export async function payQuickSale(
   revalidatePath(`/cashier/${venueId}/quick`);
   revalidatePath(`/cashier/${venueId}/sales`);
 
-  const receiptFailed =
-    !("browserPrint" in printResult && printResult.browserPrint) &&
-    !printResult.printOk;
+  const receiptFailed = !printResult.printOk;
   const receiptError =
     "printError" in printResult ? printResult.printError : undefined;
 
@@ -1520,15 +1470,6 @@ export async function payQuickSale(
     receiptFailed,
     inventoryWarning: inventory.warning,
   };
-
-  if ("browserPrint" in printResult && printResult.browserPrint) {
-    return {
-      ...base,
-      printOk: !kitchenFailed,
-      browserPrint: true,
-      receiptHtml: printResult.receiptHtml,
-    };
-  }
 
   if (printResult.printOk && !kitchenFailed) {
     return {
@@ -1553,8 +1494,6 @@ export async function reprintOrderReceipt(
       ok: true;
       printOk: boolean;
       printError?: string;
-      browserPrint?: boolean;
-      receiptHtml?: string;
       message: string;
     }
 > {
@@ -1602,16 +1541,6 @@ export async function reprintOrderReceipt(
     detail: printed.detail,
   });
 
-  if ("browserPrint" in printResult && printResult.browserPrint) {
-    return {
-      ok: true,
-      printOk: false,
-      browserPrint: true,
-      receiptHtml: printResult.receiptHtml,
-      message: "اختر الطابعة في نافذة Chrome",
-    };
-  }
-
   if (printResult.printOk) {
     return {
       ok: true,
@@ -1637,8 +1566,6 @@ type PreviewPrintResult =
       ok: true;
       printOk: boolean;
       printError?: string;
-      browserPrint?: boolean;
-      receiptHtml?: string;
       message: string;
     };
 
@@ -1669,16 +1596,6 @@ async function finishPreviewPrint(
     success: printed.success,
     detail: printed.detail,
   });
-
-  if ("browserPrint" in printResult && printResult.browserPrint) {
-    return {
-      ok: true,
-      printOk: false,
-      browserPrint: true,
-      receiptHtml: printResult.receiptHtml,
-      message: "اختر الطابعة في نافذة Chrome",
-    };
-  }
 
   if (printResult.printOk) {
     return {

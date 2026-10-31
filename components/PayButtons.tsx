@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { payOrder } from "@/app/actions/orders";
-import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 import type { PaymentMethodLike } from "@/lib/payments/core";
 
@@ -84,17 +83,8 @@ export function PayButtons({
         return;
       }
 
-      let printOk = result.printOk;
-      let message = result.message;
-
-      if (result.browserPrint && result.receiptHtml) {
-        const printed = await finishCheckoutPrint({
-          browserPrint: true,
-          receiptHtml: result.receiptHtml,
-        });
-        printOk = printed.printOk;
-        message = printed.message;
-      }
+      const printOk = result.printOk;
+      const message = result.message;
 
       showToast(printOk ? "success" : "warning", message);
 

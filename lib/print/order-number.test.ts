@@ -1,6 +1,5 @@
 import iconv from "iconv-lite";
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildCheckoutReceiptHtml } from "./receipts";
 import type { CheckoutReceiptData } from "./receipts";
 
 type BuildFn = typeof import("./escpos").buildCheckoutEscPos;
@@ -25,24 +24,6 @@ const base: CheckoutReceiptData = {
 };
 
 describe("order number on the checkout receipt", () => {
-  it("prints the order number above the invoice number in HTML", () => {
-    const html = buildCheckoutReceiptHtml({ ...base, orderNo: 7 });
-
-    expect(html).toContain("رقم الطلب");
-    expect(html).toContain("رقم الفاتورة");
-    expect(html.indexOf("رقم الطلب")).toBeLessThan(
-      html.indexOf("رقم الفاتورة"),
-    );
-    expect(html).toContain(">7<");
-  });
-
-  it("omits the order number row when there is none", () => {
-    const html = buildCheckoutReceiptHtml(base);
-
-    expect(html).not.toContain("رقم الطلب");
-    expect(html).toContain("رقم الفاتورة");
-  });
-
   it("prints the order number in the ESC/POS receipt", () => {
     const text = iconv.decode(
       Buffer.from(buildCheckoutEscPos({ ...base, orderNo: 7 })),

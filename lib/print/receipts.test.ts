@@ -1,7 +1,17 @@
-import { describe, expect, it } from "vitest";
+import iconv from "iconv-lite";
+import { beforeAll, describe, expect, it } from "vitest";
 import { nowSqlTripoli } from "@/lib/time/tripoli";
 import { formatDateTime } from "@/lib/venues";
-import { buildCheckoutReceiptHtml, type CheckoutReceiptData } from "./receipts";
+import type { CheckoutReceiptData } from "./receipts";
+
+type BuildFn = typeof import("./escpos").buildCheckoutEscPos;
+
+let buildCheckoutEscPos: BuildFn;
+
+beforeAll(async () => {
+  process.env.PRINTER_ARABIC_RASTER = "0";
+  ({ buildCheckoutEscPos } = await import("./escpos"));
+});
 
 const base: CheckoutReceiptData = {
   venueName: "فاست بوس",
@@ -15,86 +25,46 @@ const base: CheckoutReceiptData = {
   lines: [{ name: "شاي", qty: 1, unitPrice: 10, lineTotal: 10 }],
 };
 
-describe("buildCheckoutReceiptHtml — paid time", () => {
+function receiptText(data: CheckoutReceiptData) {
+  return iconv.decode(Buffer.from(buildCheckoutEscPos(data)), "win1256");
+}
+
+describe("checkout receipt text", () => {
   it("prints the Libya wall clock, not UTC", () => {
     const paidAt = formatDateTime(
       nowSqlTripoli(new Date("2026-10-25T12:13:22Z")),
     );
-    const html = buildCheckoutReceiptHtml({ ...base, paidAt });
+    const text = receiptText({ ...base, paidAt });
 
-    expect(html).toContain("2:13");
-    expect(html).not.toContain("12:13");
+    expect(text).toContain("2:13");
+    expect(text).not.toContain("12:13");
   });
-});
 
-describe("buildCheckoutReceiptHtml — customer", () => {
   it("prints the customer name and phone when attached", () => {
-    const html = buildCheckoutReceiptHtml({
+    const text = receiptText({
       ...base,
       customerName: "محمد سالم",
       customerPhone: "0910000000",
     });
 
-    expect(html).toContain("العميل");
-    expect(html).toContain("محمد سالم");
-    expect(html).toContain("0910000000");
-  });
-
-  it("escapes customer values", () => {
-    const html = buildCheckoutReceiptHtml({
-      ...base,
-      customerName: "<script>alert(1)</script>",
-      customerPhone: '09"11',
-    });
-
-    expect(html).not.toContain("<script>alert(1)</script>");
-    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
-    expect(html).toContain("09&quot;11");
+    expect(text).toContain("العميل: محمد سالم");
+    expect(text).toContain("الهاتف: 0910000000");
   });
 
   it("omits customer rows when no customer is attached", () => {
-    const html = buildCheckoutReceiptHtml(base);
+    const text = receiptText(base);
 
-    expect(html).not.toContain("العميل");
-    expect(html).not.toContain("الهاتف");
+    expect(text).not.toContain("العميل:");
+    expect(text).not.toContain("الهاتف:");
   });
 
-  it("prints brand details above the venue subtitle", () => {
-    const html = buildCheckoutReceiptHtml({
+  it("prints the configured payment method label", () => {
+    const text = receiptText({
       ...base,
-      brandName: "مطعم الأصيل",
-      brandPhone: "0911234567",
-      brandAddress: "طرابلس — شارع الجمهورية",
+      paymentMethod: "custom",
+      paymentMethodLabel: "آجل",
     });
 
-    expect(html).toContain("مطعم الأصيل");
-    expect(html).toContain("فاست بوس · إيصال الدفع");
-    expect(html).toContain("0911234567");
-    expect(html).toContain("طرابلس — شارع الجمهورية");
-  });
-
-  it("falls back to the venue name when the brand name is empty", () => {
-    const html = buildCheckoutReceiptHtml({
-      ...base,
-      brandName: "   ",
-      brandPhone: "0911234567",
-    });
-
-    expect(html).toContain(">فاست بوس</p>");
-    expect(html).toContain("إيصال الدفع");
-    expect(html).not.toContain("فاست بوس · إيصال الدفع");
-    expect(html).toContain("0911234567");
-  });
-
-  it("escapes brand values", () => {
-    const html = buildCheckoutReceiptHtml({
-      ...base,
-      brandName: "<b>علامتي</b>",
-      brandAddress: 'شارع "الجمهورية"',
-    });
-
-    expect(html).not.toContain("<b>علامتي</b>");
-    expect(html).toContain("&lt;b&gt;علامتي&lt;/b&gt;");
-    expect(html).toContain("شارع &quot;الجمهورية&quot;");
+    expect(text).toContain("الدفع: آجل");
   });
 });

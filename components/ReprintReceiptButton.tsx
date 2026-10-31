@@ -3,7 +3,6 @@
 import { useTransition } from "react";
 import { LoaderCircle, Printer } from "lucide-react";
 import { reprintOrderReceipt } from "@/app/actions/orders";
-import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 
 export function ReprintReceiptButton({
@@ -26,19 +25,10 @@ export function ReprintReceiptButton({
         return;
       }
 
-      let printOk = result.printOk;
-      let message = result.message;
-
-      if (result.browserPrint && result.receiptHtml) {
-        const printed = await finishCheckoutPrint({
-          browserPrint: true,
-          receiptHtml: result.receiptHtml,
-        });
-        printOk = printed.printOk;
-        message = printed.printOk ? "تمت إعادة الطباعة" : printed.message;
-      }
-
-      showToast(printOk ? "success" : "warning", message);
+      showToast(
+        result.printOk ? "success" : "warning",
+        result.message,
+      );
     });
   }
 

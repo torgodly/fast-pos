@@ -15,15 +15,30 @@ vi.mock("@/app/actions/admin", () => ({
   upsertPrinter: vi.fn(),
 }));
 
-const localPrinter = {
+const systemPrinter = {
   id: 1,
   venueId: "restaurant" as const,
   name: "كاشير المطعم",
   role: "checkout",
-  host: "default",
+  host: "XP-80C",
   port: 0,
   connectionType: "local",
-  autoPrint: false,
+  active: true,
+};
+
+const legacyLocalPrinter = {
+  ...systemPrinter,
+  host: "default",
+};
+
+const networkPrinter = {
+  id: 2,
+  venueId: null,
+  name: "مطبخ",
+  role: "kitchen",
+  host: "192.168.1.56",
+  port: 9100,
+  connectionType: "network",
   active: true,
 };
 
@@ -46,7 +61,7 @@ const systemPrinters = [
   },
 ];
 
-function renderPrinters(printers = [localPrinter]) {
+function renderPrinters(printers = [systemPrinter]) {
   return render(
     <ToastProvider>
       <PrintersAdmin venueId="restaurant" printers={printers} />
@@ -54,106 +69,153 @@ function renderPrinters(printers = [localPrinter]) {
   );
 }
 
-async function openLocalPrinter(container: HTMLElement) {
+async function openEdit(container: HTMLElement) {
   fireEvent.click(screen.getByTitle("تعديل"));
   return await waitFor(() => {
     const select = container.querySelector(
       'select[name="host"]',
     ) as HTMLSelectElement | null;
     expect(select).toBeTruthy();
+    // getSystemPrinters() resolves asynchronously; wait for the options so
+    // fireEvent.change on a known queue cannot race the empty list.
     expect(
-      container.querySelector('option[value="XP-80C"]'),
+      select!.querySelector('option[value="XP-80C"]'),
     ).toBeTruthy();
     return select as HTMLSelectElement;
   });
 }
 
-describe("PrintersAdmin auto print", () => {
-  beforeEach(() => {
-    vi.mocked(upsertPrinter).mockReset();
-    vi.mocked(upsertPrinter).mockResolvedValue({ ok: true });
-    vi.mocked(getSystemPrinters).mockReset();
-    vi.mocked(getSystemPrinters).mockResolvedValue({
-      printers: systemPrinters,
-    });
+beforeEach(() => {
+  vi.mocked(upsertPrinter).mockReset();
+  vi.mocked(upsertPrinter).mockResolvedValue({ ok: true });
+  vi.mocked(getSystemPrinters).mockReset();
+  vi.mocked(getSystemPrinters).mockResolvedValue({
+    printers: systemPrinters,
   });
+});
 
-  it("shows the auto print checkbox checked for a local auto-print printer", async () => {
-    const { container } = renderPrinters([
-      { ...localPrinter, autoPrint: true },
-    ]);
-
-    await openLocalPrinter(container);
-
-    const checkbox = container.querySelector(
-      'input[name="autoPrint"]',
-    ) as HTMLInputElement | null;
-    expect(checkbox).toBeChecked();
-    expect(
-      screen.getByText("طباعة تلقائية بدون نافذة Chrome"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/اختر طابعة Windows محددة/),
-    ).toBeInTheDocument();
-  });
-
-  it("submits the selected Windows queue when auto print is enabled", async () => {
+describe("PrintersAdmin connection types", () => {
+  it("uses only the two connection types and never mentions Chrome or auto print", async () => {
     const { container } = renderPrinters();
 
-    const select = await openLocalPrinter(container);
-    fireEvent.change(select, { target: { value: "XP-80C" } });
-    const checkbox = container.querySelector(
-      'input[name="autoPrint"]',
-    ) as HTMLInputElement;
-    fireEvent.click(checkbox);
-    fireEvent.click(screen.getByText("حفظ التعديلات"));
+    await openEdit(container);
 
-    await waitFor(() => expect(upsertPrinter).toHaveBeenCalled());
-
-    const formData = vi.mocked(upsertPrinter).mock.calls[0][0] as FormData;
-    expect(formData.get("autoPrint")).toBe("on");
-    expect(formData.get("host")).toBe("XP-80C");
-  });
-
-  it("blocks auto print until an explicit Windows queue is chosen", async () => {
-    const { container } = renderPrinters();
-
-    await openLocalPrinter(container);
-    const checkbox = container.querySelector(
-      'input[name="autoPrint"]',
-    ) as HTMLInputElement;
-    fireEvent.click(checkbox);
-    fireEvent.click(screen.getByText("حفظ التعديلات"));
-
+    const connection = container.querySelector(
+      'select[name="connectionType"]',
+    ) as HTMLSelectElement;
     expect(
-      screen.getByText(/اختر طابعة Windows محددة/),
-    ).toBeInTheDocument();
-    expect(upsertPrinter).not.toHaveBeenCalled();
+      Array.from(connection.options).map((option) => option.value),
+    ).toEqual(["local", "network"]);
+    expect(container.querySelector('input[name="autoPrint"]')).toBeNull();
+    expect(screen.queryByText(/Chrome/)).toBeNull();
   });
 
-  it("lists the installed Windows printers in the local printer modal", async () => {
+  it("lists the installed Windows printers", async () => {
     const { container } = renderPrinters();
 
-    const select = await openLocalPrinter(container);
+    const select = await openEdit(container);
     const values = Array.from(select.options).map((option) => option.value);
 
     expect(values).toContain("XP-80C");
     expect(values).toContain("kitchen");
   });
 
-  it("hides auto print for a network printer", async () => {
-    const { container } = renderPrinters([
-      {
-        ...localPrinter,
-        host: "192.168.1.50",
-        port: 9100,
-        connectionType: "network",
-        autoPrint: true,
-      },
-    ]);
+  it("submits the selected system printer as a local connection", async () => {
+    const { container } = renderPrinters();
+
+    const select = await openEdit(container);
+    fireEvent.change(select, { target: { value: "kitchen" } });
+    fireEvent.click(screen.getByText("حفظ التعديلات"));
+
+    await waitFor(() => expect(upsertPrinter).toHaveBeenCalled());
+
+    const formData = vi.mocked(upsertPrinter).mock.calls[0][0] as FormData;
+    expect(formData.get("connectionType")).toBe("local");
+    expect(formData.get("host")).toBe("kitchen");
+    expect(formData.get("port")).toBe("0");
+  });
+
+  it("blocks saving until a specific Windows queue is chosen", async () => {
+    const { container } = renderPrinters([legacyLocalPrinter]);
+
+    const select = await openEdit(container);
+    expect(select.value).toBe("");
+    expect(
+      screen.getAllByText(/اختر طابعة Windows محددة/).length,
+    ).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText("حفظ التعديلات"));
+    expect(upsertPrinter).not.toHaveBeenCalled();
+  });
+
+  it("submits host and port for a network printer", async () => {
+    const { container } = renderPrinters([networkPrinter]);
 
     fireEvent.click(screen.getByTitle("تعديل"));
+    const host = (await waitFor(() => {
+      const input = container.querySelector(
+        'input[name="host"]',
+      ) as HTMLInputElement | null;
+      expect(input).toBeTruthy();
+      return input as HTMLInputElement;
+    })) as HTMLInputElement;
+    const port = container.querySelector(
+      'input[name="port"]',
+    ) as HTMLInputElement;
 
-    expect(container.querySelector('input[name="autoPrint"]')).toBeNull();
+    fireEvent.change(host, { target: { value: "192.168.1.90" } });
+    fireEvent.change(port, { target: { value: "9101" } });
+    fireEvent.click(screen.getByText("حفظ التعديلات"));
+
+    await waitFor(() => expect(upsertPrinter).toHaveBeenCalled());
+
+    const formData = vi.mocked(upsertPrinter).mock.calls[0][0] as FormData;
+    expect(formData.get("connectionType")).toBe("network");
+    expect(formData.get("host")).toBe("192.168.1.90");
+    expect(formData.get("port")).toBe("9101");
+  });
+
+  it("lets a kitchen printer use the system printer connection", async () => {
+    const { container } = renderPrinters([]);
+
+    fireEvent.click(screen.getByText("إضافة طابعة"));
+    const role = container.querySelector(
+      'select[name="role"]',
+    ) as HTMLSelectElement;
+    fireEvent.change(role, { target: { value: "kitchen" } });
+
+    const connection = container.querySelector(
+      'select[name="connectionType"]',
+    ) as HTMLSelectElement;
+    expect(
+      Array.from(connection.options).map((option) => option.value),
+    ).toEqual(["local", "network"]);
+
+    const select = await waitFor(() => {
+      const element = container.querySelector(
+        'select[name="host"]',
+      ) as HTMLSelectElement | null;
+      expect(element).toBeTruthy();
+      expect(
+        element!.querySelector('option[value="XP-80C"]'),
+      ).toBeTruthy();
+      return element as HTMLSelectElement;
+    });
+    fireEvent.change(select, { target: { value: "XP-80C" } });
+    fireEvent.click(screen.getByText("إضافة"));
+
+    await waitFor(() => expect(upsertPrinter).toHaveBeenCalled());
+
+    const formData = vi.mocked(upsertPrinter).mock.calls[0][0] as FormData;
+    expect(formData.get("role")).toBe("kitchen");
+    expect(formData.get("connectionType")).toBe("local");
+    expect(formData.get("host")).toBe("XP-80C");
+  });
+
+  it("warns in the table about a legacy default-queue printer", () => {
+    renderPrinters([legacyLocalPrinter]);
+
+    expect(screen.getByText("تحتاج تحديد")).toBeInTheDocument();
+    expect(screen.getByText("اختر طابعة Windows محددة")).toBeInTheDocument();
   });
 });

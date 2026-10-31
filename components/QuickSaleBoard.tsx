@@ -10,7 +10,6 @@ import {
   Wallet,
 } from "lucide-react";
 import { payQuickSale, type QuickSaleLine } from "@/app/actions/orders";
-import { finishCheckoutPrint } from "@/lib/print/finish-checkout-print";
 import { useToast } from "@/components/ToastProvider";
 import { CustomerSelect } from "@/components/CustomerSelect";
 import type { CustomerOption } from "@/app/actions/customers";
@@ -177,17 +176,7 @@ export function QuickSaleBoard({
       setCustomerId(null);
 
       const kitchenFailed = payResult.kitchenFailed;
-      let receiptFailed = payResult.receiptFailed;
-
-      if (payResult.browserPrint && payResult.receiptHtml) {
-        const printed = await finishCheckoutPrint({
-          browserPrint: true,
-          receiptHtml: payResult.receiptHtml,
-        });
-        if (!printed.printOk) {
-          receiptFailed = true;
-        }
-      }
+      const receiptFailed = payResult.receiptFailed;
 
       showResult(
         quickSalePayNotice({

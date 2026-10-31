@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const holder = vi.hoisted(() => ({
   sqlite: null as import("better-sqlite3").Database | null,
   consume: vi.fn(),
+  raw: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
@@ -25,7 +26,7 @@ vi.mock("@/app/actions/station", () => ({
       venueId: "restaurant",
       name: "Checkout",
       role: "checkout",
-      host: "default",
+      host: "XP-80C",
       port: 9100,
       connectionType: "local",
       autoPrint: false,
@@ -37,14 +38,11 @@ vi.mock("@/lib/settings", () => ({
   getBrandDetails: () => ({ name: "Fast POS", phone: "", address: "" }),
   getReceiptFooterMessage: () => "",
 }));
-vi.mock("@/lib/print/logo", () => ({
-  getReceiptLogoPrintDataUrl: () => null,
-}));
 vi.mock("@/lib/print/checkout-bytes", () => ({
   buildCheckoutPrintBytes: async () => new Uint8Array(),
 }));
 vi.mock("@/lib/print/windows-raw", () => ({
-  printRawToWindowsPrinter: async () => {},
+  printRawToWindowsPrinter: (...args: unknown[]) => holder.raw(...args),
 }));
 vi.mock("@/lib/print/network", () => ({
   printToPrinter: async () => {},
@@ -245,6 +243,8 @@ function reset() {
     warnings: [],
     consumed: [],
   });
+  holder.raw.mockReset();
+  holder.raw.mockResolvedValue(undefined);
 }
 
 function readOrder(id: number) {
@@ -285,9 +285,7 @@ describe("payOrder deferred holds", () => {
 
     const result = await payOrder(1, "cash");
 
-    expect(result).toMatchObject({ ok: true, browserPrint: true });
-    if ("error" in result) throw new Error(result.error);
-    expect(result.receiptHtml).toContain("نقدي");
+    expect(result).toMatchObject({ ok: true, printOk: true });
 
     const saved = readOrder(1);
     expect(saved.status).toBe("paid");
@@ -310,6 +308,20 @@ describe("payOrder deferred holds", () => {
       error: "طريقة الدفع غير متاحة — حدّث الصفحة",
     });
     expect(readOrder(1).status).toBe("open");
+  });
+
+  it("keeps the payment when direct receipt printing fails", async () => {
+    holder.raw.mockRejectedValueOnce(new Error("Cannot open printer: XP-80C"));
+
+    const result = await payOrder(1, "cash");
+
+    expect(result).toMatchObject({
+      ok: true,
+      printOk: false,
+      printError: "Cannot open printer: XP-80C",
+    });
+    expect(holder.raw).toHaveBeenCalledWith("XP-80C", expect.any(Uint8Array));
+    expect(readOrder(1).status).toBe("paid");
   });
 });
 
@@ -352,7 +364,7 @@ describe("payQuickSale deferred holds", () => {
     `);
 
     const settled = await payOrder(held.orderId, "card");
-    expect(settled).toMatchObject({ ok: true, browserPrint: true });
+    expect(settled).toMatchObject({ ok: true, printOk: true });
 
     const after = readOrder(held.orderId);
     expect(after.status).toBe("paid");

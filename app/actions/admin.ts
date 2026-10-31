@@ -40,10 +40,8 @@ import {
 } from "@/lib/settings";
 import { validateBrandDetails } from "@/lib/brand";
 import { printToPrinter } from "@/lib/print/network";
-import {
-  resolvePrinterAutoPrint,
-  validateAutoPrintHost,
-} from "@/lib/print/checkout-print-mode";
+import { validateSystemPrinterName } from "@/lib/print/checkout-print-mode";
+import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
 import { parseSystemPrinterRef } from "@/lib/print/system-printer-ref";
 import { listSystemPrinters } from "@/lib/print/system";
 import { recordSessionAudit } from "@/lib/audit";
@@ -910,10 +908,6 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
       formData.get("connectionType") ?? "network",
     ) as PrinterConnectionType;
     const host = String(formData.get("host") ?? "").trim();
-    const port = Number(formData.get("port") ?? 9100);
-    const requestedAutoPrint =
-      formData.get("autoPrint") === "on" ||
-      formData.get("autoPrint") === "true";
 
     if (!isPrinterRole(role)) {
       return { error: "نوع الطابعة غير صالح" };
@@ -921,12 +915,6 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
 
     if (connectionType !== "network" && connectionType !== "local") {
       return { error: "طريقة اتصال الطابعة غير صالحة" };
-    }
-
-    if (supportsKitchen(role) && connectionType === "local") {
-      return {
-        error: "طابعة المطبخ تتطلب اتصال شبكة — استخدم IP أو طابعة شبكة من النظام",
-      };
     }
 
     const resolvedConnection: PrinterConnectionType = connectionType;
@@ -945,41 +933,36 @@ export async function upsertPrinter(formData: FormData): Promise<ActionResult> {
       return { error: "اختر قسم فاتورة الكاشير (مطعم أو كافيه)" };
     }
 
-    if (resolvedConnection === "network" && !host) {
-      return { error: "عنوان IP مطلوب لطابعة الشبكة" };
-    }
-
-    const resolvedHost =
-      resolvedConnection === "local" ? host.trim() || "default" : host;
-
-    const autoPrint = resolvePrinterAutoPrint(
-      role,
-      resolvedConnection,
-      requestedAutoPrint,
-    );
-    const autoPrintError = validateAutoPrintHost(
-      resolvedConnection,
-      autoPrint,
-      resolvedHost,
-    );
-    if (autoPrintError) {
-      return { error: autoPrintError };
-    }
-
+    let resolvedPort = 9100;
     if (resolvedConnection === "network") {
-      if (!Number.isFinite(port) || port < 1) {
+      if (!host) {
+        return { error: "عنوان IP مطلوب لطابعة الشبكة" };
+      }
+      const rawPort = String(formData.get("port") ?? "").trim();
+      resolvedPort = rawPort ? Number(rawPort) : 9100;
+      if (
+        !Number.isInteger(resolvedPort) ||
+        resolvedPort < 1 ||
+        resolvedPort > 65535
+      ) {
         return { error: "منفذ الطابعة غير صالح" };
+      }
+    } else {
+      const hostError = validateSystemPrinterName(host);
+      if (hostError) {
+        return { error: hostError };
       }
     }
 
+    const resolvedHost = host;
     const values = {
       venueId,
       name,
       role,
       host: resolvedHost,
-      port: resolvedConnection === "local" ? 0 : port,
+      port: resolvedConnection === "local" ? 0 : resolvedPort,
       connectionType: resolvedConnection,
-      autoPrint,
+      autoPrint: resolvedConnection === "local",
     };
 
     let printerId = id && Number.isFinite(id) ? id : null;
@@ -1080,31 +1063,29 @@ export async function testPrinter(
     return { error: "الطابعة غير موجودة أو معطّلة" };
   }
 
-  if (printer.connectionType === "local") {
-    return {
-      error: printer.autoPrint
-        ? "الطباعة التلقائية — تُختبر عند إتمام عملية الدفع"
-        : "طابعة Chrome — تُطبع من جهاز الكاشير عند الدفع (نافذة طباعة المتصفح)",
-    };
-  }
-
   try {
     const data = await buildTestPrintBytes(printer.name);
-    await printToPrinter({
-      host: printer.host,
-      port: printer.port,
-      data,
-    });
+    if (printer.connectionType === "local") {
+      await printRawToWindowsPrinter(printer.host, data);
+    } else {
+      await printToPrinter({
+        host: printer.host,
+        port: printer.port,
+        data,
+      });
+    }
+    const target =
+      printer.connectionType === "local" ? "نظام Windows" : printer.host;
     recordSessionAudit(session, {
       venueId: printer.venueId,
       kind: "test",
       printerName: printer.name,
       success: true,
-      detail: `اختبار ${printer.name} (${printer.host})`,
+      detail: `اختبار ${printer.name} (${target})`,
     });
     return {
       ok: true,
-      message: `تم إرسال صفحة الاختبار إلى ${printer.name} (${printer.host})`,
+      message: `تم إرسال صفحة الاختبار إلى ${printer.name}`,
     };
   } catch (error) {
     const detail =

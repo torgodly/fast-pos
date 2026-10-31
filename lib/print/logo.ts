@@ -4,16 +4,13 @@ import { PNG } from "pngjs";
 import { restorePrinterTextMode } from "./encoding";
 
 const MAX_WIDTH = 384;
-const PRINT_MAX_WIDTH = 320;
 const LOGO_PATHS = [
   path.join(process.cwd(), "data", "receipt-logo.png"),
   path.join(process.cwd(), "public", "receipt-logo.png"),
 ];
 
 let cachedLogo: Uint8Array | null | undefined;
-let cachedPrintDataUrl: string | null | undefined;
 let cachedEscPosLogoKey: string | undefined;
-let cachedPrintLogoKey: string | undefined;
 
 function getLogoCacheKey(): string {
   for (const logoPath of LOGO_PATHS) {
@@ -91,9 +88,7 @@ function isInkPixel(
 
 export function clearReceiptLogoCache() {
   cachedLogo = undefined;
-  cachedPrintDataUrl = undefined;
   cachedEscPosLogoKey = undefined;
-  cachedPrintLogoKey = undefined;
 }
 
 export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
@@ -113,58 +108,6 @@ export async function getReceiptLogoEscPos(): Promise<Uint8Array | null> {
     return cachedLogo;
   } catch {
     cachedLogo = null;
-    return null;
-  }
-}
-
-/** White background + black ink — same logic as ESC/POS, safe for Chrome print. */
-export function getReceiptLogoPrintDataUrl(
-  maxWidth = PRINT_MAX_WIDTH,
-): string | null {
-  const logoKey = getLogoCacheKey();
-  if (cachedPrintDataUrl !== undefined && cachedPrintLogoKey === logoKey) {
-    return cachedPrintDataUrl;
-  }
-  cachedPrintLogoKey = logoKey;
-
-  try {
-    const png = readLogoPixels();
-    if (!png) {
-      cachedPrintDataUrl = null;
-      return null;
-    }
-
-    const scale = png.width > maxWidth ? maxWidth / png.width : 1;
-    const targetW = Math.max(1, Math.round(png.width * scale));
-    const targetH = Math.max(1, Math.round(png.height * scale));
-    const bgLum = detectBackgroundLum(png);
-    const out = new PNG({ width: targetW, height: targetH });
-
-    for (let i = 0; i < out.data.length; i += 4) {
-      out.data[i] = 255;
-      out.data[i + 1] = 255;
-      out.data[i + 2] = 255;
-      out.data[i + 3] = 255;
-    }
-
-    for (let y = 0; y < targetH; y += 1) {
-      const srcY = Math.min(png.height - 1, Math.floor(y / scale));
-      for (let x = 0; x < targetW; x += 1) {
-        const srcX = Math.min(png.width - 1, Math.floor(x / scale));
-        if (!isInkPixel(png, srcX, srcY, bgLum)) continue;
-        const idx = (targetW * y + x) << 2;
-        out.data[idx] = 0;
-        out.data[idx + 1] = 0;
-        out.data[idx + 2] = 0;
-        out.data[idx + 3] = 255;
-      }
-    }
-
-    const buffer = PNG.sync.write(out);
-    cachedPrintDataUrl = `data:image/png;base64,${buffer.toString("base64")}`;
-    return cachedPrintDataUrl;
-  } catch {
-    cachedPrintDataUrl = null;
     return null;
   }
 }
