@@ -198,8 +198,8 @@ describe("shift totals with expenses", () => {
       },
     ]);
     expect(totals.items).toEqual([
-      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 20 },
+      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 10 },
     ]);
   });
 
@@ -214,9 +214,9 @@ describe("shift totals with expenses", () => {
     const totals = getShiftTotals("restaurant", 1);
 
     expect(totals.items).toEqual([
-      { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
-      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+      { name: "كولا", qty: 3, categoryName: "مشروبات باردة", revenue: 30 },
+      { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 20 },
+      { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 10 },
     ]);
     expect(totals.totalItems).toBe(6);
   });
@@ -235,6 +235,7 @@ describe("shift totals with expenses", () => {
       name: "بيتزا",
       qty: 4,
       categoryName: "البيتزا",
+      revenue: 120,
     });
     expect(totals.totalItems).toBe(7);
   });

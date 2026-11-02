@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { requireAdmin } from "@/app/actions/auth";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { PrintReportButton } from "@/components/PrintReportButton";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
@@ -236,6 +237,11 @@ export default async function AdminReportsPage({
                   name: printer.name,
                   connectionType: printer.connectionType,
                 }))}
+              />
+              <PdfDownloadButton
+                request={{ document: "sales", filters: printFilters }}
+                label="تنزيل التقرير PDF"
+                className="btn btn-sm gap-2 rounded-xl border-white/15 bg-white text-neutral hover:bg-white/90"
               />
               <div className="flex flex-wrap gap-1.5 sm:justify-end">
                 <Link

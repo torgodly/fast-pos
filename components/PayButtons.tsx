@@ -62,6 +62,26 @@ export function PayButtons({
     return <Wallet className="size-4" />;
   }
 
+  function methodButton(method: PaymentMethodLike) {
+    const blockedByShift = !shiftOpen && !method.deferred;
+    return (
+      <button
+        key={method.code}
+        type="button"
+        className={`btn btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm ${methodClass(method)}`}
+        disabled={pending || blockedByShift}
+        title={blockedByShift ? "افتح الوردية أولاً" : method.name}
+        onClick={() => askConfirm(method.code)}
+      >
+        {methodIcon(method)}
+        {method.name}
+      </button>
+    );
+  }
+
+  const immediateMethods = paymentMethods.filter((method) => !method.deferred);
+  const deferredMethods = paymentMethods.filter((method) => method.deferred);
+
   function confirmPay() {
     if (!selected) return;
     startTransition(async () => {
@@ -97,23 +117,26 @@ export function PayButtons({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-1.5">
-        {paymentMethods.map((method) => {
-          const blockedByShift = !shiftOpen && !method.deferred;
-          return (
-            <button
-              key={method.code}
-              type="button"
-              className={`btn btn-sm h-11 min-h-11 gap-1.5 rounded-lg text-sm ${methodClass(method)}`}
-              disabled={pending || blockedByShift}
-              title={blockedByShift ? "افتح الوردية أولاً" : method.name}
-              onClick={() => askConfirm(method.code)}
-            >
-              {methodIcon(method)}
-              {method.name}
-            </button>
-          );
-        })}
+      <div className="space-y-1.5">
+        {immediateMethods.length > 0 ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            {immediateMethods.map(methodButton)}
+          </div>
+        ) : null}
+        {immediateMethods.length > 0 && deferredMethods.length > 0 ? (
+          <div
+            role="separator"
+            aria-orientation="horizontal"
+            className="flex items-center px-0.5 py-0.5"
+          >
+            <span className="h-px w-full bg-base-300" />
+          </div>
+        ) : null}
+        {deferredMethods.length > 0 ? (
+          <div className="grid grid-cols-2 gap-1.5">
+            {deferredMethods.map(methodButton)}
+          </div>
+        ) : null}
       </div>
 
       {!shiftOpen ? (

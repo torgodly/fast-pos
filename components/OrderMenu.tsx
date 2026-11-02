@@ -47,6 +47,7 @@ export function OrderMenu({
   lines,
   total,
   footer,
+  headerAction,
   isMainCashier = false,
   cancelledLines = [],
 }: {
@@ -56,6 +57,7 @@ export function OrderMenu({
   lines: Line[];
   total: number;
   footer?: ReactNode;
+  headerAction?: ReactNode;
   isMainCashier?: boolean;
   cancelledLines?: CancelledTicketLine[];
 }) {
@@ -199,6 +201,7 @@ export function OrderMenu({
             onChangeQty={changeQty}
             onRemove={remove}
             onChangeNote={changeNote}
+            headerAction={headerAction}
             footer={ticketFooter}
           />
         </div>

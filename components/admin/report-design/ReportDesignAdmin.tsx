@@ -7,11 +7,8 @@ import {
   saveReportTemplate,
   testPrintReportTemplate,
 } from "@/app/actions/report-templates";
-import {
-  blankSample,
-  type BlockId,
-  type TemplateCommit,
-} from "@/lib/print/templates/blocks";
+import { downloadPdf } from "@/lib/client/download-pdf";
+import { blankSample, type TemplateCommit } from "@/lib/print/templates/element-ops";
 import { DEFAULT_REPORT_TEMPLATES } from "@/lib/print/templates/defaults";
 import { parseReportTemplateJson } from "@/lib/print/templates/schema";
 import type {
@@ -20,9 +17,10 @@ import type {
   ReportTemplate,
 } from "@/lib/print/templates/types";
 import { AdvancedPanel } from "./AdvancedPanel";
-import { BlockInspector } from "./BlockInspector";
 import { EditorToolbar } from "./EditorToolbar";
-import { ReportCanvas } from "./ReportCanvas";
+import { ElementInspector } from "./ElementInspector";
+import { ElementPalette } from "./ElementPalette";
+import { GridCanvas } from "./GridCanvas";
 import { useTemplateEditor } from "./useTemplateEditor";
 
 type ReportDesignAdminProps = {
@@ -39,10 +37,21 @@ type ReportDesignAdminProps = {
   }>;
 };
 
+function jsonVersion(json: string): number | null {
+  try {
+    const value = JSON.parse(json) as { version?: unknown };
+    return typeof value.version === "number" ? value.version : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ReportDesignAdmin(props: ReportDesignAdminProps) {
   const router = useRouter();
   const editor = useTemplateEditor(props.template);
-  const [selected, setSelected] = useState<BlockId | null>("header");
+  const [selected, setSelected] = useState<string | null>(
+    props.template.elements[0]?.id ?? null,
+  );
   const [sampleMode, setSampleMode] = useState<"sample" | "blank">("sample");
   const [advanced, setAdvanced] = useState(false);
   const [jsonText, setJsonText] = useState(props.templateJson);
@@ -55,6 +64,7 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
   const [printerId, setPrinterId] = useState(props.printers[0]?.id ?? 0);
   const saving = useRef(false);
   const printing = useRef(false);
+  const downloading = useRef(false);
 
   const template = editor.template;
   const data = sampleMode === "sample" ? props.sample : blankSample(props.sample);
@@ -71,9 +81,21 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
 
   const commit: TemplateCommit = (next, options) => {
     editor.commit(next, options);
+    keepSelection(next);
     setError(null);
     setMessage(null);
   };
+
+  // Imports, resets, and JSON edits can replace every element id. Keep the
+  // current selection while it still exists; otherwise fall back to the first
+  // element so the inspector never points at a deleted id.
+  function keepSelection(next: ReportTemplate) {
+    setSelected((current) =>
+      current && next.elements.some((element) => element.id === current)
+        ? current
+        : next.elements[0]?.id ?? null,
+    );
+  }
 
   function changeDocument(next: ReportDocument) {
     if (next === props.document) return;
@@ -140,6 +162,7 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
     const fallback = structuredClone(DEFAULT_REPORT_TEMPLATES[props.document]);
     editor.replace(fallback);
     editor.markSaved(fallback);
+    keepSelection(fallback);
     setJsonText(JSON.stringify(fallback, null, 2));
     setError(null);
     setMessage("تمت استعادة التصميم الافتراضي");
@@ -179,7 +202,29 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
     }
   }
 
+  async function downloadDesignPdf() {
+    if (downloading.current) return;
+    downloading.current = true;
+    try {
+      const result = await downloadPdf({
+        document: props.document,
+        source: "design",
+        template: JSON.stringify(template),
+      });
+      if ("error" in result) {
+        setError(result.error);
+        setMessage(null);
+        return;
+      }
+      setError(null);
+      setMessage(`تم تنزيل ${result.filename}`);
+    } finally {
+      downloading.current = false;
+    }
+  }
+
   function applyJson() {
+    const wasV1 = jsonVersion(jsonText) === 1;
     const result = parseReportTemplateJson(jsonText, props.document);
     if (!result.ok) {
       setError(result.errors.join("\n"));
@@ -187,9 +232,14 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
       return;
     }
     editor.replace(result.template);
+    keepSelection(result.template);
     setJsonText(JSON.stringify(result.template, null, 2));
     setError(null);
-    setMessage("تم تطبيق التصميم من JSON");
+    setMessage(
+      wasV1
+        ? "تم ترحيل تصميم الإصدار الأول وتطبيقه"
+        : "تم تطبيق التصميم من JSON",
+    );
   }
 
   async function importFile(file: File | undefined) {
@@ -202,6 +252,7 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
       setMessage(null);
       return;
     }
+    const wasV1 = jsonVersion(text) === 1;
     const result = parseReportTemplateJson(text, props.document);
     if (!result.ok) {
       setError(result.errors.join("\n"));
@@ -209,9 +260,12 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
       return;
     }
     editor.replace(result.template);
+    keepSelection(result.template);
     setJsonText(JSON.stringify(result.template, null, 2));
     setError(null);
-    setMessage(`تم استيراد ${file.name}`);
+    setMessage(
+      `تم استيراد ${file.name}${wasV1 ? " — تم ترحيل v1" : ""}`,
+    );
   }
 
   function exportFile() {
@@ -250,6 +304,7 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
         onRedo={editor.redo}
         onPrinterChange={setPrinterId}
         onTestPrint={testPrint}
+        onDownloadPdf={downloadDesignPdf}
         onSampleModeChange={setSampleMode}
         onToggleAdvanced={toggleAdvanced}
       />
@@ -260,17 +315,30 @@ export function ReportDesignAdmin(props: ReportDesignAdminProps) {
       {message && <div className="alert alert-success text-sm">{message}</div>}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <ReportCanvas
+        <div className="space-y-3">
+          <ElementPalette
+            template={template}
+            defaults={DEFAULT_REPORT_TEMPLATES[props.document]}
+            onCommit={commit}
+          />
+          <GridCanvas
+            template={template}
+            data={data}
+            selectedId={selected}
+            onSelect={setSelected}
+            onCommit={commit}
+            onBlocked={(message) => {
+              setError(message);
+              setMessage(null);
+            }}
+          />
+        </div>
+        <ElementInspector
           template={template}
-          data={data}
-          selected={selected}
-          onSelect={setSelected}
+          defaults={DEFAULT_REPORT_TEMPLATES[props.document]}
+          selectedId={selected}
           onCommit={commit}
-        />
-        <BlockInspector
-          template={template}
-          selected={selected}
-          onChange={commit}
+          onSelect={setSelected}
         />
       </div>
 

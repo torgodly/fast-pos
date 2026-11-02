@@ -8,7 +8,6 @@ import { KitchenConfirmButton } from "@/components/KitchenConfirmButton";
 import { OrderCustomerSelect } from "@/components/OrderCustomerSelect";
 import { OrderMenu } from "@/components/OrderMenu";
 import { PayButtons } from "@/components/PayButtons";
-import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { PosHeader } from "@/components/PosHeader";
 import { db } from "@/lib/db";
 import {
@@ -163,14 +162,16 @@ export default async function CashierOrderPage({
             reason: row.reason,
             removedByName: row.removedByName,
           }))}
+          headerAction={
+            <OrderCustomerSelect
+              key="customer"
+              orderId={orderId}
+              customers={customerOptions}
+              value={order.customerId}
+            />
+          }
           footer={
             <div className="space-y-1">
-              <OrderCustomerSelect
-                key="customer"
-                orderId={orderId}
-                customers={customerOptions}
-                value={order.customerId}
-              />
               <KitchenConfirmButton
                 key="kitchen"
                 orderId={orderId}
@@ -179,11 +180,6 @@ export default async function CashierOrderPage({
                   lines.length > 0 &&
                   lines.every((line) => (line.kitchenSentQty ?? 0) >= line.qty)
                 }
-              />
-              <PreviewReceiptButton
-                key="preview"
-                orderId={orderId}
-                disabled={lines.length === 0}
               />
               <PayButtons
                 key="pay"

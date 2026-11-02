@@ -21,6 +21,7 @@ import {
   reprintShiftReport,
 } from "@/app/actions/shifts";
 import { useToast } from "@/components/ToastProvider";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { DEFAULT_OPENING_FLOAT } from "@/lib/shifts/cash";
 import type {
   ShiftExpenseItem,
@@ -264,7 +265,7 @@ export function CashierShiftPanel({
             )}
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
             <button
               type="button"
               className="btn btn-outline gap-2 rounded-xl"
@@ -278,6 +279,11 @@ export function CashierShiftPanel({
               )}
               طباعة ملخص الوردية
             </button>
+            <PdfDownloadButton
+              request={{ document: "shift", shiftId: openShift.shiftId }}
+              label="ملخص PDF"
+              className="btn btn-outline gap-2 rounded-xl"
+            />
             <button
               type="button"
               className="btn btn-error gap-2 rounded-xl"
@@ -416,16 +422,22 @@ export function CashierShiftPanel({
                       <DifferenceValue value={row.difference} />
                     </td>
                     <td>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
-                        disabled={pending}
-                        onClick={() => run(() => reprintShiftReport(row.shiftId))}
-                        title="إعادة طباعة تقرير الإغلاق"
-                      >
-                        <RotateCcw className="size-3.5" />
-                        طباعة
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
+                          disabled={pending}
+                          onClick={() => run(() => reprintShiftReport(row.shiftId))}
+                          title="إعادة طباعة تقرير الإغلاق"
+                        >
+                          <RotateCcw className="size-3.5" />
+                          طباعة
+                        </button>
+                        <PdfDownloadButton
+                          request={{ document: "shift", shiftId: row.shiftId }}
+                          className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
+                        />
+                      </div>
                     </td>
                   </tr>
                 ))

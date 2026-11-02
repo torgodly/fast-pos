@@ -189,6 +189,7 @@ export function PosTicketPanel({
   total,
   lines,
   footer,
+  headerAction,
   pending,
   emptyLabel,
   compact = false,
@@ -201,6 +202,7 @@ export function PosTicketPanel({
   total: number;
   lines: PosTicketLine[];
   footer?: ReactNode;
+  headerAction?: ReactNode;
   pending?: boolean;
   emptyLabel?: string;
   compact?: boolean;
@@ -211,17 +213,22 @@ export function PosTicketPanel({
   const listRef = useDragScroll<HTMLDivElement>("y");
   return (
     <aside className="flex h-full min-h-0 flex-1 flex-col overflow-hidden border border-base-300 bg-base-100">
-      <div className="flex shrink-0 items-center justify-between border-b border-base-300 px-2.5 py-1.5">
-        <p className="text-sm font-black">
-          {title ?? "فاتورة"}
-          <span className="ms-1 font-bold text-base-content/40">
-            ({itemCount})
-          </span>
-        </p>
-        <p className="shrink-0 whitespace-nowrap text-base font-black tabular-nums text-primary">
-          {formatMoney(total)}
-        </p>
-      </div>
+      <header className="shrink-0 border-b border-base-300">
+        <div className="flex items-center justify-between px-2.5 py-1.5">
+          <p className="text-sm font-black">
+            {title ?? "فاتورة"}
+            <span className="ms-1 font-bold text-base-content/40">
+              ({itemCount})
+            </span>
+          </p>
+          <p className="shrink-0 whitespace-nowrap text-base font-black tabular-nums text-primary">
+            {formatMoney(total)}
+          </p>
+        </div>
+        {headerAction ? (
+          <div className="px-2.5 pb-1.5">{headerAction}</div>
+        ) : null}
+      </header>
       <div ref={listRef} className="touch-scroll px-1.5">
         <PosTicketLines
           lines={lines}

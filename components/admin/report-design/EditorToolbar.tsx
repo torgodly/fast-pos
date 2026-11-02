@@ -31,6 +31,7 @@ type EditorToolbarProps = {
   onRedo: () => void;
   onPrinterChange: (id: number) => void;
   onTestPrint: () => void;
+  onDownloadPdf: () => void;
   onSampleModeChange: (mode: "sample" | "blank") => void;
   onToggleAdvanced: () => void;
 };
@@ -52,6 +53,7 @@ export function EditorToolbar({
   onRedo,
   onPrinterChange,
   onTestPrint,
+  onDownloadPdf,
   onSampleModeChange,
   onToggleAdvanced,
 }: EditorToolbarProps) {
@@ -140,6 +142,14 @@ export function EditorToolbar({
             طباعة تجريبية
           </button>
         </div>
+        <button
+          type="button"
+          className="btn btn-outline btn-lg"
+          onClick={onDownloadPdf}
+          title="تنزيل معاينة التصميم كملف PDF"
+        >
+          تنزيل PDF
+        </button>
         {dirty && (
           <span className="badge badge-warning badge-lg">تغييرات غير محفوظة</span>
         )}

@@ -1,5 +1,5 @@
 import { isArabicRasterEnabled, restorePrinterTextMode } from "../encoding";
-import { appendLogo } from "../logo";
+import { appendLogo, shiftRaster } from "../logo";
 import {
   align,
   concat,
@@ -11,6 +11,7 @@ import {
 } from "../primitives";
 import { columnsToEscPos, columnsToText } from "../text-raster";
 import { pixelWidths } from "./columns";
+import { qrRaster } from "./qr";
 import type { LayoutLine, TextSize } from "./types";
 
 export const TEXT_SIZE_PX: Record<TextSize, number> = {
@@ -55,7 +56,18 @@ export function renderLayout(
       continue;
     }
     if (line.kind === "logo") {
-      appendLogo(parts, options.logo ?? null, line.align);
+      const logo = options.logo ?? null;
+      // `offsetPx: 0` means "narrow logo at column 0", so test for undefined
+      // rather than truthiness: a zero offset still needs the padded-raster
+      // path with left alignment (`shiftRaster` is a no-op at offset 0).
+      const offsetPx = line.offsetPx;
+      const raster = logo && offsetPx !== undefined ? shiftRaster(logo, offsetPx) : logo;
+      appendLogo(parts, raster, offsetPx !== undefined ? "left" : line.align);
+      continue;
+    }
+    if (line.kind === "qr") {
+      const raster = shiftRaster(qrRaster(line.payload, line.sizePx), line.offsetPx);
+      appendLogo(parts, raster, "left");
       continue;
     }
     if (line.kind === "columns") {

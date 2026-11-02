@@ -64,9 +64,9 @@ const shift: ShiftReportPrintData = {
   tableSales: 9,
   quickSales: 3,
   items: [
-    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-    { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
-    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 10 },
+    { name: "كولا", qty: 3, categoryName: "مشروبات باردة", revenue: 30 },
+    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 8 },
   ],
   openingFloat: 50,
   expenseTotal: 12.5,
@@ -150,6 +150,7 @@ describe("kitchenDocumentData", () => {
     expect(data.title).toBe("إلغاء — لا تحضّر");
     expect(data.fields).toMatchObject({
       orderNo: "#7",
+      invoiceId: "#7",
       table: "T1",
       waiter: "علي",
       time: "12:30",
@@ -157,6 +158,20 @@ describe("kitchenDocumentData", () => {
     });
     expect(data.items[0]).toEqual({ name: "بيتزا", qty: "1" });
     expect(data.summary).toBeNull();
+  });
+
+  it("prints the per-shift order number and exposes the invoice id", () => {
+    const data = kitchenDocumentData({
+      venueName: "Fast Cafe",
+      orderId: 7,
+      orderNo: 42,
+      tableName: "T1",
+      waiterName: "علي",
+      createdAt: "12:30",
+      lines: [{ name: "بيتزا", qty: 1 }],
+    });
+    expect(data.fields.orderNo).toBe("42");
+    expect(data.fields.invoiceId).toBe("#7");
   });
 });
 
@@ -227,7 +242,7 @@ describe("shiftDocumentData", () => {
 });
 
 describe("items and sales documents", () => {
-  it("groups the items ticket by category with subtotals and a grand total", () => {
+  it("prints the items ticket as numbered category and item tables", () => {
     const data = itemsDocumentData(shift);
     expect(data.title).toBe("تقرير أصناف الوردية #4");
     expect(data.sections.overview!.rows).toEqual(
@@ -236,20 +251,24 @@ describe("items and sales documents", () => {
         expect.objectContaining({ labelId: "itemCount", value: "3" }),
       ]),
     );
-    const groups = data.sections.groups!.groups!;
-    expect(groups.map((group) => group.label)).toEqual([
-      "مشروبات ساخنة",
-      "مشروبات باردة",
+    expect(data.sections.categories!.table).toEqual([
+      { index: "1", name: "مشروبات باردة", qty: "3", revenue: "30.00" },
+      { index: "2", name: "مشروبات ساخنة", qty: "3", revenue: "18.00" },
     ]);
-    expect(groups[0]!.total).toBe("3 قطعة");
+    expect(data.sections.itemsList!.table).toEqual([
+      { index: "1", name: "كولا", qty: "3", revenue: "30.00" },
+      { index: "2", name: "شاي", qty: "2", revenue: "10.00" },
+      { index: "3", name: "قهوة", qty: "1", revenue: "8.00" },
+    ]);
     expect(data.summary).toBe("6 قطعة");
   });
 
   it("renders the empty items state", () => {
     const data = itemsDocumentData({ ...shift, items: [] });
     expect(data.sections.overview!.rows).toEqual([]);
-    expect(data.sections.groups!.groups).toEqual([]);
-    expect(data.sections.groups!.emptyText).toBe("لا أصناف مبيعة في هذه الوردية");
+    expect(data.sections.categories!.table).toEqual([]);
+    expect(data.sections.categories!.emptyText).toBe("لا مجموعات في هذه الوردية");
+    expect(data.sections.itemsList!.emptyText).toBe("لا أصناف مبيعة في هذه الوردية");
     expect(data.summary).toBeNull();
   });
 
@@ -309,7 +328,10 @@ describe("sample documents", () => {
     ).toContain("كرواسون");
     expect(JSON.stringify(samples.kitchen)).toContain("كابتشينو");
     expect(texts("shift")).toContain("إغلاق وردية #4");
-    expect(texts("items")).toContain("— مشروبات ساخنة —");
+    expect(texts("items")).toContain("المجموعات");
+    expect(
+      JSON.stringify(layoutTemplate(DEFAULT_REPORT_TEMPLATES.items, samples.items)),
+    ).toContain("مشروبات ساخنة");
     expect(texts("sales")).toContain("تقرير المبيعات");
   });
 });

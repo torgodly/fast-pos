@@ -8,10 +8,9 @@ import { recordSessionAudit } from "@/lib/audit";
 import { buildSalesReportEscPos } from "@/lib/print/templates/build";
 import { printToPrinter } from "@/lib/print/network";
 import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
-import type { ReportSummaryPrintData } from "@/lib/print/receipts";
 import { type ReportFiltersInput } from "@/lib/reports/filters";
+import { summaryToPrintData } from "@/lib/reports/print-data";
 import { getReportSummary } from "@/lib/reports/summary";
-import { formatPrintTimestamp } from "@/lib/venues";
 
 async function assertAdmin() {
   const session = await getSession();
@@ -19,48 +18,6 @@ async function assertAdmin() {
     throw new Error("غير مصرح");
   }
   return session;
-}
-
-function byRevenue<T extends { revenue: number }>(rows: T[]) {
-  return [...rows].sort((a, b) => b.revenue - a.revenue);
-}
-
-function summaryToPrintData(
-  summary: ReturnType<typeof getReportSummary>,
-): ReportSummaryPrintData {
-  return {
-    venueName: summary.venueName,
-    fromLabel: formatPrintTimestamp(summary.fromSql),
-    toLabel: formatPrintTimestamp(summary.toSql),
-    printedAt: formatPrintTimestamp(new Date()),
-    invoiceCount: summary.rows.length,
-    totalSales: summary.totalSales,
-    cashTotal: summary.cashTotal,
-    nonCashTotal: summary.nonCashTotal,
-    paymentBreakdown: summary.paymentBreakdown.map((item) => ({
-      name: item.name,
-      total: item.total,
-      count: item.count,
-    })),
-    totalItems: summary.totalItems,
-    tableSales: summary.tableSales,
-    quickSales: summary.quickSales,
-    cancelledCount: summary.cancelledCount,
-    openCount: summary.openCount,
-    openTotal: summary.openTotal,
-    categorySales: byRevenue(summary.categorySales).map((row) => ({
-      name: row.categoryName,
-      qty: row.qty,
-      revenue: row.revenue,
-    })),
-    itemSales: byRevenue(summary.itemSales).map((row) => ({
-      name: row.itemName,
-      qty: row.qty,
-      revenue: row.revenue,
-    })),
-    waiterPerformance: [],
-    cashierPerformance: [],
-  };
 }
 
 export async function printReportSummary(

@@ -55,7 +55,7 @@ export type ShiftReportPrintData = {
   totalItems: number;
   tableSales: number;
   quickSales: number;
-  items: Array<{ name: string; qty: number; categoryName: string }>;
+  items: Array<{ name: string; qty: number; categoryName: string; revenue: number }>;
   openingFloat: number;
   expenseTotal: number;
   expenses: Array<{
@@ -83,6 +83,8 @@ export type ShiftItemsPrintData = Pick<
 export type KitchenReceiptData = {
   venueName: string;
   orderId: number;
+  /** Per-shift invoice sequence; omitted on previews and legacy rows. */
+  orderNo?: number | null;
   tableName: string;
   waiterName: string;
   createdAt: string;

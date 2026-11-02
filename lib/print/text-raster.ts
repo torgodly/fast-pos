@@ -1,10 +1,15 @@
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, type SKRSContext2D } from "@napi-rs/canvas";
 import { PNG } from "pngjs";
 import { pngToEscPosRaster } from "./logo";
 import { normalizePrinterText, hasArabicText } from "./encoding";
 
-const RASTER_WIDTH = 384;
-const SIDE_PAD = 8;
+export const TEXT_RASTER_WIDTH = 384;
+export const TEXT_RASTER_PAD = 8;
+export const FONT_FAMILY = 'Tahoma, "Segoe UI", Arial, sans-serif';
+
+function fontFor(fontSize: number, bold?: boolean) {
+  return `${bold ? "bold " : ""}${fontSize}px ${FONT_FAMILY}`;
+}
 
 function wrapMeasured(
   ctx: { measureText: (text: string) => { width: number } },
@@ -51,6 +56,54 @@ function wrapMeasured(
   return lines.length > 0 ? lines : [value];
 }
 
+export function wrapTextRows(
+  text: string,
+  options: {
+    bold?: boolean;
+    fontSize: number;
+    maxWidth?: number;
+  },
+): string[] {
+  const maxWidth =
+    options.maxWidth ?? TEXT_RASTER_WIDTH - TEXT_RASTER_PAD * 2;
+  const measureCanvas = createCanvas(TEXT_RASTER_WIDTH, options.fontSize + 10);
+  const measureCtx = measureCanvas.getContext("2d");
+  measureCtx.font = fontFor(options.fontSize, options.bold);
+  return wrapMeasured(
+    measureCtx,
+    normalizePrinterText(text),
+    maxWidth,
+  );
+}
+
+export function drawTextRows(
+  ctx: SKRSContext2D | CanvasRenderingContext2D,
+  rows: string[],
+  options: {
+    bold?: boolean;
+    fontSize: number;
+    align: "right" | "center" | "left";
+    y: number;
+  },
+): number {
+  const lineHeight = options.fontSize + 10;
+  ctx.fillStyle = "#000000";
+  ctx.font = fontFor(options.fontSize, options.bold);
+  ctx.textAlign = options.align;
+  ctx.textBaseline = "middle";
+
+  const x =
+    options.align === "center"
+      ? TEXT_RASTER_WIDTH / 2
+      : options.align === "left"
+        ? TEXT_RASTER_PAD
+        : TEXT_RASTER_WIDTH - TEXT_RASTER_PAD;
+  rows.forEach((row, index) => {
+    ctx.fillText(row, x, options.y + index * lineHeight + lineHeight / 2);
+  });
+  return rows.length * lineHeight;
+}
+
 export function textToEscPosRaster(
   text: string,
   options: {
@@ -59,40 +112,20 @@ export function textToEscPosRaster(
     align?: "right" | "center" | "left";
   } = {},
 ): Uint8Array {
-  const value = normalizePrinterText(text);
   const fontSize = options.fontSize ?? (options.bold ? 30 : 26);
-  const lineHeight = fontSize + 10;
   const align = options.align ?? "right";
-  const maxWidth = RASTER_WIDTH - SIDE_PAD * 2;
-
-  const measureCanvas = createCanvas(RASTER_WIDTH, lineHeight);
-  const measureCtx = measureCanvas.getContext("2d");
-  measureCtx.font = `${options.bold ? "bold " : ""}${fontSize}px Tahoma, "Segoe UI", Arial, sans-serif`;
-
-  const rows = wrapMeasured(measureCtx, value, maxWidth);
+  const rows = wrapTextRows(text, { bold: options.bold, fontSize });
+  const lineHeight = fontSize + 10;
   const height = Math.max(lineHeight, rows.length * lineHeight);
-  const canvas = createCanvas(RASTER_WIDTH, height);
+  const canvas = createCanvas(TEXT_RASTER_WIDTH, height);
   const ctx = canvas.getContext("2d");
 
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, RASTER_WIDTH, height);
-  ctx.fillStyle = "#000000";
-  ctx.font = `${options.bold ? "bold " : ""}${fontSize}px Tahoma, "Segoe UI", Arial, sans-serif`;
-  ctx.textAlign = align;
-  ctx.textBaseline = "middle";
-
-  const x =
-    align === "center"
-      ? RASTER_WIDTH / 2
-      : align === "left"
-        ? SIDE_PAD
-        : RASTER_WIDTH - SIDE_PAD;
-  rows.forEach((row, index) => {
-    ctx.fillText(row, x, index * lineHeight + lineHeight / 2);
-  });
+  ctx.fillRect(0, 0, TEXT_RASTER_WIDTH, height);
+  drawTextRows(ctx, rows, { bold: options.bold, fontSize, align, y: 0 });
 
   const png = PNG.sync.read(canvas.toBuffer("image/png"));
-  return pngToEscPosRaster(png, RASTER_WIDTH);
+  return pngToEscPosRaster(png, TEXT_RASTER_WIDTH);
 }
 
 export type ColumnCell = {
@@ -101,8 +134,6 @@ export type ColumnCell = {
   bold?: boolean;
   fontSize?: number;
 };
-
-const COLUMN_FONT_FAMILY = 'Tahoma, "Segoe UI", Arial, sans-serif';
 
 function fitCell(
   text: string,
@@ -134,24 +165,29 @@ export function columnsToText(
   return line;
 }
 
-export function columnsToEscPos(
+/**
+ * Draws one table row at logical 384-px coordinates. The first column sits at
+ * the right edge, matching the ESC/POS output. Returns the row height.
+ */
+export function drawColumnCells(
+  ctx: SKRSContext2D | CanvasRenderingContext2D,
   cells: ColumnCell[],
   widths: number[],
-): Uint8Array {
+  y: number,
+): number {
   const largest = Math.max(...cells.map((cell) => cell.fontSize ?? 26), 20);
   const lineHeight = largest + 10;
-  const canvas = createCanvas(RASTER_WIDTH, lineHeight);
-  const ctx = canvas.getContext("2d");
 
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, RASTER_WIDTH, lineHeight);
   ctx.fillStyle = "#000000";
   ctx.textBaseline = "middle";
 
   const bounds: Array<{ left: number; right: number; width: number }> = [];
   let offset = 0;
   for (const width of widths) {
-    const right = Math.min(RASTER_WIDTH, Math.max(0, RASTER_WIDTH - offset));
+    const right = Math.min(
+      TEXT_RASTER_WIDTH,
+      Math.max(0, TEXT_RASTER_WIDTH - offset),
+    );
     offset += width;
     const left = Math.min(right, Math.max(0, right - width));
     bounds.push({ left, right, width: Math.max(0, right - left) });
@@ -164,8 +200,7 @@ export function columnsToEscPos(
     const alignMode = cell.align ?? "right";
     let fontSize = Math.max(20, cell.fontSize ?? 26);
     let text = normalizePrinterText(cell.text);
-    const font = () =>
-      `${cell.bold ? "bold " : ""}${fontSize}px ${COLUMN_FONT_FAMILY}`;
+    const font = () => fontFor(fontSize, cell.bold);
 
     ctx.font = font();
     while (fontSize > 20 && ctx.measureText(text).width > bound.width - 4) {
@@ -185,7 +220,7 @@ export function columnsToEscPos(
     ctx.direction = hasArabicText(text) ? "rtl" : "ltr";
     ctx.textAlign = alignMode;
     const x = Math.min(
-      RASTER_WIDTH,
+      TEXT_RASTER_WIDTH,
       Math.max(
         0,
         alignMode === "left"
@@ -195,9 +230,25 @@ export function columnsToEscPos(
             : bound.right - 2,
       ),
     );
-    ctx.fillText(text, x, lineHeight / 2);
+    ctx.fillText(text, x, y + lineHeight / 2);
   });
 
+  return lineHeight;
+}
+
+export function columnsToEscPos(
+  cells: ColumnCell[],
+  widths: number[],
+): Uint8Array {
+  const largest = Math.max(...cells.map((cell) => cell.fontSize ?? 26), 20);
+  const lineHeight = largest + 10;
+  const canvas = createCanvas(TEXT_RASTER_WIDTH, lineHeight);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, TEXT_RASTER_WIDTH, lineHeight);
+  drawColumnCells(ctx, cells, widths, 0);
+
   const png = PNG.sync.read(canvas.toBuffer("image/png"));
-  return pngToEscPosRaster(png, RASTER_WIDTH);
+  return pngToEscPosRaster(png, TEXT_RASTER_WIDTH);
 }

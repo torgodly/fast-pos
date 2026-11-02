@@ -27,7 +27,6 @@ import {
   PosTicketPanel,
   type PosTicketLine,
 } from "@/components/PosTicket";
-import { PreviewReceiptButton } from "@/components/PreviewReceiptButton";
 import { formatMoney } from "@/lib/venues";
 
 export function QuickSaleBoard({
@@ -211,37 +210,45 @@ export function QuickSaleBoard({
     return <Wallet className="size-3.5" />;
   }
 
+  function methodButton(item: PaymentMethodLike) {
+    return (
+      <button
+        key={item.code}
+        type="button"
+        className={`btn btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs ${methodClass(item)}`}
+        disabled={pending || cart.length === 0}
+        onClick={() => askConfirm(item.code)}
+      >
+        {methodIcon(item)}
+        {item.name}
+      </button>
+    );
+  }
+
+  const immediateMethods = paymentMethods.filter((item) => !item.deferred);
+  const deferredMethods = paymentMethods.filter((item) => item.deferred);
+
   const payFooter = (
     <div className="space-y-1">
-      <CustomerSelect
-        customers={customers}
-        value={customerId}
-        onSelect={setCustomerId}
-        disabled={pending}
-      />
-      <div className="grid grid-cols-[1fr_auto] gap-1">
+      {immediateMethods.length > 0 ? (
         <div className="grid grid-cols-2 gap-1">
-          {paymentMethods.map((item) => (
-            <button
-              key={item.code}
-              type="button"
-              className={`btn btn-sm h-9 min-h-9 gap-1 rounded-lg px-2 text-xs ${methodClass(item)}`}
-              disabled={pending || cart.length === 0}
-              onClick={() => askConfirm(item.code)}
-            >
-              {methodIcon(item)}
-              {item.name}
-            </button>
-          ))}
+          {immediateMethods.map(methodButton)}
         </div>
-        <PreviewReceiptButton
-          venueId={venueId}
-          cart={cart}
-          customerId={customerId}
-          compact
-          disabled={pending || cart.length === 0}
-        />
-      </div>
+      ) : null}
+      {immediateMethods.length > 0 && deferredMethods.length > 0 ? (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          className="flex items-center px-0.5 py-0.5"
+        >
+          <span className="h-px w-full bg-base-300" />
+        </div>
+      ) : null}
+      {deferredMethods.length > 0 ? (
+        <div className="grid grid-cols-2 gap-1">
+          {deferredMethods.map(methodButton)}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -271,6 +278,14 @@ export function QuickSaleBoard({
             onChangeQty={changeQty}
             onRemove={remove}
             onChangeNote={changeNote}
+            headerAction={
+              <CustomerSelect
+                customers={customers}
+                value={customerId}
+                onSelect={setCustomerId}
+                disabled={pending}
+              />
+            }
             footer={payFooter}
           />
         </div>

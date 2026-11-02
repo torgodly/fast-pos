@@ -13,6 +13,8 @@ vi.mock("@/lib/settings", () => ({
 }));
 
 import { DEFAULT_REPORT_TEMPLATES } from "./defaults";
+import { DEFAULT_REPORT_TEMPLATES_V1 } from "./defaults-v1";
+import { templatesEqual } from "./schema";
 import {
   deleteReportTemplate,
   getReportTemplateJson,
@@ -68,6 +70,16 @@ describe("report template store", () => {
     expect(loadReportTemplate("receipt")).toEqual(
       DEFAULT_REPORT_TEMPLATES.receipt,
     );
+  });
+
+  it("migrates a stored v1 template to v2", () => {
+    state.values.set(
+      "report_template.receipt",
+      JSON.stringify(DEFAULT_REPORT_TEMPLATES_V1.receipt),
+    );
+    const loaded = loadReportTemplate("receipt");
+    expect(loaded.version).toBe(2);
+    expect(templatesEqual(loaded, DEFAULT_REPORT_TEMPLATES.receipt)).toBe(true);
   });
 
   it("falls back and warns once for a malformed stored template", async () => {

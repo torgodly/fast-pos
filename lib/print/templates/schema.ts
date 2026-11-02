@@ -1,136 +1,42 @@
-import { canonicalBlockIds } from "./blocks";
 import { DOCUMENT_SPECS } from "./document-specs";
 import type { DocumentSpec } from "./document-specs";
+import { migrateReportTemplate } from "./migrate";
+import {
+  canonicalBlockIds,
+  checkKeys,
+  checkPlaceholders,
+  clean,
+  isPlainObject,
+  MAX_TEXT,
+  readAlign,
+  readBool,
+  readColumns,
+  readSize,
+  readString,
+} from "./schema-common";
+import {
+  validateReportTemplateV2,
+  type ValidationResultV2,
+} from "./schema-v2";
 import {
   isReportDocument,
-  type Align,
   type ReportDocument,
-  type ReportTemplate,
+  type ReportTemplateV1,
+  type ReportTemplateV1 as ReportTemplate,
   type TemplateColumn,
   type TemplateLine,
-  type TextSize,
 } from "./types";
 
 export { DOCUMENT_SPECS } from "./document-specs";
 export type { DocumentSpec } from "./document-specs";
 
-export type ValidationResult =
-  | { ok: true; template: ReportTemplate }
+export type ValidationResultV1 =
+  | { ok: true; template: ReportTemplateV1 }
   | { ok: false; errors: string[] };
 
 const MAX_JSON_BYTES = 100 * 1024;
 const MAX_LINES = 6;
-const MAX_COLUMNS = 6;
-const MAX_TEXT = 200;
 const MAX_TOTAL_LINES = 40;
-const ALIGNS: readonly Align[] = ["right", "center", "left"];
-const SIZES: readonly TextSize[] = ["small", "normal", "large", "xlarge"];
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/g;
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function clean(value: string): string {
-  return value.replace(CONTROL_CHARS, "").trim();
-}
-
-function checkKeys(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-  path: string,
-  errors: string[],
-) {
-  for (const key of Object.keys(value)) {
-    if (!allowed.includes(key)) errors.push(`${path}.${key} غير معروف`);
-  }
-}
-
-function readString(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: string[],
-  options: { required?: boolean; max?: number } = {},
-): string {
-  const required = options.required ?? true;
-  const max = options.max ?? MAX_TEXT;
-  const raw = value[key];
-  if (raw === undefined || raw === null) {
-    if (required) errors.push(`${path} مطلوب`);
-    return "";
-  }
-  if (typeof raw !== "string") {
-    errors.push(`${path} يجب أن يكون نصاً`);
-    return "";
-  }
-  const text = clean(raw);
-  if (required && !text) errors.push(`${path} مطلوب`);
-  if (text.length > max) errors.push(`${path} أطول من ${max} حرفاً`);
-  return text;
-}
-
-function readBool(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: string[],
-  fallback: boolean,
-): boolean {
-  const raw = value[key];
-  if (raw === undefined) return fallback;
-  if (typeof raw !== "boolean") {
-    errors.push(`${path} يجب أن يكون true أو false`);
-    return fallback;
-  }
-  return raw;
-}
-
-function readAlign(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: string[],
-): Align | undefined {
-  const raw = value[key];
-  if (raw === undefined) return undefined;
-  if (typeof raw !== "string" || !ALIGNS.includes(raw as Align)) {
-    errors.push(`${path} غير صالح`);
-    return undefined;
-  }
-  return raw as Align;
-}
-
-function readSize(
-  value: Record<string, unknown>,
-  key: string,
-  path: string,
-  errors: string[],
-): TextSize | undefined {
-  const raw = value[key];
-  if (raw === undefined) return undefined;
-  if (typeof raw !== "string" || !SIZES.includes(raw as TextSize)) {
-    errors.push(`${path} غير صالح`);
-    return undefined;
-  }
-  return raw as TextSize;
-}
-
-function checkPlaceholders(
-  text: string,
-  spec: DocumentSpec,
-  path: string,
-  errors: string[],
-) {
-  for (const match of text.matchAll(/\{\{\s*([^}\s]+)\s*\}\}/g)) {
-    const token = match[1]!;
-    if (!spec.placeholders.includes(token)) {
-      errors.push(`${path}: {{${token}}} غير مدعوم في هذا التقرير`);
-    }
-  }
-  const leftovers = text.replace(/\{\{\s*[^}\s]+\s*\}\}/g, "");
-  if (/[{}]/.test(leftovers)) errors.push(`${path}: أقواس غير صالحة`);
-}
 
 function readLines(
   value: unknown,
@@ -164,65 +70,6 @@ function readLines(
     const size = readSize(entry, "size", `${at}.size`, errors);
     if (size) line.size = size;
     return line;
-  });
-}
-
-function readWidth(
-  value: Record<string, unknown>,
-  path: string,
-  errors: string[],
-): number {
-  const raw = value.width;
-  if (
-    typeof raw !== "number" ||
-    !Number.isInteger(raw) ||
-    raw < 1 ||
-    raw > 64
-  ) {
-    errors.push(`${path}.width غير صالح`);
-    return 1;
-  }
-  return raw;
-}
-
-function readColumns(
-  value: unknown,
-  path: string,
-  allowedKeys: readonly string[],
-  errors: string[],
-): TemplateColumn[] {
-  if (!Array.isArray(value)) {
-    errors.push(`${path} مطلوب`);
-    return [];
-  }
-  if (value.length > MAX_COLUMNS) {
-    errors.push(`${path} يتجاوز ${MAX_COLUMNS} أعمدة`);
-  }
-  const seen = new Set<string>();
-  return value.slice(0, MAX_COLUMNS).map((entry, index) => {
-    const at = `${path}[${index}]`;
-    if (!isPlainObject(entry)) {
-      errors.push(`${at} غير صالح`);
-      return { key: "", label: "", width: 1 };
-    }
-    checkKeys(entry, ["key", "label", "width", "align", "bold", "size"], at, errors);
-    const key = readString(entry, "key", `${at}.key`, errors);
-    if (key && !allowedKeys.includes(key)) {
-      errors.push(`${at}.key غير معروف`);
-    }
-    if (key && seen.has(key)) errors.push(`${at}.key مكرر`);
-    seen.add(key);
-    const label = readString(entry, "label", `${at}.label`, errors);
-    const width = readWidth(entry, at, errors);
-    const column: TemplateColumn = { key, label, width };
-    const align = readAlign(entry, "align", `${at}.align`, errors);
-    if (align) column.align = align;
-    if (entry.bold !== undefined) {
-      column.bold = readBool(entry, "bold", `${at}.bold`, errors, false);
-    }
-    const size = readSize(entry, "size", `${at}.size`, errors);
-    if (size) column.size = size;
-    return column;
   });
 }
 
@@ -386,10 +233,10 @@ function readOrder(
   return ordered;
 }
 
-export function validateReportTemplate(
+export function validateReportTemplateV1(
   value: unknown,
   expectedDoc?: ReportDocument,
-): ValidationResult {
+): ValidationResultV1 {
   const errors: string[] = [];
   if (!isPlainObject(value)) {
     return { ok: false, errors: ["ملف التصميم يجب أن يكون كائناً JSON"] };
@@ -630,6 +477,8 @@ export function templatesEqual(a: unknown, b: unknown): boolean {
   return stableKey(a) === stableKey(b);
 }
 
+export type ValidationResult = ValidationResultV2;
+
 export function parseReportTemplateJson(
   json: string,
   expectedDoc?: ReportDocument,
@@ -643,8 +492,21 @@ export function parseReportTemplateJson(
   } catch {
     return { ok: false, errors: ["ملف التصميم ليس JSON صالحاً"] };
   }
+  const version =
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>).version
+      : undefined;
   try {
-    return validateReportTemplate(value, expectedDoc);
+    if (version === 1) {
+      const v1 = validateReportTemplateV1(value, expectedDoc);
+      if (!v1.ok) return { ok: false, errors: v1.errors };
+      return validateReportTemplateV2(
+        migrateReportTemplate(v1.template),
+        expectedDoc,
+      );
+    }
+    if (version === 2) return validateReportTemplateV2(value, expectedDoc);
+    return { ok: false, errors: ["version غير مدعوم"] };
   } catch {
     return { ok: false, errors: ["ملف التصميم غير صالح"] };
   }

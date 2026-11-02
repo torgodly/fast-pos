@@ -9,6 +9,7 @@ export type DocumentSpec = {
   >;
   placeholders: readonly string[];
   summaryAllowed: boolean;
+  qr: boolean;
 };
 
 export const BASE_PLACEHOLDERS = ["title", "venue"] as const;
@@ -36,13 +37,15 @@ export const DOCUMENT_SPECS: Record<ReportDocument, DocumentSpec> = {
       "footer",
     ],
     summaryAllowed: true,
+    qr: true,
   },
   kitchen: {
-    fields: ["orderNo", "table", "waiter", "time", "ticketPart"],
+    fields: ["orderNo", "invoiceId", "table", "waiter", "time", "ticketPart"],
     itemColumns: ["name", "qty"],
     sections: {},
     placeholders: BASE_PLACEHOLDERS,
     summaryAllowed: false,
+    qr: false,
   },
   shift: {
     fields: [
@@ -74,6 +77,7 @@ export const DOCUMENT_SPECS: Record<ReportDocument, DocumentSpec> = {
     },
     placeholders: [...BASE_PLACEHOLDERS, "status"],
     summaryAllowed: false,
+    qr: false,
   },
   items: {
     fields: ["workDate", "printedAt", "printedByName"],
@@ -84,14 +88,20 @@ export const DOCUMENT_SPECS: Record<ReportDocument, DocumentSpec> = {
         rowIds: ["categoryCount", "itemCount", "totalItems"],
         columnKeys: [],
       },
-      groups: {
-        kind: "groupedTable",
-        rowIds: ["groupTotal"],
-        columnKeys: ["name", "qty"],
+      categories: {
+        kind: "table",
+        rowIds: [],
+        columnKeys: ["index", "name", "qty", "revenue"],
+      },
+      itemsList: {
+        kind: "table",
+        rowIds: [],
+        columnKeys: ["index", "name", "qty", "revenue"],
       },
     },
     placeholders: BASE_PLACEHOLDERS,
     summaryAllowed: true,
+    qr: false,
   },
   sales: {
     fields: ["from", "to", "printedAt"],
@@ -115,5 +125,6 @@ export const DOCUMENT_SPECS: Record<ReportDocument, DocumentSpec> = {
     },
     placeholders: BASE_PLACEHOLDERS,
     summaryAllowed: true,
+    qr: false,
   },
 };

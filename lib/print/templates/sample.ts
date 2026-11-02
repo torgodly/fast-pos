@@ -46,6 +46,7 @@ const sampleReceipt: CheckoutReceiptData = {
 const sampleKitchen: KitchenReceiptData = {
   venueName: "فاست بوس",
   orderId: 148,
+  orderNo: 12,
   tableName: "4",
   waiterName: "أحمد",
   createdAt: "14:05",
@@ -80,9 +81,9 @@ const sampleShift: ShiftReportPrintData = {
   tableSales: 9,
   quickSales: 3,
   items: [
-    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-    { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
-    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 20 },
+    { name: "كولا", qty: 3, categoryName: "مشروبات باردة", revenue: 30 },
+    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 10 },
   ],
   openingFloat: 50,
   expenseTotal: 12.5,

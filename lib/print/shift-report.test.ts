@@ -47,8 +47,8 @@ const base: ShiftReportPrintData = {
   tableSales: 1,
   quickSales: 1,
   items: [
-    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+    { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 20 },
+    { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 10 },
   ],
   openingFloat: 30,
   expenseTotal: 12.5,
@@ -161,29 +161,29 @@ describe("shift items ticket", () => {
     );
   }
 
-  it("groups items under bold category headers with subtotals", async () => {
+  it("prints numbered category and item tables like the sales report", async () => {
     const text = await itemsText(
       [
-        { name: "كولا", qty: 3, categoryName: "مشروبات باردة" },
-        { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة" },
-        { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة" },
+        { name: "كولا", qty: 3, categoryName: "مشروبات باردة", revenue: 30 },
+        { name: "شاي", qty: 2, categoryName: "مشروبات ساخنة", revenue: 20 },
+        { name: "قهوة", qty: 1, categoryName: "مشروبات ساخنة", revenue: 10 },
       ],
       6,
     );
 
     expect(text).toContain("تقرير أصناف الوردية #3");
-    expect(text).toContain("المجموعات: 2");
-    expect(text).toContain("الأصناف: 3");
-    expect(text).toContain("إجمالي القطع: 6");
-    expect(text).toContain("— مشروبات باردة —");
-    expect(text).toContain("— مشروبات ساخنة —");
-    expect(text.indexOf("— مشروبات باردة —")).toBeLessThan(
-      text.indexOf("— مشروبات ساخنة —"),
+    expect(text).toContain("المجموعة");
+    expect(text).toContain("الصنف");
+    expect(text).toContain("الإيراد");
+    expect(text).not.toContain("— مشروبات باردة —");
+    expect(text).not.toContain("إجمالي المجموعة");
+    expect(text).toMatch(/30\.00\s+3\s+مشروبات باردة/);
+    expect(text).toMatch(/30\.00\s+3\s+مشروبات ساخنة/);
+    expect(text).toMatch(/30\.00\s+3\s+كولا/);
+    expect(text).toMatch(/20\.00\s+2\s+شاي/);
+    expect(text.indexOf("مشروبات باردة")).toBeLessThan(
+      text.indexOf("مشروبات ساخنة"),
     );
-    expect(text).toMatch(/3\s+كولا/);
-    expect(text).toMatch(/2\s+شاي/);
-    expect(text).toMatch(/1\s+قهوة/);
-    expect(text).toContain("إجمالي المجموعة: 3 قطعة");
     expect(text).toContain("الإجمالي العام: 6 قطعة");
     expect(text).toContain("— نهاية التقرير —");
   });
@@ -191,6 +191,7 @@ describe("shift items ticket", () => {
   it("prints an empty-sales line instead of a blank list", async () => {
     const text = await itemsText([], 0);
 
+    expect(text).toContain("لا مجموعات في هذه الوردية");
     expect(text).toContain("لا أصناف مبيعة في هذه الوردية");
   });
 });

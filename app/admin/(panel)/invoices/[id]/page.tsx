@@ -11,6 +11,7 @@ import {
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/app/actions/auth";
 import { InvoiceEditor } from "@/components/admin/InvoiceEditor";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import {
   AUDIT_KIND_LABELS,
   isAuditKind,
@@ -151,6 +152,20 @@ export default async function AdminInvoicePage({
             <div className="rounded-2xl bg-white/10 px-4 py-3">
               <p className="text-xs text-white/55">الإجمالي</p>
               <p className="text-2xl font-black">{formatMoney(order.total)}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {order.status === "paid" ? (
+                <PdfDownloadButton
+                  request={{ document: "receipt", orderId: order.id }}
+                  label="الفاتورة PDF"
+                  className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
+                />
+              ) : null}
+              <PdfDownloadButton
+                request={{ document: "kitchen", orderId: order.id }}
+                label="المطبخ PDF"
+                className="btn btn-sm rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20"
+              />
             </div>
             <Link
               href="/admin/invoices"

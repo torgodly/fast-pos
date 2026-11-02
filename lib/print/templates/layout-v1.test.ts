@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_REPORT_TEMPLATES } from "./defaults";
-import { layoutTemplate } from "./layout";
-import type { DocumentData, LayoutLine } from "./types";
+import { DEFAULT_REPORT_TEMPLATES_V1 } from "./defaults-v1";
+import { layoutTemplateV1 as layoutTemplate } from "./layout-v1";
+import type { DocumentData, LayoutLine, ReportTemplateV1 } from "./types";
 
 const receiptData: DocumentData = {
   title: "Acme Corner",
@@ -38,7 +38,7 @@ function texts(lines: LayoutLine[]): string[] {
 
 describe("layoutTemplate — receipt", () => {
   it("expands header placeholders and skips empty optional lines", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData);
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData);
     const header = texts(lines).slice(0, 4);
     expect(header).toEqual([
       "Acme Corner",
@@ -51,7 +51,7 @@ describe("layoutTemplate — receipt", () => {
   });
 
   it("prints only shown fields that have values, in template order", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData);
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData);
     const body = texts(lines);
     expect(body).toContain("رقم الطلب: 7");
     expect(body).toContain("فاتورة: #12");
@@ -63,7 +63,7 @@ describe("layoutTemplate — receipt", () => {
   });
 
   it("uses the four-column header and one columns line per item", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData);
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData);
     const columnLines = lines.filter(
       (line): line is Extract<LayoutLine, { kind: "columns" }> =>
         line.kind === "columns",
@@ -86,7 +86,7 @@ describe("layoutTemplate — receipt", () => {
   });
 
   it("prints notes and a bold xlarge summary, and expands the footer", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData);
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData);
     expect(lines).toContainEqual({
       kind: "text",
       text: "• بدون سكر",
@@ -102,7 +102,7 @@ describe("layoutTemplate — receipt", () => {
   });
 
   it("places dividers after header, fields, and items, and before the summary", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData);
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData);
     const lastHeader = lines.findIndex(
       (line) => line.kind === "text" && line.text === "0911234567",
     );
@@ -123,7 +123,7 @@ describe("layoutTemplate — receipt", () => {
 
   it("wraps a long item name into continuation lines", () => {
     const long = "كابتشينو كبير جداً بالحليب";
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, {
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, {
       ...receiptData,
       items: [{ name: long, qty: "1", unitPrice: "10.00", lineTotal: "10.00" }],
       itemNotes: [null],
@@ -138,7 +138,7 @@ describe("layoutTemplate — receipt", () => {
   });
 
   it("honours a label override", () => {
-    const template = structuredClone(DEFAULT_REPORT_TEMPLATES.receipt);
+    const template = structuredClone(DEFAULT_REPORT_TEMPLATES_V1.receipt);
     template.labels.customer = "الزبون";
     const lines = layoutTemplate(template, {
       ...receiptData,
@@ -150,7 +150,7 @@ describe("layoutTemplate — receipt", () => {
 
 describe("layoutTemplate — documents without an item table", () => {
   it("renders shift sections in template order and the status footer", () => {
-    const template = DEFAULT_REPORT_TEMPLATES.shift;
+    const template = DEFAULT_REPORT_TEMPLATES_V1.shift;
     const lines = layoutTemplate(template, {
       ...receiptData,
       title: "إغلاق وردية #3",
@@ -193,7 +193,27 @@ describe("layoutTemplate — documents without an item table", () => {
   });
 
   it("renders grouped tables with a group total and a summary", () => {
-    const template = DEFAULT_REPORT_TEMPLATES.items;
+    const template: ReportTemplateV1 = {
+      ...DEFAULT_REPORT_TEMPLATES_V1.items,
+      labels: {
+        ...DEFAULT_REPORT_TEMPLATES_V1.items.labels,
+        groupTotal: "إجمالي المجموعة",
+      },
+      order: ["section:overview", "section:groups"],
+      sections: [
+        { id: "overview", title: "", show: true, separator: true },
+        {
+          id: "groups",
+          title: "",
+          show: true,
+          separator: true,
+          columns: [
+            { key: "name", label: "الصنف", width: 26 },
+            { key: "qty", label: "الكمية", width: 6, align: "center" },
+          ],
+        },
+      ],
+    };
     const lines = layoutTemplate(template, {
       ...receiptData,
       title: "تقرير أصناف الوردية #3",
@@ -240,7 +260,7 @@ describe("layoutTemplate — documents without an item table", () => {
   });
 
   it("renders a table section with columns and an empty table message", () => {
-    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES.sales, {
+    const lines = layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.sales, {
       ...receiptData,
       title: "تقرير المبيعات",
       status: "",
@@ -289,7 +309,7 @@ describe("layoutTemplate — documents without an item table", () => {
 
 describe("layoutTemplate — block order and visibility", () => {
   it("renders blocks in a custom order", () => {
-    const template = structuredClone(DEFAULT_REPORT_TEMPLATES.receipt);
+    const template = structuredClone(DEFAULT_REPORT_TEMPLATES_V1.receipt);
     template.order = ["summary", "items", "header", "fields", "footer"];
     const body = texts(layoutTemplate(template, receiptData));
     // Item names live in `columns` cells, which `texts` drops; the items
@@ -301,7 +321,7 @@ describe("layoutTemplate — block order and visibility", () => {
   });
 
   it("skips blocks hidden with the new flags", () => {
-    const template = structuredClone(DEFAULT_REPORT_TEMPLATES.receipt);
+    const template = structuredClone(DEFAULT_REPORT_TEMPLATES_V1.receipt);
     template.header.show = false;
     template.fields.visible = false;
     template.footer.show = false;
@@ -311,15 +331,15 @@ describe("layoutTemplate — block order and visibility", () => {
   });
 
   it("falls back to canonical order when order is absent", () => {
-    const template = structuredClone(DEFAULT_REPORT_TEMPLATES.receipt);
+    const template = structuredClone(DEFAULT_REPORT_TEMPLATES_V1.receipt);
     delete template.order;
     expect(layoutTemplate(template, receiptData)).toEqual(
-      layoutTemplate(DEFAULT_REPORT_TEMPLATES.receipt, receiptData),
+      layoutTemplate(DEFAULT_REPORT_TEMPLATES_V1.receipt, receiptData),
     );
   });
 
   it("places a section block where order says", () => {
-    const template = structuredClone(DEFAULT_REPORT_TEMPLATES.shift);
+    const template = structuredClone(DEFAULT_REPORT_TEMPLATES_V1.shift);
     template.order = [
       "section:reconciliation",
       "header",

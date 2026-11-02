@@ -45,6 +45,7 @@ const receipt: CheckoutReceiptData = {
 const kitchen: KitchenReceiptData = {
   venueName: "Fast Cafe",
   orderId: 12,
+  orderNo: 7,
   tableName: "4",
   waiterName: "أحمد",
   createdAt: "14:05",
@@ -110,6 +111,8 @@ describe("template builders", () => {
     );
 
     expect(text).toContain("طلبات المطبخ");
+    expect(text).toContain("الطلب: 7");
+    expect(text).not.toContain("#12");
     expect(text).toContain("بيتزا");
     expect(text).not.toContain("الإجمالي");
     expect(text).not.toContain("د.ل");

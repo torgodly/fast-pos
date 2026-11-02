@@ -111,6 +111,35 @@ describe("renderLayout", () => {
     );
   });
 
+  it("left-aligns a narrow logo placed at column zero", () => {
+    const logo = new Uint8Array([
+      0x1d, 0x76, 0x30, 0x00, 0x01, 0x00, 0x01, 0x00, 0xff,
+    ]);
+    const zeroOffset = renderLayout(
+      [{ kind: "logo", align: "center", maxWidth: 256, offsetPx: 0 }],
+      { logo },
+    );
+    // offsetPx 0 still means "positioned at column 0": the padded raster path
+    // with left alignment, never the full-width centre path.
+    expect(contains(zeroOffset, [0x1b, 0x61, 0x00])).toBe(true);
+    expect(contains(zeroOffset, [0x1b, 0x61, 0x01])).toBe(false);
+    expect(Array.from(zeroOffset)).toEqual(
+      Array.from(
+        renderLayout([{ kind: "logo", align: "left", maxWidth: 256 }], { logo }),
+      ),
+    );
+    // The raster itself is unchanged (shiftRaster is a no-op at offset 0).
+    expect(contains(zeroOffset, Array.from(logo))).toBe(true);
+  });
+
+  it("renders a QR line as a raster at the requested position", () => {
+    const bytes = renderLayout([
+      { kind: "qr", payload: "INV-1|2.00|now", sizePx: 96, offsetPx: 30, columns: 32 },
+    ]);
+    expect(contains(bytes, [0x1d, 0x76, 0x30, 0x00])).toBe(true);
+    expect(contains(bytes, [0x1d, 0x76, 0x30, 0x00, 0x30, 0x00])).toBe(true);
+  });
+
   it("emits a raster block per column row when raster mode is enabled", async () => {
     process.env.PRINTER_ARABIC_RASTER = "1";
     vi.resetModules();

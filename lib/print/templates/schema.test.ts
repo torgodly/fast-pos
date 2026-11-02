@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_REPORT_TEMPLATES } from "./defaults";
+import { DEFAULT_REPORT_TEMPLATES_V1 } from "./defaults-v1";
 import {
   parseReportTemplateJson,
   templatesEqual,
-  validateReportTemplate,
+  validateReportTemplateV1 as validateReportTemplate,
 } from "./schema";
-import type { ReportTemplate } from "./types";
+import type { ReportTemplateV1 } from "./types";
 
-export const validReceipt: ReportTemplate = {
+export const validReceipt: ReportTemplateV1 = {
   format: "fastpos-report",
   version: 1,
   document: "receipt",
@@ -39,8 +39,8 @@ export const validReceipt: ReportTemplate = {
   footer: { separator: false, lines: [{ text: "{{footer}}", align: "center" }] },
 };
 
-function clone(value: ReportTemplate): ReportTemplate {
-  return JSON.parse(JSON.stringify(value)) as ReportTemplate;
+function clone(value: ReportTemplateV1): ReportTemplateV1 {
+  return JSON.parse(JSON.stringify(value)) as ReportTemplateV1;
 }
 
 describe("validateReportTemplate", () => {
@@ -59,7 +59,7 @@ describe("validateReportTemplate", () => {
   });
 
   it("rejects unknown keys, placeholders, and ids", () => {
-    const unknownKey = clone(validReceipt) as ReportTemplate & {
+    const unknownKey = clone(validReceipt) as ReportTemplateV1 & {
       surprise?: boolean;
     };
     unknownKey.surprise = true;
@@ -80,7 +80,7 @@ describe("validateReportTemplate", () => {
     badColumn.items.columns[0]!.key = "cost";
     expect(validateReportTemplate(badColumn).ok).toBe(false);
 
-    const badHeaderSeparator = clone(validReceipt) as ReportTemplate & {
+    const badHeaderSeparator = clone(validReceipt) as ReportTemplateV1 & {
       header: { separator?: unknown };
     };
     badHeaderSeparator.header.separator = "yes";
@@ -166,8 +166,8 @@ describe("validateReportTemplate", () => {
   it("rejects prototype section ids without throwing", () => {
     for (const id of ["__proto__", "constructor", "toString"]) {
       const shift = JSON.parse(
-        JSON.stringify(DEFAULT_REPORT_TEMPLATES.shift),
-      ) as ReportTemplate;
+        JSON.stringify(DEFAULT_REPORT_TEMPLATES_V1.shift),
+      ) as ReportTemplateV1;
       shift.sections = [{ id, title: "", show: true }];
       expect(() => validateReportTemplate(shift, "shift"), id).not.toThrow();
       expect(validateReportTemplate(shift, "shift"), id).toMatchObject({
@@ -222,7 +222,7 @@ describe("order and visibility normalization", () => {
   });
 
   it("rejects non-array, unknown, and duplicate order entries", () => {
-    const nonArray = clone(validReceipt) as ReportTemplate & { order?: unknown };
+    const nonArray = clone(validReceipt) as ReportTemplateV1 & { order?: unknown };
     nonArray.order = "summary";
     expect(validateReportTemplate(nonArray)).toMatchObject({
       ok: false,

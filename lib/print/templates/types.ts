@@ -42,7 +42,7 @@ export type TemplateSection = {
   columns?: TemplateColumn[];
 };
 
-export type ReportTemplate = {
+export type ReportTemplateV1 = {
   format: "fastpos-report";
   version: 1;
   document: ReportDocument;
@@ -68,6 +68,8 @@ export type ReportTemplate = {
   labels: Record<string, string>;
   footer: { show?: boolean; separator?: boolean; lines: TemplateLine[] };
 };
+
+export type ReportTemplate = ReportTemplateV2;
 
 export type SectionKind = "kv" | "table" | "groupedTable";
 
@@ -102,9 +104,105 @@ export type DocumentData = {
 export type LayoutLine =
   | { kind: "text"; text: string; align: Align; bold: boolean; size: TextSize }
   | { kind: "separator" }
-  | { kind: "logo"; align: Align; maxWidth: number }
+  | { kind: "logo"; align: Align; maxWidth: number; offsetPx?: number }
+  | { kind: "qr"; payload: string; sizePx: number; offsetPx: number; columns: 32 | 48 }
   | {
       kind: "columns";
       widths: number[];
       cells: Array<{ text: string; align: Align; bold: boolean; size: TextSize }>;
     };
+
+export const ELEMENT_TYPES = [
+  "text",
+  "field",
+  "logo",
+  "qr",
+  "separator",
+  "itemTable",
+  "section",
+  "summary",
+] as const;
+
+export type ElementType = (typeof ELEMENT_TYPES)[number];
+
+export type ElementBase = {
+  id: string;
+  type: ElementType;
+  row: number;
+  col: number;
+  width: number;
+  visible: boolean;
+};
+
+export type TextElement = ElementBase & {
+  type: "text";
+  text: string;
+  align?: Align;
+  bold?: boolean;
+  size?: TextSize;
+  hideWhenEmpty?: boolean;
+};
+
+export type FieldElement = ElementBase & {
+  type: "field";
+  fieldId: string;
+  align?: Align;
+  bold?: boolean;
+  size?: TextSize;
+  hideWhenEmpty?: boolean;
+};
+
+export type LogoElement = ElementBase & {
+  type: "logo";
+  align?: Align;
+  maxWidth?: number;
+};
+
+export type QrElement = ElementBase & {
+  type: "qr";
+  sizePx: number;
+};
+
+export type SeparatorElement = ElementBase & {
+  type: "separator";
+  hideWhenEmptyOf?: string[];
+};
+
+export type ItemTableElement = ElementBase & {
+  type: "itemTable";
+  title?: string;
+  showHeader?: boolean;
+  showNotes?: boolean;
+  columns: TemplateColumn[];
+};
+
+export type SectionElement = ElementBase & {
+  type: "section";
+  sectionId: string;
+  title?: string;
+  columns?: TemplateColumn[];
+};
+
+export type SummaryElement = ElementBase & {
+  type: "summary";
+  label: string;
+};
+
+export type TemplateElement =
+  | TextElement
+  | FieldElement
+  | LogoElement
+  | QrElement
+  | SeparatorElement
+  | ItemTableElement
+  | SectionElement
+  | SummaryElement;
+
+export type ReportTemplateV2 = {
+  format: "fastpos-report";
+  version: 2;
+  document: ReportDocument;
+  paper: { columns: 32 | 48 };
+  elements: TemplateElement[];
+  labels: Record<string, string>;
+};

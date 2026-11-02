@@ -9,7 +9,7 @@ import type {
   ShiftItemsPrintData,
   ShiftReportPrintData,
 } from "../receipts";
-import { getReceiptLogoEscPos } from "../logo";
+import { getReceiptLogoEscPos, readReceiptLogoPng } from "../logo";
 import {
   itemsDocumentData,
   kitchenDocumentData,
@@ -18,12 +18,14 @@ import {
   shiftDocumentData,
   type ReceiptDocumentSettings,
 } from "./data";
+import { DEFAULT_LOGO_WIDTH, logoElement } from "./elements";
 import { layoutTemplate } from "./layout";
 import { renderLayout } from "./render";
 import { buildSampleDocuments } from "./sample";
 import { loadReportTemplate } from "./store";
 import type {
   DocumentData,
+  LayoutLine,
   ReportDocument,
   ReportTemplate,
 } from "./types";
@@ -70,21 +72,45 @@ function resolveSettings(
   };
 }
 
+export type DocumentPage = {
+  lines: LayoutLine[];
+  logoPng: Uint8Array | null;
+};
+
+/**
+ * The same lines the printer receives, plus the logo as PNG for the PDF page
+ * renderer. Thermal output still goes through `renderDocument` above.
+ */
+export async function documentPage(
+  document: ReportDocument,
+  data: DocumentData,
+  overrides: Pick<BuildOverrides, "template"> = {},
+): Promise<DocumentPage> {
+  const template = overrides.template ?? loadReportTemplate(document);
+  const logo = logoElement(template);
+  const logoPng =
+    logo?.visible && data.logoAvailable ? readReceiptLogoPng() : null;
+  return { lines: layoutTemplate(template, data), logoPng };
+}
+
 async function renderDocument(
   document: ReportDocument,
   data: DocumentData,
   overrides: BuildOverrides,
 ): Promise<Uint8Array> {
   const template = overrides.template ?? loadReportTemplate(document);
-  let logo: Uint8Array | null = null;
+  let logoBytes: Uint8Array | null = null;
 
+  const logo = logoElement(template);
   if (overrides.logo !== undefined) {
-    logo = overrides.logo;
-  } else if (template.header.logo.show && data.logoAvailable) {
-    logo = await getReceiptLogoEscPos(template.header.logo.maxWidth ?? 256);
+    logoBytes = overrides.logo;
+  } else if (logo?.visible && data.logoAvailable) {
+    logoBytes = await getReceiptLogoEscPos(
+      logo.maxWidth ?? DEFAULT_LOGO_WIDTH,
+    );
   }
 
-  return renderLayout(layoutTemplate(template, data), { logo });
+  return renderLayout(layoutTemplate(template, data), { logo: logoBytes });
 }
 
 export async function buildReceiptEscPos(
@@ -127,6 +153,52 @@ export async function buildSalesReportEscPos(
   return renderDocument("sales", salesDocumentData(data), overrides);
 }
 
+export async function receiptPage(
+  data: CheckoutReceiptData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  const settings = resolveSettings(data.venueName, overrides.settings);
+  return documentPage("receipt", receiptDocumentData(data, settings), overrides);
+}
+
+export async function kitchenPage(
+  data: KitchenReceiptData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  return documentPage("kitchen", kitchenDocumentData(data), overrides);
+}
+
+export async function shiftPage(
+  data: ShiftReportPrintData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  return documentPage("shift", shiftDocumentData(data), overrides);
+}
+
+export async function itemsPage(
+  data: ShiftItemsPrintData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  return documentPage("items", itemsDocumentData(data), overrides);
+}
+
+export async function salesPage(
+  data: ReportSummaryPrintData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  return documentPage("sales", salesDocumentData(data), overrides);
+}
+
+export async function samplePage(
+  document: ReportDocument,
+  template: ReportTemplate,
+  options: SampleBuildOptions = {},
+): Promise<DocumentPage> {
+  const settings = resolveSettings("فاست بوس", options.settings);
+  const data = buildSampleDocuments(settings)[document];
+  return documentPage(document, data, { template });
+}
+
 export async function buildSampleEscPos(
   document: ReportDocument,
   template: ReportTemplate,
@@ -135,12 +207,15 @@ export async function buildSampleEscPos(
   const settings = resolveSettings("فاست بوس", options.settings);
   const data = buildSampleDocuments(settings)[document];
 
-  let logo: Uint8Array | null = null;
+  let logoBytes: Uint8Array | null = null;
+  const logo = logoElement(template);
   if (options.logo !== undefined) {
-    logo = options.logo;
-  } else if (template.header.logo.show && data.logoAvailable) {
-    logo = await getReceiptLogoEscPos(template.header.logo.maxWidth ?? 256);
+    logoBytes = options.logo;
+  } else if (logo?.visible && data.logoAvailable) {
+    logoBytes = await getReceiptLogoEscPos(
+      logo.maxWidth ?? DEFAULT_LOGO_WIDTH,
+    );
   }
 
-  return renderLayout(layoutTemplate(template, data), { logo });
+  return renderLayout(layoutTemplate(template, data), { logo: logoBytes });
 }

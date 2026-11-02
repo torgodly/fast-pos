@@ -46,6 +46,7 @@ export type ShiftItemSale = {
   name: string;
   qty: number;
   categoryName: string;
+  revenue: number;
 };
 
 export type ShiftReportKind = "summary" | "close" | "reprint";
@@ -239,6 +240,9 @@ function itemSalesForShift(shiftId: number): ShiftItemSale[] {
         'غير مصنف'
       )`,
       qty: sql<number>`coalesce(sum(${orderItems.qty}), 0)`.mapWith(Number),
+      revenue: sql<number>`coalesce(sum(${orderItems.lineTotal}), 0)`.mapWith(
+        Number,
+      ),
     })
     .from(orderItems)
     .innerJoin(orders, eq(orderItems.orderId, orders.id))

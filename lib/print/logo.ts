@@ -11,6 +11,28 @@ const LOGO_PATHS = [
 
 const escposCache = new Map<string, Uint8Array | null>();
 
+/** Raw PNG bytes of the receipt logo, for vector/report export paths. */
+export function readReceiptLogoPng(): Uint8Array | null {
+  for (const logoPath of LOGO_PATHS) {
+    try {
+      if (!fs.existsSync(/*turbopackIgnore: true*/ logoPath)) continue;
+      const buffer = fs.readFileSync(/*turbopackIgnore: true*/ logoPath);
+      if (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 &&
+        buffer[1] === 0x50 &&
+        buffer[2] === 0x4e &&
+        buffer[3] === 0x47
+      ) {
+        return new Uint8Array(buffer);
+      }
+    } catch {
+      // Ignore unreadable logo files and keep looking.
+    }
+  }
+  return null;
+}
+
 function getLogoCacheKey(): string {
   for (const logoPath of LOGO_PATHS) {
     if (!fs.existsSync(/*turbopackIgnore: true*/ logoPath)) continue;
@@ -159,4 +181,44 @@ export function appendLogo(
   parts.push(logo);
   parts.push(new Uint8Array([0x0a]));
   parts.push(restorePrinterTextMode("right"));
+}
+
+export function shiftRaster(
+  raster: Uint8Array,
+  offsetPx: number,
+  paperPx = 384,
+): Uint8Array {
+  if (offsetPx <= 0) return raster;
+  const bytesPerRow = raster[4]! | (raster[5]! << 8);
+  const height = raster[6]! | (raster[7]! << 8);
+  const rowBytes = Math.ceil(paperPx / 8);
+  const out = new Uint8Array(8 + rowBytes * height);
+  out[0] = 0x1d;
+  out[1] = 0x76;
+  out[2] = 0x30;
+  out[3] = 0x00;
+  out[4] = rowBytes & 0xff;
+  out[5] = (rowBytes >> 8) & 0xff;
+  out[6] = height & 0xff;
+  out[7] = (height >> 8) & 0xff;
+  const byteShift = offsetPx >> 3;
+  const bitShift = offsetPx & 7;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < bytesPerRow; x += 1) {
+      const value = raster[8 + y * bytesPerRow + x]!;
+      if (value === 0) continue;
+      const base = 8 + y * rowBytes + byteShift + x;
+      if (base >= 8 + (y + 1) * rowBytes) continue;
+      if (bitShift === 0) {
+        out[base] = out[base]! | value;
+      } else {
+        out[base] = out[base]! | (value >> bitShift);
+        const next = base + 1;
+        if (next < 8 + (y + 1) * rowBytes) {
+          out[next] = out[next]! | ((value << (8 - bitShift)) & 0xff);
+        }
+      }
+    }
+  }
+  return out;
 }

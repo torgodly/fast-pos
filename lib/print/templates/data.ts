@@ -79,7 +79,8 @@ export function kitchenDocumentData(input: KitchenReceiptData): DocumentData {
     status: "",
     logoAvailable: false,
     fields: {
-      orderNo: `#${input.orderId}`,
+      orderNo: input.orderNo ? String(input.orderNo) : `#${input.orderId}`,
+      invoiceId: `#${input.orderId}`,
       table: input.tableName,
       waiter: input.waiterName,
       time: input.createdAt,
@@ -181,30 +182,35 @@ export function shiftDocumentData(input: ShiftReportPrintData): DocumentData {
   };
 }
 
+type TableRow = Record<string, string>;
+
+function tableRows(
+  rows: Array<{ name: string; qty: number; revenue: number }>,
+): TableRow[] {
+  return rows.map((row, index) => ({
+    index: String(index + 1),
+    name: row.name,
+    qty: String(row.qty),
+    revenue: amount(row.revenue),
+  }));
+}
+
 export function itemsDocumentData(input: ShiftItemsPrintData): DocumentData {
-  const groups: Array<{
-    label: string;
-    rows: Array<Record<string, string>>;
-    total: string;
-  }> = [];
-  const groupTotals = new Map<string, number>();
+  const byCategory = new Map<string, { qty: number; revenue: number }>();
   let totalQuantity = 0;
   for (const item of input.items) {
-    let group = groups.find((entry) => entry.label === item.categoryName);
-    if (!group) {
-      group = { label: item.categoryName, rows: [], total: "" };
-      groups.push(group);
-    }
-    group.rows.push({ name: item.name, qty: String(item.qty) });
-    groupTotals.set(
-      item.categoryName,
-      (groupTotals.get(item.categoryName) ?? 0) + item.qty,
-    );
+    const category = byCategory.get(item.categoryName) ?? { qty: 0, revenue: 0 };
+    category.qty += item.qty;
+    category.revenue += item.revenue;
+    byCategory.set(item.categoryName, category);
     totalQuantity += item.qty;
   }
-  for (const group of groups) {
-    group.total = `${groupTotals.get(group.label) ?? 0} قطعة`;
-  }
+  const categoryRows = [...byCategory]
+    .map(([name, totals]) => ({ name, qty: totals.qty, revenue: totals.revenue }))
+    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ar"));
+  const itemRows = [...input.items].sort(
+    (a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "ar"),
+  );
   const empty = input.items.length === 0;
   return {
     title: `تقرير أصناف الوردية #${input.shiftNumber}${
@@ -230,15 +236,21 @@ export function itemsDocumentData(input: ShiftItemsPrintData): DocumentData {
         rows: empty
           ? []
           : [
-              { labelId: "categoryCount", value: String(groups.length) },
+              { labelId: "categoryCount", value: String(byCategory.size) },
               { labelId: "itemCount", value: String(input.items.length) },
               { labelId: "totalItems", value: String(totalQuantity), bold: true },
             ],
       },
-      groups: {
-        kind: "groupedTable",
+      categories: {
+        kind: "table",
         rows: [],
-        groups,
+        table: tableRows(categoryRows),
+        emptyText: "لا مجموعات في هذه الوردية",
+      },
+      itemsList: {
+        kind: "table",
+        rows: [],
+        table: tableRows(itemRows),
         emptyText: "لا أصناف مبيعة في هذه الوردية",
       },
     },

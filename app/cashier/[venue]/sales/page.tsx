@@ -13,6 +13,7 @@ import {
 import { notFound } from "next/navigation";
 import { requireCashier } from "@/app/actions/auth";
 import { PosHeader } from "@/components/PosHeader";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { ReprintKitchenButton } from "@/components/ReprintKitchenButton";
 import { ReprintReceiptButton } from "@/components/ReprintReceiptButton";
 import { db } from "@/lib/db";
@@ -268,6 +269,9 @@ export default async function CashierSalesPage({
                     <ReprintKitchenButton orderId={sale.id} />
                   ) : null}
                   <ReprintReceiptButton orderId={sale.id} venueId={venue} />
+                  <PdfDownloadButton
+                    request={{ document: "receipt", orderId: sale.id }}
+                  />
                 </div>
               </div>
             </article>

@@ -1,6 +1,14 @@
 // @vitest-environment node
+import { createCanvas } from "@napi-rs/canvas";
 import { describe, expect, it } from "vitest";
-import { columnsToEscPos, columnsToText } from "./text-raster";
+import {
+  TEXT_RASTER_WIDTH,
+  columnsToEscPos,
+  columnsToText,
+  drawColumnCells,
+  drawTextRows,
+  wrapTextRows,
+} from "./text-raster";
 
 const cells = [
   { text: "Burger", align: "right" as const, fontSize: 26 },
@@ -37,6 +45,69 @@ describe("columnsToText", () => {
       [4, 4, 4, 0],
     );
     expect(line).toBe("   R C  L   ");
+  });
+});
+
+function inkPixelCount(
+  width: number,
+  height: number,
+  draw: (ctx: ReturnType<ReturnType<typeof createCanvas>["getContext"]>) => void,
+) {
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, width, height);
+  draw(ctx);
+  const data = ctx.getImageData(0, 0, width, height).data;
+  let dark = 0;
+  for (let index = 0; index < data.length; index += 4) {
+    if (data[index]! < 128) dark += 1;
+  }
+  return dark;
+}
+
+describe("shared drawing helpers", () => {
+  it("keeps short printer text on one row", () => {
+    expect(wrapTextRows("شاي", { fontSize: 26 })).toEqual(["شاي"]);
+  });
+
+  it("wraps long text to the raster width", () => {
+    const rows = wrapTextRows(
+      "قهوة عربية مع هيل وزعفران ومكسرات لجميع الضيوف",
+      { fontSize: 26 },
+    );
+    expect(rows.length).toBeGreaterThan(1);
+  });
+
+  it("draws text rows and reports their height", () => {
+    const height = 200;
+    let drawn = 0;
+    const ink = inkPixelCount(TEXT_RASTER_WIDTH, height, (ctx) => {
+      drawn = drawTextRows(ctx, ["شاي", "قهوة"], {
+        fontSize: 26,
+        align: "right",
+        y: 0,
+      });
+    });
+    expect(drawn).toBe(72);
+    expect(ink).toBeGreaterThan(0);
+  });
+
+  it("draws column cells and reports the tallest row height", () => {
+    let drawn = 0;
+    const ink = inkPixelCount(TEXT_RASTER_WIDTH, 48, (ctx) => {
+      drawn = drawColumnCells(
+        ctx,
+        [
+          { text: "برجر", align: "right", fontSize: 26 },
+          { text: "2", align: "center", fontSize: 32 },
+        ],
+        [200, 184],
+        0,
+      );
+    });
+    expect(drawn).toBe(42);
+    expect(ink).toBeGreaterThan(0);
   });
 });
 

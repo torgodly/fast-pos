@@ -1,6 +1,7 @@
 import { Clock3 } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
 import { AdminReprintShiftButton } from "@/components/AdminReprintShiftButton";
+import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { getOpenShift, listShifts } from "@/lib/shifts/core";
@@ -66,6 +67,10 @@ export default async function AdminShiftsPage({
             {formatDateTime(openShift.openedAt)} بعهدة{" "}
             {formatMoney(openShift.openingFloat)}
           </span>
+          <PdfDownloadButton
+            request={{ document: "shift", shiftId: openShift.id }}
+            className="btn btn-outline btn-sm gap-1.5 rounded-xl"
+          />
         </div>
       ) : (
         <div className="rounded-xl border border-warning/40 bg-warning/10 px-4 py-3 text-sm font-bold text-warning">
@@ -149,7 +154,13 @@ export default async function AdminShiftsPage({
                     </p>
                   </td>
                   <td>
-                    <AdminReprintShiftButton shiftId={row.shiftId} />
+                    <div className="flex items-center gap-1">
+                      <AdminReprintShiftButton shiftId={row.shiftId} />
+                      <PdfDownloadButton
+                        request={{ document: "shift", shiftId: row.shiftId }}
+                        className="btn btn-ghost btn-xs h-7 min-h-7 gap-1 rounded-md"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))

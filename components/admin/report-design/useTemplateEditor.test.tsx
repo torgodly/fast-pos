@@ -4,10 +4,27 @@ import { DEFAULT_REPORT_TEMPLATES } from "@/lib/print/templates/defaults";
 import type { ReportTemplate } from "@/lib/print/templates/types";
 import { useTemplateEditor } from "./useTemplateEditor";
 
+function withFooterText(template: ReportTemplate, text: string): ReportTemplate {
+  return {
+    ...template,
+    elements: template.elements.map((element) =>
+      element.type === "text" && element.id === "el_footer_0"
+        ? { ...element, text }
+        : element,
+    ),
+  };
+}
+
+function footerText(template: ReportTemplate): string {
+  const element = template.elements.find((entry) => entry.id === "el_footer_0");
+  return element?.type === "text" ? element.text : "";
+}
+
 function withFooter(text: string): ReportTemplate {
-  const template = structuredClone(DEFAULT_REPORT_TEMPLATES.receipt);
-  template.footer.lines = [{ text }];
-  return template;
+  return withFooterText(
+    structuredClone(DEFAULT_REPORT_TEMPLATES.receipt),
+    text,
+  );
 }
 
 afterEach(() => {
@@ -26,11 +43,11 @@ describe("useTemplateEditor", () => {
     expect(result.current.canUndo).toBe(true);
 
     act(() => result.current.undo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("{{footer}}");
+    expect(footerText(result.current.template)).toBe("{{footer}}");
     expect(result.current.canRedo).toBe(true);
 
     act(() => result.current.redo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("نسخة");
+    expect(footerText(result.current.template)).toBe("نسخة");
   });
 
   it("coalesces rapid edits with the same key and starts a new step after the pause", () => {
@@ -47,9 +64,9 @@ describe("useTemplateEditor", () => {
     act(() => result.current.commit(withFooter("أبج"), { coalesceKey: "line" }));
 
     act(() => result.current.undo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("أب");
+    expect(footerText(result.current.template)).toBe("أب");
     act(() => result.current.undo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("{{footer}}");
+    expect(footerText(result.current.template)).toBe("{{footer}}");
   });
 
   it("pushes history for replace and clears dirty on markSaved", () => {
@@ -76,11 +93,11 @@ describe("useTemplateEditor", () => {
 
     act(() => result.current.commit(withFooter("تعديل")));
     rerender({ template: withFooter("من السيرفر") });
-    expect(result.current.template.footer.lines[0]!.text).toBe("تعديل");
+    expect(footerText(result.current.template)).toBe("تعديل");
 
     act(() => result.current.markSaved(withFooter("تعديل")));
     rerender({ template: withFooter("من السيرفر") });
-    expect(result.current.template.footer.lines[0]!.text).toBe("من السيرفر");
+    expect(footerText(result.current.template)).toBe("من السيرفر");
   });
 });
 
@@ -98,7 +115,7 @@ describe("useTemplateEditor history limits", () => {
       act(() => result.current.undo());
     }
 
-    expect(result.current.template.footer.lines[0]!.text).toBe("خطوة 10");
+    expect(footerText(result.current.template)).toBe("خطوة 10");
     expect(result.current.canUndo).toBe(false);
   });
 
@@ -109,9 +126,12 @@ describe("useTemplateEditor history limits", () => {
     const { result } = renderHook(() => useTemplateEditor(initial));
 
     act(() => result.current.commit(next));
-    next.footer.lines[0]!.text = "تغيير خارجي";
+    // Mutate the committed input in place: the editor must have cloned it, so
+    // the present state keeps the text that was committed.
+    const committed = next.elements.find((element) => element.id === "el_footer_0");
+    if (committed?.type === "text") committed.text = "تغيير خارجي";
 
-    expect(result.current.template.footer.lines[0]!.text).toBe("أولاً");
+    expect(footerText(result.current.template)).toBe("أولاً");
     expect(initial).toEqual(initialSnapshot);
   });
 
@@ -152,7 +172,7 @@ describe("useTemplateEditor review regressions", () => {
 
     expect(result.current.canUndo).toBe(true);
     act(() => result.current.undo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("{{footer}}");
+    expect(footerText(result.current.template)).toBe("{{footer}}");
   });
 
   it("undoes to the pre-chain present after a no-op first coalesced commit", () => {
@@ -171,7 +191,7 @@ describe("useTemplateEditor review regressions", () => {
     act(() => result.current.commit(withFooter("لاحق"), { coalesceKey: "line" }));
 
     act(() => result.current.undo());
-    expect(result.current.template.footer.lines[0]!.text).toBe("حالي");
+    expect(footerText(result.current.template)).toBe("حالي");
   });
 });
 
@@ -183,11 +203,11 @@ describe("useTemplateEditor keyboard shortcuts", () => {
 
     act(() => result.current.commit(withFooter("نسخة")));
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
-    expect(result.current.template.footer.lines[0]!.text).toBe("{{footer}}");
+    expect(footerText(result.current.template)).toBe("{{footer}}");
 
     act(() => result.current.commit(withFooter("نسخة")));
     fireEvent.keyDown(document.body, { key: "z", metaKey: true });
-    expect(result.current.template.footer.lines[0]!.text).toBe("{{footer}}");
+    expect(footerText(result.current.template)).toBe("{{footer}}");
   });
 
   it("redoes with Ctrl+Shift+Z, Cmd+Shift+Z and Ctrl+Y", () => {
@@ -199,15 +219,15 @@ describe("useTemplateEditor keyboard shortcuts", () => {
     act(() => result.current.undo());
 
     fireEvent.keyDown(document.body, { key: "z", ctrlKey: true, shiftKey: true });
-    expect(result.current.template.footer.lines[0]!.text).toBe("نسخة");
+    expect(footerText(result.current.template)).toBe("نسخة");
 
     act(() => result.current.undo());
     fireEvent.keyDown(document.body, { key: "z", metaKey: true, shiftKey: true });
-    expect(result.current.template.footer.lines[0]!.text).toBe("نسخة");
+    expect(footerText(result.current.template)).toBe("نسخة");
 
     act(() => result.current.undo());
     fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
-    expect(result.current.template.footer.lines[0]!.text).toBe("نسخة");
+    expect(footerText(result.current.template)).toBe("نسخة");
   });
 
   it("ignores shortcuts inside inputs, textareas, selects and contenteditable", () => {
@@ -231,7 +251,7 @@ describe("useTemplateEditor keyboard shortcuts", () => {
       document.body.appendChild(target);
       fireEvent.keyDown(target, { key: "z", ctrlKey: true });
       target.remove();
-      expect(result.current.template.footer.lines[0]!.text, name).toBe("نسخة");
+      expect(footerText(result.current.template), name).toBe("نسخة");
     }
   });
 
@@ -242,7 +262,7 @@ describe("useTemplateEditor keyboard shortcuts", () => {
 
     act(() => result.current.commit(withFooter("نسخة")));
     fireEvent.keyDown(document.body, { key: "z" });
-    expect(result.current.template.footer.lines[0]!.text).toBe("نسخة");
+    expect(footerText(result.current.template)).toBe("نسخة");
   });
 
   it("removes the keyboard listener on unmount", () => {
