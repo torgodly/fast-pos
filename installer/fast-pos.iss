@@ -56,9 +56,6 @@ Name: "{group}\Fast POS Remote Access"; Filename: "{app}\bin\fast-pos-remote.cmd
 Name: "{group}\Fast POS README"; Filename: "{app}\README-FIRST.txt"
 Name: "{autodesktop}\Fast POS"; Filename: "{app}\bin\fast-pos-open.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\FastPOS.ico"; Tasks: desktopicon
 
-[Registry]
-Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}\bin"; Check: NeedsAddPath('{app}\bin'); Flags: preservestringtype
-
 [Run]
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""Fast POS"" dir=in action=allow protocol=TCP localport=3000"; Flags: runhidden waituntilterminated; StatusMsg: "إضافة قاعدة جدار الحماية..."
 Filename: "{app}\bin\fast-pos-install-service.cmd"; Flags: runhidden waituntilterminated; StatusMsg: "تثبيت خدمة Fast POS..."
@@ -111,18 +108,59 @@ begin
       mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
 end;
 
-function NeedsAddPath(Param: string): Boolean;
+procedure RemovePathEntry(var PathValue: String; Entry: String);
 var
-  PathValue: string;
+  P: Integer;
 begin
+  while Pos(';' + Uppercase(Entry) + ';', ';' + Uppercase(PathValue) + ';') > 0 do
+  begin
+    P := Pos(';' + Uppercase(Entry) + ';', ';' + Uppercase(PathValue) + ';');
+    if P = 1 then
+      Delete(PathValue, 1, Length(Entry) + 1)
+    else
+      Delete(PathValue, P - 1, Length(Entry) + 1);
+  end;
+end;
+
+procedure UpdateMachinePath;
+var
+  PathValue: String;
+  BinDir: String;
+begin
+  BinDir := ExpandConstant('{app}\bin');
   if not RegQueryStringValue(HKEY_LOCAL_MACHINE,
     'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
     'Path', PathValue) then
   begin
-    Result := True;
+    { Never overwrite a Path we could not read; only create it when absent. }
+    if RegValueExists(HKEY_LOCAL_MACHINE,
+      'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'Path') then
+    begin
+      Log('Could not read the system Path; leaving it unchanged.');
+      exit;
+    end;
+    RegWriteExpandStringValue(HKEY_LOCAL_MACHINE,
+      'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
+      'Path', BinDir);
     exit;
   end;
-  Result := Pos(';' + Uppercase(Param) + ';', ';' + Uppercase(PathValue) + ';') = 0;
+
+  { Old installers appended the entry on every update; collapse duplicates. }
+  RemovePathEntry(PathValue, BinDir);
+  while (Length(PathValue) > 0) and (PathValue[1] = ';') do
+    Delete(PathValue, 1, 1);
+  while (Length(PathValue) > 0) and (PathValue[Length(PathValue)] = ';') do
+    Delete(PathValue, Length(PathValue), 1);
+
+  if PathValue = '' then
+    PathValue := BinDir
+  else
+    PathValue := PathValue + ';' + BinDir;
+
+  RegWriteExpandStringValue(HKEY_LOCAL_MACHINE,
+    'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
+    'Path', PathValue);
+  Log('System Path now contains a single Fast POS entry.');
 end;
 
 procedure StopFastPosService;
@@ -160,7 +198,6 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   PathValue: string;
   BinDir: string;
-  P: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
@@ -178,12 +215,12 @@ begin
       'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
       'Path', PathValue) then
     begin
-      P := Pos(';' + Uppercase(BinDir) + ';', ';' + Uppercase(PathValue) + ';');
-      { Remove ";bin" mid/end, or "bin;" when it is the first entry. }
-      if P = 1 then
-        Delete(PathValue, 1, Length(BinDir) + 1)
-      else if P > 1 then
-        Delete(PathValue, P - 1, Length(BinDir) + 1);
+      RemovePathEntry(PathValue, BinDir);
+      while (Length(PathValue) > 0) and (PathValue[1] = ';') do
+        Delete(PathValue, 1, 1);
+      while (Length(PathValue) > 0) and
+        (PathValue[Length(PathValue)] = ';') do
+        Delete(PathValue, Length(PathValue), 1);
       RegWriteExpandStringValue(HKEY_LOCAL_MACHINE,
         'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
         'Path', PathValue);
@@ -263,7 +300,9 @@ begin
         Mode := 'full';
       SaveStringToFile(DataDir + '\deployment.json', '{"mode":"' + Mode + '"}', False);
     end;
-  end;
+  end
+  else if CurStep = ssPostInstall then
+    UpdateMachinePath;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
