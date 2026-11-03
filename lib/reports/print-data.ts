@@ -1,5 +1,9 @@
-import type { ReportSummaryPrintData } from "@/lib/print/receipts";
+import type {
+  PurchasesReportPrintData,
+  ReportSummaryPrintData,
+} from "@/lib/print/receipts";
 import { formatPrintTimestamp } from "@/lib/venues";
+import type { PurchaseSummary } from "./purchases";
 import type { ReportSummary } from "./summary";
 
 function byRevenue<T extends { revenue: number }>(rows: T[]) {
@@ -41,5 +45,34 @@ export function summaryToPrintData(
     })),
     waiterPerformance: [],
     cashierPerformance: [],
+  };
+}
+
+function purchasesBoundary(value: string | null, fallback: string) {
+  return value ? formatPrintTimestamp(value) : fallback;
+}
+
+export function purchasesToPrintData(
+  summary: PurchaseSummary,
+  context: { venueName: string; printedByName: string },
+): PurchasesReportPrintData {
+  return {
+    venueName: context.venueName,
+    fromLabel: purchasesBoundary(summary.fromSql, "البداية"),
+    toLabel: purchasesBoundary(summary.toSql, "الآن"),
+    supplierLabel: summary.supplierName ?? "كل الموردين",
+    printedAt: formatPrintTimestamp(new Date()),
+    printedByName: context.printedByName,
+    invoiceCount: summary.totals.invoiceCount,
+    totalSpent: summary.totals.totalSpent,
+    lineCount: summary.totals.lineCount,
+    supplierCount: summary.totals.supplierCount,
+    invoices: summary.rows.map((row) => ({
+      invoiceNumber: row.invoiceNumber?.trim() || `#${row.id}`,
+      supplierName: row.supplierName?.trim() || "—",
+      date: formatPrintTimestamp(row.createdAt),
+      lineCount: row.lineCount,
+      totalCost: row.totalCost,
+    })),
   };
 }

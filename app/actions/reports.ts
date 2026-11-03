@@ -5,11 +5,21 @@ import { getSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { printers } from "@/lib/db/schema";
 import { recordSessionAudit } from "@/lib/audit";
-import { buildSalesReportEscPos } from "@/lib/print/templates/build";
+import {
+  buildPurchasesReportEscPos,
+  buildSalesReportEscPos,
+} from "@/lib/print/templates/build";
 import { printToPrinter } from "@/lib/print/network";
 import { printRawToWindowsPrinter } from "@/lib/print/windows-raw";
 import { type ReportFiltersInput } from "@/lib/reports/filters";
-import { summaryToPrintData } from "@/lib/reports/print-data";
+import {
+  purchasesToPrintData,
+  summaryToPrintData,
+} from "@/lib/reports/print-data";
+import {
+  getPurchaseSummary,
+  type PurchaseFiltersInput,
+} from "@/lib/reports/purchases";
 import { getReportSummary } from "@/lib/reports/summary";
 
 async function assertAdmin() {
@@ -76,6 +86,71 @@ export async function printReportSummary(
         : `تعذر الطباعة على ${printer.name}`;
     recordSessionAudit(session, {
       venueId: summary.venue,
+      kind: "report",
+      printerName: printer.name,
+      success: false,
+      detail,
+    });
+    return { error: detail };
+  }
+}
+
+export async function printPurchaseReport(
+  filters: PurchaseFiltersInput,
+  printerId: number,
+): Promise<{ error: string } | { ok: true; message: string }> {
+  let session;
+  try {
+    session = await assertAdmin();
+  } catch {
+    return { error: "غير مصرح" };
+  }
+
+  if (!Number.isFinite(printerId) || printerId < 1) {
+    return { error: "اختر طابعة" };
+  }
+
+  const printer = db
+    .select()
+    .from(printers)
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)))
+    .get();
+  if (!printer) {
+    return { error: "الطابعة غير موجودة أو معطّلة" };
+  }
+
+  const summary = getPurchaseSummary(filters);
+  const data = purchasesToPrintData(summary, {
+    venueName: "المخزن",
+    printedByName: session.name,
+  });
+
+  try {
+    const bytes = await buildPurchasesReportEscPos(data);
+    if (printer.connectionType === "local") {
+      await printRawToWindowsPrinter(printer.host, bytes);
+    } else {
+      await printToPrinter({
+        host: printer.host,
+        port: printer.port,
+        data: bytes,
+      });
+    }
+    recordSessionAudit(session, {
+      venueId: null,
+      kind: "report",
+      printerName: printer.name,
+      success: true,
+      detail: `تقرير مشتريات ${summary.fromLabel} — ${summary.toLabel} · ${summary.totals.invoiceCount} فاتورة · ${summary.totals.totalSpent.toFixed(2)}`,
+    });
+    return { ok: true, message: `طُبع التقرير على ${printer.name}` };
+  } catch (error) {
+    const detail =
+      error instanceof Error
+        ? error.message
+        : `تعذر الطباعة على ${printer.name}`;
+    recordSessionAudit(session, {
+      venueId: null,
       kind: "report",
       printerName: printer.name,
       success: false,

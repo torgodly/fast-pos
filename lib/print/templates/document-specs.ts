@@ -127,4 +127,23 @@ export const DOCUMENT_SPECS: Record<ReportDocument, DocumentSpec> = {
     summaryAllowed: true,
     qr: false,
   },
+  purchases: {
+    fields: ["from", "to", "supplier", "printedAt", "printedByName"],
+    itemColumns: [],
+    sections: {
+      totals: {
+        kind: "kv",
+        rowIds: ["totalSpent", "invoiceCount", "lineCount", "supplierCount"],
+        columnKeys: [],
+      },
+      invoices: {
+        kind: "table",
+        rowIds: [],
+        columnKeys: ["index", "invoiceNumber", "supplier", "date", "total"],
+      },
+    },
+    placeholders: BASE_PLACEHOLDERS,
+    summaryAllowed: true,
+    qr: false,
+  },
 };

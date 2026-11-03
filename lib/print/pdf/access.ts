@@ -42,6 +42,10 @@ export function canDownloadSalesPdf(session: PdfSession): boolean {
   return session.role === "admin";
 }
 
+export function canDownloadPurchasesPdf(session: PdfSession): boolean {
+  return session.role === "admin";
+}
+
 export function canDownloadDesignPdf(session: PdfSession): boolean {
   return session.role === "admin";
 }

@@ -13,4 +13,7 @@ export const DEFAULT_REPORT_TEMPLATES_V2: Record<ReportDocument, ReportTemplateV
   shift: structuredClone(migrateReportTemplate(DEFAULT_REPORT_TEMPLATES_V1.shift)),
   items: structuredClone(migrateReportTemplate(DEFAULT_REPORT_TEMPLATES_V1.items)),
   sales: structuredClone(migrateReportTemplate(DEFAULT_REPORT_TEMPLATES_V1.sales)),
+  purchases: structuredClone(
+    migrateReportTemplate(DEFAULT_REPORT_TEMPLATES_V1.purchases),
+  ),
 };

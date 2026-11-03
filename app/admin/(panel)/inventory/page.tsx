@@ -1,5 +1,5 @@
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
-import { AlertTriangle, ArrowDown, Package, Warehouse } from "lucide-react";
+import { and, asc, desc, eq, gte, like, lte } from "drizzle-orm";
+import { AlertTriangle, ArrowDown, Package, Wallet, Warehouse } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
 import {
   IngredientsAdmin,
@@ -18,19 +18,31 @@ import {
   units,
 } from "@/lib/db/schema";
 import { isLowStock, type UnitKind } from "@/lib/inventory/rules";
+import { resolveMovementFilters } from "@/lib/inventory/movements";
+import { getInventoryValuation } from "@/lib/inventory/valuation";
 import {
   resolveReportDateRange,
   toDateTimeLocalValue,
 } from "@/lib/reports/filters";
+import { formatMoney } from "@/lib/venues";
 
 export default async function AdminInventoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    item?: string;
+    category?: string;
+  }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const range = resolveReportDateRange({ venue: "", from: sp.from, to: sp.to });
+  const movementFilters = resolveMovementFilters({
+    item: sp.item,
+    category: sp.category,
+  });
 
   const unitOptions: UnitOption[] = db
     .select()
@@ -79,6 +91,7 @@ export default async function AdminInventoryPage({
       unitName: units.name,
       unitKind: units.kind,
       factorToBase: units.factorToBase,
+      categoryId: categories.id,
       categoryName: categories.name,
     })
     .from(items)
@@ -96,31 +109,51 @@ export default async function AdminInventoryPage({
 
   const trackedById = new Map(trackedItemRows.map((row) => [row.id, row]));
 
-  const ingredientMovementRows = db
-    .select({
-      id: ingredientMovements.id,
-      targetName: ingredientMovements.ingredientName,
-      deltaBase: ingredientMovements.deltaBase,
-      kind: ingredientMovements.kind,
-      userName: ingredientMovements.userName,
-      note: ingredientMovements.note,
-      createdAt: ingredientMovements.createdAt,
-      unitName: units.name,
-      unitKind: units.kind,
-      factorToBase: units.factorToBase,
-    })
-    .from(ingredientMovements)
-    .leftJoin(ingredients, eq(ingredientMovements.ingredientId, ingredients.id))
-    .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
-    .where(
-      and(
-        gte(ingredientMovements.createdAt, range.fromSql),
-        lte(ingredientMovements.createdAt, range.toSql),
-      ),
-    )
-    .orderBy(desc(ingredientMovements.createdAt), desc(ingredientMovements.id))
-    .limit(200)
-    .all();
+  const ingredientMovementConditions = [
+    gte(ingredientMovements.createdAt, range.fromSql),
+    lte(ingredientMovements.createdAt, range.toSql),
+  ];
+  if (movementFilters.item) {
+    ingredientMovementConditions.push(
+      like(ingredientMovements.ingredientName, `%${movementFilters.item}%`),
+    );
+  }
+
+  const ingredientMovementRows = movementFilters.categoryId
+    ? []
+    : db
+        .select({
+          id: ingredientMovements.id,
+          targetName: ingredientMovements.ingredientName,
+          deltaBase: ingredientMovements.deltaBase,
+          kind: ingredientMovements.kind,
+          userName: ingredientMovements.userName,
+          note: ingredientMovements.note,
+          createdAt: ingredientMovements.createdAt,
+          unitName: units.name,
+          unitKind: units.kind,
+          factorToBase: units.factorToBase,
+        })
+        .from(ingredientMovements)
+        .leftJoin(ingredients, eq(ingredientMovements.ingredientId, ingredients.id))
+        .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
+        .where(and(...ingredientMovementConditions))
+        .orderBy(desc(ingredientMovements.createdAt), desc(ingredientMovements.id))
+        .limit(200)
+        .all();
+
+  const itemMovementConditions = [
+    gte(itemMovements.createdAt, range.fromSql),
+    lte(itemMovements.createdAt, range.toSql),
+  ];
+  if (movementFilters.item) {
+    itemMovementConditions.push(
+      like(itemMovements.itemName, `%${movementFilters.item}%`),
+    );
+  }
+  if (movementFilters.categoryId) {
+    itemMovementConditions.push(eq(items.categoryId, movementFilters.categoryId));
+  }
 
   const itemMovementRows = db
     .select({
@@ -137,12 +170,8 @@ export default async function AdminInventoryPage({
       factorToBase: itemMovements.factorToBase,
     })
     .from(itemMovements)
-    .where(
-      and(
-        gte(itemMovements.createdAt, range.fromSql),
-        lte(itemMovements.createdAt, range.toSql),
-      ),
-    )
+    .leftJoin(items, eq(itemMovements.itemId, items.id))
+    .where(and(...itemMovementConditions))
     .orderBy(desc(itemMovements.createdAt), desc(itemMovements.id))
     .limit(200)
     .all();
@@ -200,6 +229,8 @@ export default async function AdminInventoryPage({
     ...trackedItemRows.map((row) => row.stockBase),
   ].filter((stock) => stock < 0).length;
 
+  const valuation = getInventoryValuation().summary;
+
   return (
     <div className="space-y-7">
       <div>
@@ -247,6 +278,43 @@ export default async function AdminInventoryPage({
         </div>
       </div>
 
+      <section className="premium-card rounded-2xl p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-success/10 text-success">
+              <Wallet className="size-5" />
+            </span>
+            <div>
+              <p className="text-xs font-bold text-base-content/45">
+                قيمة المخزون (بآخر سعر شراء)
+              </p>
+              <p className="text-2xl font-black">
+                {formatMoney(valuation.total)}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-base-content/60">
+            <span>
+              المكونات{" "}
+              <b className="text-base-content">
+                {formatMoney(valuation.ingredientValue)}
+              </b>
+            </span>
+            <span>
+              الأصناف المتتبعة{" "}
+              <b className="text-base-content">
+                {formatMoney(valuation.trackedItemValue)}
+              </b>
+            </span>
+            {valuation.unpricedCount > 0 ? (
+              <span className="text-warning">
+                {valuation.unpricedCount} بلا سعر شراء مسجّل
+              </span>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
       <IngredientsAdmin
         ingredients={ingredientRows}
         trackedItems={trackedItemRows}
@@ -254,6 +322,10 @@ export default async function AdminInventoryPage({
         units={unitOptions}
         from={toDateTimeLocalValue(range.from, "start")}
         to={toDateTimeLocalValue(range.to, "end")}
+        item={movementFilters.item}
+        category={
+          movementFilters.categoryId ? String(movementFilters.categoryId) : ""
+        }
       />
     </div>
   );

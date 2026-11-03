@@ -2,9 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { LoaderCircle, Printer } from "lucide-react";
-import { printReportSummary } from "@/app/actions/reports";
+import {
+  printPurchaseReport,
+  printReportSummary,
+} from "@/app/actions/reports";
 import { useToast } from "@/components/ToastProvider";
 import type { ReportFiltersInput } from "@/lib/reports/filters";
+import type { PurchaseFiltersInput } from "@/lib/reports/purchases";
 
 type PrinterChoice = {
   id: number;
@@ -15,9 +19,13 @@ type PrinterChoice = {
 export function PrintReportButton({
   filters,
   printers,
+  report = "sales",
+  label = "طباعة الأصناف والمجموعات",
 }: {
-  filters: ReportFiltersInput;
+  filters: ReportFiltersInput | PurchaseFiltersInput;
   printers: PrinterChoice[];
+  report?: "sales" | "purchases";
+  label?: string;
 }) {
   const { showToast } = useToast();
   const [pending, startTransition] = useTransition();
@@ -36,7 +44,10 @@ export function PrintReportButton({
       return;
     }
     startTransition(async () => {
-      const result = await printReportSummary(filters, id);
+      const result =
+        report === "purchases"
+          ? await printPurchaseReport(filters as PurchaseFiltersInput, id)
+          : await printReportSummary(filters as ReportFiltersInput, id);
       if ("error" in result) {
         showToast("error", result.error);
         return;
@@ -78,7 +89,7 @@ export function PrintReportButton({
         ) : (
           <Printer className="size-3.5" />
         )}
-        طباعة الأصناف والمجموعات
+        {label}
       </button>
     </div>
   );

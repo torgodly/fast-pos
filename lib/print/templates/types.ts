@@ -4,6 +4,7 @@ export const REPORT_DOCUMENTS = [
   "shift",
   "items",
   "sales",
+  "purchases",
 ] as const;
 
 export type ReportDocument = (typeof REPORT_DOCUMENTS)[number];

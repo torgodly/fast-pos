@@ -1,6 +1,7 @@
 import {
   kitchenPage,
   itemsPage,
+  purchasesPage,
   receiptPage,
   salesPage,
   samplePage,
@@ -14,6 +15,7 @@ import {
   loadKitchenReceiptForOrder,
 } from "../order-documents";
 import type {
+  PurchasesReportPrintData,
   ReportSummaryPrintData,
   ShiftItemsPrintData,
   ShiftReportPrintData,
@@ -53,6 +55,12 @@ export function pdfFilename(input: PdfFilenameInput): string {
     const to = datePart(input.to);
     if (!from && !to) return "sales-report.pdf";
     return `sales-${from || to}_${to || from}.pdf`;
+  }
+  if (input.document === "purchases") {
+    const from = datePart(input.from);
+    const to = datePart(input.to);
+    if (!from && !to) return "purchases-report.pdf";
+    return `purchases-${from || "start"}_${to || "now"}.pdf`;
   }
   return `${input.document}.pdf`;
 }
@@ -137,8 +145,22 @@ export async function salesPdf(
   };
 }
 
-export async function samplePdf(
-  document: ReportDocument,
+export async function purchasesPdf(
+  data: PurchasesReportPrintData,
+  template?: ReportTemplate,
+  range?: PdfRange,
+): Promise<PdfResult> {
+  return {
+    bytes: await pageToPdf(await purchasesPage(data, { template })),
+    filename: pdfFilename({
+      document: "purchases",
+      from: range?.from,
+      to: range?.to,
+    }),
+  };
+}
+
+export async function samplePdf(  document: ReportDocument,
   template?: ReportTemplate,
 ): Promise<PdfResult> {
   const page = await samplePage(

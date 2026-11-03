@@ -1,12 +1,14 @@
 import type {
   CheckoutReceiptData,
   KitchenReceiptData,
+  PurchasesReportPrintData,
   ReportSummaryPrintData,
   ShiftReportPrintData,
 } from "@/lib/print/receipts";
 import {
   itemsDocumentData,
   kitchenDocumentData,
+  purchasesDocumentData,
   receiptDocumentData,
   salesDocumentData,
   shiftDocumentData,
@@ -124,6 +126,35 @@ const sampleSales: ReportSummaryPrintData = {
   cashierPerformance: [],
 };
 
+const samplePurchases: PurchasesReportPrintData = {
+  venueName: "فاست بوس",
+  fromLabel: "2026-10-01 00:00:00",
+  toLabel: "2026-10-31 23:59:59",
+  supplierLabel: "مورد أ",
+  printedAt: "2026-10-31 18:00",
+  printedByName: "سارة",
+  invoiceCount: 3,
+  totalSpent: 640.5,
+  lineCount: 9,
+  supplierCount: 1,
+  invoices: [
+    {
+      invoiceNumber: "INV-1001",
+      supplierName: "مورد أ",
+      date: "2026-10-30 12:00:00",
+      lineCount: 3,
+      totalCost: 250,
+    },
+    {
+      invoiceNumber: "INV-1002",
+      supplierName: "مورد أ",
+      date: "2026-10-29 10:30:00",
+      lineCount: 2,
+      totalCost: 120.5,
+    },
+  ],
+};
+
 export function buildSampleDocuments(
   settings: ReceiptDocumentSettings,
 ): Record<ReportDocument, DocumentData> {
@@ -139,5 +170,9 @@ export function buildSampleDocuments(
     shift: shiftDocumentData({ ...sampleShift, venueName: settings.venueName }),
     items: itemsDocumentData({ ...sampleShift, venueName: settings.venueName }),
     sales: salesDocumentData({ ...sampleSales, venueName: settings.venueName }),
+    purchases: purchasesDocumentData({
+      ...samplePurchases,
+      venueName: settings.venueName,
+    }),
   };
 }

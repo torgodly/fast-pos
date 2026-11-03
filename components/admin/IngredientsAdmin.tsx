@@ -3,7 +3,16 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowDownUp, Package, Pencil, Plus, Warehouse } from "lucide-react";
+import {
+  ArrowDownUp,
+  Filter,
+  Package,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Warehouse,
+} from "lucide-react";
 import {
   adjustIngredientStock,
   adjustTrackedItemStock,
@@ -56,6 +65,7 @@ export type TrackedItemRow = {
   unitName: string;
   unitKind: UnitKind;
   factorToBase: number;
+  categoryId: number | null;
   categoryName: string | null;
 };
 
@@ -115,6 +125,8 @@ export function IngredientsAdmin({
   units,
   from,
   to,
+  item,
+  category,
 }: {
   ingredients: IngredientRow[];
   trackedItems: TrackedItemRow[];
@@ -122,6 +134,8 @@ export function IngredientsAdmin({
   units: UnitOption[];
   from: string;
   to: string;
+  item: string;
+  category: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -132,6 +146,19 @@ export function IngredientsAdmin({
   const [ingredientUnitId, setIngredientUnitId] = useState("");
 
   const editing = modal?.mode === "edit" ? modal.ingredient : null;
+
+  const movementCategoryMap = new Map<number, string>();
+  for (const row of trackedItems) {
+    if (row.categoryId !== null && row.categoryName) {
+      movementCategoryMap.set(row.categoryId, row.categoryName);
+    }
+  }
+  const movementCategories = [...movementCategoryMap.entries()].sort((a, b) =>
+    a[1].localeCompare(b[1], "ar"),
+  );
+  const movementFilterCount = [item, category].filter((value) =>
+    value.trim(),
+  ).length;
 
   function closeModals() {
     if (pending) return;
@@ -230,8 +257,12 @@ export function IngredientsAdmin({
     const params = new URLSearchParams();
     const fromValue = String(formData.get("from") ?? "").trim();
     const toValue = String(formData.get("to") ?? "").trim();
+    const itemValue = String(formData.get("item") ?? "").trim();
+    const categoryValue = String(formData.get("category") ?? "").trim();
     if (fromValue) params.set("from", fromValue);
     if (toValue) params.set("to", toValue);
+    if (itemValue) params.set("item", itemValue);
+    if (categoryValue) params.set("category", categoryValue);
     router.push(
       params.toString()
         ? `/admin/inventory?${params.toString()}`
@@ -530,7 +561,7 @@ export function IngredientsAdmin({
       </section>
 
       <section className="premium-card card">
-        <div className="card-body gap-5 p-5 sm:p-6">
+        <div className="card-body gap-4 p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-black">حركات المخزون</h3>
@@ -538,10 +569,61 @@ export function IngredientsAdmin({
                 شراء، بيع، تعديل يدوي، وتعديلات الفواتير — للمكونات والأصناف
               </p>
             </div>
+            <p className="text-xs font-bold text-base-content/40">
+              {movements.length} حركة معروضة
+            </p>
+          </div>
+
+          <details
+            className="rounded-2xl border border-base-300/60"
+            open={movementFilterCount > 0}
+          >
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-3">
+              <span className="flex items-center gap-2 text-sm font-bold">
+                <Filter className="size-4 text-primary" />
+                فلاتر الحركات
+              </span>
+              {movementFilterCount > 0 ? (
+                <span className="badge badge-primary badge-sm">
+                  {movementFilterCount} فلتر نشط
+                </span>
+              ) : (
+                <span className="badge badge-ghost badge-sm">عرض الفلاتر</span>
+              )}
+            </summary>
             <form
               onSubmit={applyFilter}
-              className="flex flex-wrap items-end gap-2"
+              className="grid gap-2 border-t border-base-300/60 p-3 sm:grid-cols-2 xl:grid-cols-5"
             >
+              <label className="form-control">
+                <span className="label-text mb-1 text-xs font-bold">
+                  اسم المكوّن أو الصنف
+                </span>
+                <input
+                  type="search"
+                  name="item"
+                  defaultValue={item}
+                  placeholder="مثال: قهوة"
+                  className="input input-bordered input-sm"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label-text mb-1 text-xs font-bold">
+                  المجموعة
+                </span>
+                <select
+                  name="category"
+                  defaultValue={category}
+                  className="select select-bordered select-sm"
+                >
+                  <option value="">كل المجموعات</option>
+                  {movementCategories.map(([id, name]) => (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label className="form-control">
                 <span className="label-text mb-1 text-xs font-bold">من</span>
                 <input
@@ -560,18 +642,22 @@ export function IngredientsAdmin({
                   className="input input-bordered input-sm"
                 />
               </label>
-              <button type="submit" className="btn btn-primary btn-sm">
-                عرض
-              </button>
-              <Link
-                href="/admin/inventory"
-                className="btn btn-ghost btn-sm"
-                prefetch={false}
-              >
-                اليوم
-              </Link>
+              <div className="flex items-end gap-2">
+                <button type="submit" className="btn btn-primary btn-sm gap-1">
+                  <Search className="size-3.5" />
+                  عرض
+                </button>
+                <Link
+                  href="/admin/inventory"
+                  className="btn btn-ghost btn-sm gap-1"
+                  prefetch={false}
+                >
+                  <RotateCcw className="size-3.5" />
+                  إعادة ضبط
+                </Link>
+              </div>
             </form>
-          </div>
+          </details>
 
           <div className="overflow-x-auto rounded-2xl border border-base-300/60">
             <table className="table table-zebra">

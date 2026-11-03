@@ -3,12 +3,14 @@ import { getSession } from "@/lib/auth/session";
 import {
   canDownloadDesignPdf,
   canDownloadOrderPdf,
+  canDownloadPurchasesPdf,
   canDownloadSalesPdf,
   canDownloadShiftPdf,
 } from "@/lib/print/pdf/access";
 import {
   itemsPdf,
   kitchenPdfForOrder,
+  purchasesPdf,
   receiptPdfForOrder,
   salesPdf,
   samplePdf,
@@ -17,8 +19,15 @@ import {
 } from "@/lib/print/pdf/documents";
 import { parseReportTemplateJson } from "@/lib/print/templates/schema";
 import { isReportDocument } from "@/lib/print/templates/types";
-import { summaryToPrintData } from "@/lib/reports/print-data";
+import {
+  purchasesToPrintData,
+  summaryToPrintData,
+} from "@/lib/reports/print-data";
 import type { ReportFiltersInput } from "@/lib/reports/filters";
+import {
+  getPurchaseSummary,
+  type PurchaseFiltersInput,
+} from "@/lib/reports/purchases";
 import { getReportSummary } from "@/lib/reports/summary";
 import { buildShiftReportData, getShiftById } from "@/lib/shifts/core";
 
@@ -94,6 +103,23 @@ export async function POST(request: Request) {
       return pdfResponse(
         document === "shift" ? await shiftPdf(data) : await itemsPdf(data),
       );
+    }
+
+    if (document === "purchases") {
+      if (!canDownloadPurchasesPdf(session)) return fail(403, "غير مصرح");
+      const filters = (
+        body.filters && typeof body.filters === "object" ? body.filters : {}
+      ) as PurchaseFiltersInput;
+      const summary = getPurchaseSummary(filters);
+      const result = await purchasesPdf(
+        purchasesToPrintData(summary, {
+          venueName: "المخزن",
+          printedByName: session.name,
+        }),
+        undefined,
+        { from: summary.fromSql ?? "", to: summary.toSql ?? "" },
+      );
+      return pdfResponse(result);
     }
 
     if (!canDownloadSalesPdf(session)) return fail(403, "غير مصرح");

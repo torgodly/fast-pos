@@ -1,12 +1,13 @@
 import type { ReportDocument } from "@/lib/print/templates/types";
 import type { ReportFiltersInput } from "@/lib/reports/filters";
+import type { PurchaseFiltersInput } from "@/lib/reports/purchases";
 
 export type PdfRequest = {
   document: ReportDocument;
   source?: "design";
   orderId?: number;
   shiftId?: number;
-  filters?: ReportFiltersInput;
+  filters?: ReportFiltersInput | PurchaseFiltersInput;
   template?: string;
 };
 

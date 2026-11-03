@@ -3,6 +3,7 @@ import {
   checkoutReceiptMethodLabel,
   type CheckoutReceiptData,
   type KitchenReceiptData,
+  type PurchasesReportPrintData,
   type ReportSummaryPrintData,
   type ShiftItemsPrintData,
   type ShiftReportPrintData,
@@ -258,8 +259,7 @@ export function itemsDocumentData(input: ShiftItemsPrintData): DocumentData {
   };
 }
 
-export function salesDocumentData(input: ReportSummaryPrintData): DocumentData {
-  const totals: DocumentSectionData = {
+export function salesDocumentData(input: ReportSummaryPrintData): DocumentData {  const totals: DocumentSectionData = {
     kind: "kv",
     rows: [
       { labelId: "total", value: money(input.totalSales), bold: true },
@@ -319,5 +319,54 @@ export function salesDocumentData(input: ReportSummaryPrintData): DocumentData {
       },
     },
     summary: money(input.totalSales),
+  };
+}
+
+export function purchasesDocumentData(
+  input: PurchasesReportPrintData,
+): DocumentData {
+  const totals: DocumentSectionData = {
+    kind: "kv",
+    rows: [
+      { labelId: "totalSpent", value: money(input.totalSpent), bold: true },
+      { labelId: "invoiceCount", value: String(input.invoiceCount) },
+      { labelId: "lineCount", value: String(input.lineCount) },
+      { labelId: "supplierCount", value: String(input.supplierCount) },
+    ],
+  };
+  return {
+    title: "تقرير المشتريات",
+    subtitle: "",
+    venue: input.venueName,
+    brandPhone: "",
+    brandAddress: "",
+    footer: "",
+    status: "",
+    logoAvailable: false,
+    fields: {
+      from: input.fromLabel,
+      to: input.toLabel,
+      supplier: input.supplierLabel,
+      printedAt: input.printedAt,
+      printedByName: input.printedByName,
+    },
+    items: [],
+    itemNotes: [],
+    sections: {
+      totals,
+      invoices: {
+        kind: "table",
+        rows: [],
+        table: input.invoices.map((invoice, index) => ({
+          index: String(index + 1),
+          invoiceNumber: invoice.invoiceNumber,
+          supplier: invoice.supplierName,
+          date: invoice.date,
+          total: amount(invoice.totalCost),
+        })),
+        emptyText: "لا فواتير مشتريات في هذه الفترة",
+      },
+    },
+    summary: money(input.totalSpent),
   };
 }

@@ -36,6 +36,26 @@ export type ReportSummaryPrintData = {
   }>;
 };
 
+export type PurchasesReportPrintData = {
+  venueName: string;
+  fromLabel: string;
+  toLabel: string;
+  supplierLabel: string;
+  printedAt: string;
+  printedByName: string;
+  invoiceCount: number;
+  totalSpent: number;
+  lineCount: number;
+  supplierCount: number;
+  invoices: Array<{
+    invoiceNumber: string;
+    supplierName: string;
+    date: string;
+    lineCount: number;
+    totalCost: number;
+  }>;
+};
+
 export type ShiftReportPrintData = {
   kind: "summary" | "close" | "reprint";
   shiftNumber: number;

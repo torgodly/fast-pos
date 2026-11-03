@@ -360,6 +360,77 @@ const sales: ReportTemplateV1 = {
   },
 };
 
+const purchases: ReportTemplateV1 = {
+  format: "fastpos-report",
+  version: 1,
+  document: "purchases",
+  order: [
+    "header",
+    "fields",
+    "items",
+    "section:totals",
+    "section:invoices",
+    "summary",
+    "footer",
+  ],
+  paper: { columns: 32 },
+  header: {
+    show: true,
+    logo: { show: false },
+    separator: true,
+    lines: [
+      { text: "{{title}}", align: "center", bold: true, size: "xlarge" },
+      { text: "{{venue}}", align: "center" },
+    ],
+  },
+  fields: {
+    show: ["from", "to", "supplier", "printedAt", "printedByName"],
+    visible: true,
+    separator: true,
+  },
+  items: {
+    show: false,
+    title: "",
+    columns: [],
+    header: false,
+    showNote: false,
+    separator: true,
+  },
+  sections: [
+    { id: "totals", title: "", show: true, separator: true },
+    {
+      id: "invoices",
+      title: "الفواتير",
+      show: true,
+      separator: true,
+      columns: [
+        { key: "index", label: "م", width: 3, align: "center" },
+        { key: "invoiceNumber", label: "الفاتورة", width: 8 },
+        { key: "supplier", label: "المورد", width: 8 },
+        { key: "date", label: "التاريخ", width: 7, align: "center" },
+        { key: "total", label: "المبلغ", width: 6, align: "center" },
+      ],
+    },
+  ],
+  summary: { show: true, label: "إجمالي المصروف", separator: true },
+  labels: {
+    from: "من",
+    to: "إلى",
+    supplier: "المورد",
+    printedAt: "طباعة",
+    printedByName: "بواسطة",
+    totalSpent: "إجمالي المصروف",
+    invoiceCount: "الفواتير",
+    lineCount: "بنود الشراء",
+    supplierCount: "الموردون",
+  },
+  footer: {
+    show: true,
+    separator: true,
+    lines: [{ text: "— نهاية التقرير —", align: "center" }],
+  },
+};
+
 export const DEFAULT_REPORT_TEMPLATES_V1: Record<
   ReportDocument,
   ReportTemplateV1
@@ -369,4 +440,5 @@ export const DEFAULT_REPORT_TEMPLATES_V1: Record<
   shift,
   items,
   sales,
+  purchases,
 };

@@ -5,6 +5,7 @@ import {
 import type {
   CheckoutReceiptData,
   KitchenReceiptData,
+  PurchasesReportPrintData,
   ReportSummaryPrintData,
   ShiftItemsPrintData,
   ShiftReportPrintData,
@@ -13,6 +14,7 @@ import { getReceiptLogoEscPos, readReceiptLogoPng } from "../logo";
 import {
   itemsDocumentData,
   kitchenDocumentData,
+  purchasesDocumentData,
   receiptDocumentData,
   salesDocumentData,
   shiftDocumentData,
@@ -153,6 +155,13 @@ export async function buildSalesReportEscPos(
   return renderDocument("sales", salesDocumentData(data), overrides);
 }
 
+export async function buildPurchasesReportEscPos(
+  data: PurchasesReportPrintData,
+  overrides: BuildOverrides = {},
+): Promise<Uint8Array> {
+  return renderDocument("purchases", purchasesDocumentData(data), overrides);
+}
+
 export async function receiptPage(
   data: CheckoutReceiptData,
   overrides: BuildOverrides = {},
@@ -187,6 +196,13 @@ export async function salesPage(
   overrides: BuildOverrides = {},
 ): Promise<DocumentPage> {
   return documentPage("sales", salesDocumentData(data), overrides);
+}
+
+export async function purchasesPage(
+  data: PurchasesReportPrintData,
+  overrides: BuildOverrides = {},
+): Promise<DocumentPage> {
+  return documentPage("purchases", purchasesDocumentData(data), overrides);
 }
 
 export async function samplePage(

@@ -8,6 +8,7 @@ const DOCUMENT_LABELS: Record<ReportDocument, string> = {
   shift: "تقرير الوردية",
   items: "تذكرة الأصناف",
   sales: "تقرير المبيعات",
+  purchases: "تقرير المشتريات",
 };
 
 type EditorToolbarProps = {
