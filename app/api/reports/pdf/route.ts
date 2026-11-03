@@ -107,9 +107,15 @@ export async function POST(request: Request) {
 
     if (document === "purchases") {
       if (!canDownloadPurchasesPdf(session)) return fail(403, "غير مصرح");
-      const filters = (
+      const raw = (
         body.filters && typeof body.filters === "object" ? body.filters : {}
       ) as PurchaseFiltersInput;
+      const filters: PurchaseFiltersInput = {
+        from: raw.from,
+        to: raw.to,
+        supplier: raw.supplier,
+        q: raw.q,
+      };
       const summary = getPurchaseSummary(filters);
       const result = await purchasesPdf(
         purchasesToPrintData(summary, {

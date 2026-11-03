@@ -1,4 +1,13 @@
-import { and, desc, eq, like, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  inArray,
+  like,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   purchaseInvoiceLines,
@@ -12,16 +21,8 @@ export type PurchaseFiltersInput = {
   to?: string;
   supplier?: string;
   q?: string;
-};
-
-export type PurchaseInvoiceSummary = {
-  id: number;
-  supplierName: string | null;
-  invoiceNumber: string | null;
-  totalCost: number;
-  createdAt: string;
-  lineCount: number;
-  createdByName?: string;
+  limit?: number;
+  offset?: number;
 };
 
 export type PurchaseSummaryTotals = {
@@ -60,23 +61,7 @@ export function resolvePurchaseRange(input: {
   };
 }
 
-export function summarizePurchaseRows(
-  rows: PurchaseInvoiceSummary[],
-): PurchaseSummaryTotals {
-  const supplierNames = new Set(
-    rows
-      .map((row) => row.supplierName?.trim())
-      .filter((name): name is string => Boolean(name)),
-  );
-  return {
-    invoiceCount: rows.length,
-    totalSpent: round2(rows.reduce((sum, row) => sum + row.totalCost, 0)),
-    lineCount: rows.reduce((sum, row) => sum + row.lineCount, 0),
-    supplierCount: supplierNames.size,
-  };
-}
-
-export function getPurchaseSummary(input: PurchaseFiltersInput) {
+function buildPurchaseContext(input: PurchaseFiltersInput) {
   const range = resolvePurchaseRange(input);
   const q = (input.q ?? "").trim();
   const supplierId = parseId(input.supplier);
@@ -106,6 +91,24 @@ export function getPurchaseSummary(input: PurchaseFiltersInput) {
     if (combined) conditions.push(combined);
   }
 
+  return { range, q, supplierId, conditions };
+}
+
+export function countPurchaseInvoices(input: PurchaseFiltersInput): number {
+  const { conditions } = buildPurchaseContext(input);
+  return (
+    db
+      .select({ value: sql<number>`count(*)`.mapWith(Number) })
+      .from(purchaseInvoices)
+      .leftJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .get()?.value ?? 0
+  );
+}
+
+export function getPurchaseSummary(input: PurchaseFiltersInput) {
+  const { range, q, supplierId, conditions } = buildPurchaseContext(input);
+
   const supplier =
     supplierId !== null
       ? db
@@ -114,6 +117,37 @@ export function getPurchaseSummary(input: PurchaseFiltersInput) {
           .where(eq(suppliers.id, supplierId))
           .get()
       : null;
+
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const totalsRow = db
+    .select({
+      invoiceCount: sql<number>`count(*)`.mapWith(Number),
+      totalSpent: sql<number>`coalesce(sum(${purchaseInvoices.totalCost}), 0)`.mapWith(
+        Number,
+      ),
+      supplierCount:
+        sql<number>`count(distinct ${purchaseInvoices.supplierId})`.mapWith(
+          Number,
+        ),
+    })
+    .from(purchaseInvoices)
+    .leftJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
+    .where(where)
+    .get();
+
+  const matchingInvoiceIds = db
+    .select({ id: purchaseInvoices.id })
+    .from(purchaseInvoices)
+    .leftJoin(suppliers, eq(purchaseInvoices.supplierId, suppliers.id))
+    .where(where);
+
+  const lineCount =
+    db
+      .select({ value: sql<number>`count(*)`.mapWith(Number) })
+      .from(purchaseInvoiceLines)
+      .where(inArray(purchaseInvoiceLines.invoiceId, matchingInvoiceIds))
+      .get()?.value ?? 0;
 
   const rows = db
     .select({
@@ -131,10 +165,19 @@ export function getPurchaseSummary(input: PurchaseFiltersInput) {
       purchaseInvoiceLines,
       eq(purchaseInvoiceLines.invoiceId, purchaseInvoices.id),
     )
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .where(where)
     .groupBy(purchaseInvoices.id)
     .orderBy(desc(purchaseInvoices.createdAt), desc(purchaseInvoices.id))
+    .limit(input.limit ?? -1)
+    .offset(input.offset ?? 0)
     .all();
+
+  const totals: PurchaseSummaryTotals = {
+    invoiceCount: totalsRow?.invoiceCount ?? 0,
+    totalSpent: round2(totalsRow?.totalSpent ?? 0),
+    lineCount,
+    supplierCount: totalsRow?.supplierCount ?? 0,
+  };
 
   return {
     ...range,
@@ -142,7 +185,8 @@ export function getPurchaseSummary(input: PurchaseFiltersInput) {
     supplierId,
     supplierName: supplier?.name ?? null,
     rows,
-    totals: summarizePurchaseRows(rows),
+    total: totals.invoiceCount,
+    totals,
   };
 }
 

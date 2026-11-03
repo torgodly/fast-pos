@@ -18,6 +18,7 @@ import {
   type UnitOption,
 } from "@/components/admin/PurchaseInvoicesAdmin";
 import { PdfDownloadButton } from "@/components/PdfDownloadButton";
+import { Pagination } from "@/components/Pagination";
 import { PrintReportButton } from "@/components/PrintReportButton";
 import { db } from "@/lib/db";
 import {
@@ -28,7 +29,11 @@ import {
   units,
 } from "@/lib/db/schema";
 import type { UnitKind } from "@/lib/inventory/rules";
-import { getPurchaseSummary } from "@/lib/reports/purchases";
+import { resolvePageInfo } from "@/lib/pagination";
+import {
+  countPurchaseInvoices,
+  getPurchaseSummary,
+} from "@/lib/reports/purchases";
 import { formatDateTime, formatMoney } from "@/lib/venues";
 
 export default async function AdminPurchasesPage({
@@ -39,15 +44,24 @@ export default async function AdminPurchasesPage({
     from?: string;
     to?: string;
     supplier?: string;
+    page?: string;
+    size?: string;
   }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
-  const summary = getPurchaseSummary({
+  const filters = {
     q: sp.q,
     from: sp.from,
     to: sp.to,
     supplier: sp.supplier,
+  };
+  const total = countPurchaseInvoices(filters);
+  const info = resolvePageInfo({ page: sp.page, size: sp.size }, total);
+  const summary = getPurchaseSummary({
+    ...filters,
+    limit: info.size,
+    offset: info.offset,
   });
   const { totals } = summary;
 
@@ -273,6 +287,7 @@ export default async function AdminPurchasesPage({
           action="/admin/purchases"
           className="grid gap-3 border-t border-base-300/60 p-4 sm:grid-cols-2 sm:p-5 xl:grid-cols-4"
         >
+          {sp.size ? <input type="hidden" name="size" value={sp.size} /> : null}
           <label className="form-control">
             <span className="label-text mb-1.5 font-bold">من تاريخ</span>
             <input
@@ -342,6 +357,8 @@ export default async function AdminPurchasesPage({
         units={unitOptions}
         suppliers={supplierOptions}
       />
+
+      <Pagination basePath="/admin/purchases" params={sp} info={info} />
     </div>
   );
 }

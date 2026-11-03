@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, like, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, like, lte, sql } from "drizzle-orm";
 import { AlertTriangle, ArrowDown, Package, Wallet, Warehouse } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
 import {
@@ -8,6 +8,7 @@ import {
   type TrackedItemRow,
   type UnitOption,
 } from "@/components/admin/IngredientsAdmin";
+import { Pagination } from "@/components/Pagination";
 import { db } from "@/lib/db";
 import {
   categories,
@@ -20,6 +21,7 @@ import {
 import { isLowStock, type UnitKind } from "@/lib/inventory/rules";
 import { resolveMovementFilters } from "@/lib/inventory/movements";
 import { getInventoryValuation } from "@/lib/inventory/valuation";
+import { resolvePageInfo } from "@/lib/pagination";
 import {
   resolveReportDateRange,
   toDateTimeLocalValue,
@@ -34,6 +36,8 @@ export default async function AdminInventoryPage({
     to?: string;
     item?: string;
     category?: string;
+    page?: string;
+    size?: string;
   }>;
 }) {
   await requireAdmin();
@@ -107,8 +111,6 @@ export default async function AdminInventoryPage({
       factorToBase: row.factorToBase ?? 1,
     }));
 
-  const trackedById = new Map(trackedItemRows.map((row) => [row.id, row]));
-
   const ingredientMovementConditions = [
     gte(ingredientMovements.createdAt, range.fromSql),
     lte(ingredientMovements.createdAt, range.toSql),
@@ -118,29 +120,9 @@ export default async function AdminInventoryPage({
       like(ingredientMovements.ingredientName, `%${movementFilters.item}%`),
     );
   }
-
-  const ingredientMovementRows = movementFilters.categoryId
-    ? []
-    : db
-        .select({
-          id: ingredientMovements.id,
-          targetName: ingredientMovements.ingredientName,
-          deltaBase: ingredientMovements.deltaBase,
-          kind: ingredientMovements.kind,
-          userName: ingredientMovements.userName,
-          note: ingredientMovements.note,
-          createdAt: ingredientMovements.createdAt,
-          unitName: units.name,
-          unitKind: units.kind,
-          factorToBase: units.factorToBase,
-        })
-        .from(ingredientMovements)
-        .leftJoin(ingredients, eq(ingredientMovements.ingredientId, ingredients.id))
-        .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
-        .where(and(...ingredientMovementConditions))
-        .orderBy(desc(ingredientMovements.createdAt), desc(ingredientMovements.id))
-        .limit(200)
-        .all();
+  if (movementFilters.categoryId) {
+    ingredientMovementConditions.push(sql`1 = 0`);
+  }
 
   const itemMovementConditions = [
     gte(itemMovements.createdAt, range.fromSql),
@@ -155,64 +137,98 @@ export default async function AdminInventoryPage({
     itemMovementConditions.push(eq(items.categoryId, movementFilters.categoryId));
   }
 
-  const itemMovementRows = db
+  const ingredientMovementQuery = db
     .select({
-      id: itemMovements.id,
-      itemId: itemMovements.itemId,
-      targetName: itemMovements.itemName,
-      deltaBase: itemMovements.deltaBase,
-      kind: itemMovements.kind,
-      userName: itemMovements.userName,
-      note: itemMovements.note,
-      createdAt: itemMovements.createdAt,
-      unitName: itemMovements.unitName,
-      unitKind: itemMovements.unitKind,
-      factorToBase: itemMovements.factorToBase,
+      source: sql<string>`'ingredient'`.as("source"),
+      id: sql<number>`${ingredientMovements.id}`.as("id"),
+      targetName: sql<string>`${ingredientMovements.ingredientName}`.as(
+        "target_name",
+      ),
+      deltaBase: sql<number>`${ingredientMovements.deltaBase}`.as("delta_base"),
+      kind: sql<string>`${ingredientMovements.kind}`.as("kind"),
+      userName: sql<string>`${ingredientMovements.userName}`.as("user_name"),
+      note: sql<string | null>`${ingredientMovements.note}`.as("note"),
+      createdAt: sql<string>`${ingredientMovements.createdAt}`.as("created_at"),
+      unitName: sql<string | null>`${units.name}`.as("unit_name"),
+      unitKind: sql<string | null>`${units.kind}`.as("unit_kind"),
+      factorToBase: sql<number | null>`${units.factorToBase}`.as(
+        "factor_to_base",
+      ),
+      itemId: sql<number | null>`null`.as("item_id"),
+    })
+    .from(ingredientMovements)
+    .leftJoin(ingredients, eq(ingredientMovements.ingredientId, ingredients.id))
+    .leftJoin(units, eq(ingredients.preferredUnitId, units.id))
+    .where(and(...ingredientMovementConditions));
+
+  const itemMovementQuery = db
+    .select({
+      source: sql<string>`'item'`.as("source"),
+      id: sql<number>`${itemMovements.id}`.as("id"),
+      targetName: sql<string>`${itemMovements.itemName}`.as("target_name"),
+      deltaBase: sql<number>`${itemMovements.deltaBase}`.as("delta_base"),
+      kind: sql<string>`${itemMovements.kind}`.as("kind"),
+      userName: sql<string>`${itemMovements.userName}`.as("user_name"),
+      note: sql<string | null>`${itemMovements.note}`.as("note"),
+      createdAt: sql<string>`${itemMovements.createdAt}`.as("created_at"),
+      unitName:
+        sql<string | null>`coalesce(${itemMovements.unitName}, ${units.name})`.as(
+          "unit_name",
+        ),
+      unitKind:
+        sql<string | null>`coalesce(${itemMovements.unitKind}, ${units.kind})`.as(
+          "unit_kind",
+        ),
+      factorToBase:
+        sql<number | null>`coalesce(${itemMovements.factorToBase}, ${units.factorToBase})`.as(
+          "factor_to_base",
+        ),
+      itemId: sql<number | null>`${itemMovements.itemId}`.as("item_id"),
     })
     .from(itemMovements)
     .leftJoin(items, eq(itemMovements.itemId, items.id))
-    .where(and(...itemMovementConditions))
-    .orderBy(desc(itemMovements.createdAt), desc(itemMovements.id))
-    .limit(200)
+    .leftJoin(units, eq(items.unitId, units.id))
+    .where(and(...itemMovementConditions));
+
+  const movementsSource = ingredientMovementQuery
+    .unionAll(itemMovementQuery)
+    .as("movements");
+
+  const total =
+    db
+      .select({ value: sql<number>`count(*)`.mapWith(Number) })
+      .from(movementsSource)
+      .get()?.value ?? 0;
+  const info = resolvePageInfo({ page: sp.page, size: sp.size }, total);
+
+  const movementRows = db
+    .select()
+    .from(movementsSource)
+    .orderBy(
+      desc(movementsSource.createdAt),
+      desc(movementsSource.source),
+      desc(movementsSource.id),
+    )
+    .limit(info.size)
+    .offset(info.offset)
     .all();
 
-  const movements: StockMovementRow[] = [
-    ...ingredientMovementRows.map((row) => ({
-      key: `ingredient-${row.id}`,
-      targetType: "ingredient" as const,
+  const movements: StockMovementRow[] = movementRows.map((row) => {
+    const isItem = row.source === "item";
+    return {
+      key: `${row.source}-${row.id}`,
+      targetType: isItem ? "item" : "ingredient",
       targetName: row.targetName,
       deltaBase: row.deltaBase,
       kind: row.kind,
       userName: row.userName,
       note: row.note,
       createdAt: row.createdAt,
-      unitName: row.unitName ?? "غرام",
-      unitKind: (row.unitKind ?? "weight") as UnitKind,
+      unitName: row.unitName ?? (isItem ? "حبة" : "غرام"),
+      unitKind: (row.unitKind ?? (isItem ? "count" : "weight")) as UnitKind,
       factorToBase: row.factorToBase ?? 1,
-    })),
-    ...itemMovementRows.map((row) => {
-      const current =
-        row.itemId != null ? trackedById.get(row.itemId) : undefined;
-      return {
-        key: `item-${row.id}`,
-        targetType: "item" as const,
-        targetName: row.targetName,
-        deltaBase: row.deltaBase,
-        kind: row.kind,
-        userName: row.userName,
-        note: row.note,
-        createdAt: row.createdAt,
-        unitName: row.unitName ?? current?.unitName ?? "حبة",
-        unitKind: (row.unitKind ?? current?.unitKind ?? "count") as UnitKind,
-        factorToBase: row.factorToBase ?? current?.factorToBase ?? 1,
-      };
-    }),
-  ]
-    .sort(
-      (a, b) =>
-        b.createdAt.localeCompare(a.createdAt) || b.key.localeCompare(a.key),
-    )
-    .slice(0, 200);
+    };
+  });
 
   const lowCount = [
     ...ingredientRows.map((row) => ({
@@ -326,7 +342,10 @@ export default async function AdminInventoryPage({
         category={
           movementFilters.categoryId ? String(movementFilters.categoryId) : ""
         }
+        size={sp.size}
       />
+
+      <Pagination basePath="/admin/inventory" params={sp} info={info} />
     </div>
   );
 }

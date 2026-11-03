@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { and, desc, eq, gte, like, lte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, like, lte, or, sql, type SQL } from "drizzle-orm";
 import { ClipboardList, Filter, Search } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
+import { Pagination } from "@/components/Pagination";
 import {
   AUDIT_KIND_LABELS,
   AUDIT_KINDS,
@@ -12,6 +13,7 @@ import {
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { auditEvents, users } from "@/lib/db/schema";
+import { resolvePageInfo } from "@/lib/pagination";
 import {
   defaultReportRange,
   inputDate,
@@ -34,6 +36,8 @@ export default async function AdminAuditPage({
     result?: string;
     order?: string;
     q?: string;
+    page?: string;
+    size?: string;
   }>;
 }) {
   await requireAdmin();
@@ -75,12 +79,21 @@ export default async function AdminAuditPage({
     );
   }
 
+  const total =
+    db
+      .select({ value: sql<number>`count(*)`.mapWith(Number) })
+      .from(auditEvents)
+      .where(and(...conditions))
+      .get()?.value ?? 0;
+  const info = resolvePageInfo({ page: sp.page, size: sp.size }, total);
+
   const rows = db
     .select()
     .from(auditEvents)
     .where(and(...conditions))
     .orderBy(desc(auditEvents.id))
-    .limit(400)
+    .limit(info.size)
+    .offset(info.offset)
     .all();
 
   const staff = db
@@ -107,6 +120,7 @@ export default async function AdminAuditPage({
       result: result === "all" ? undefined : result,
       order: orderId ? String(orderId) : undefined,
       q: q || undefined,
+      size: sp.size,
       ...next,
     };
     for (const [key, value] of Object.entries(merged)) {
@@ -282,6 +296,7 @@ export default async function AdminAuditPage({
             </Link>
           </div>
           <input type="hidden" name="venue" value={venueAll ? "all" : venue ?? "restaurant"} />
+          {sp.size ? <input type="hidden" name="size" value={sp.size} /> : null}
           <button type="submit" className="btn btn-primary btn-sm rounded-xl">
             تطبيق التصفية
           </button>
@@ -291,7 +306,7 @@ export default async function AdminAuditPage({
       <section className="overflow-hidden rounded-3xl border border-base-300/70 bg-base-100 shadow-sm">
         <div className="flex items-center justify-between px-5 py-4">
           <p className="text-sm font-bold text-base-content/55">
-            {rows.length} حركة
+            {info.total} حركة
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -364,6 +379,8 @@ export default async function AdminAuditPage({
           </table>
         </div>
       </section>
+
+      <Pagination basePath="/admin/audit" params={sp} info={info} />
     </div>
   );
 }

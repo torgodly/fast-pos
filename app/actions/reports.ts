@@ -119,7 +119,12 @@ export async function printPurchaseReport(
     return { error: "الطابعة غير موجودة أو معطّلة" };
   }
 
-  const summary = getPurchaseSummary(filters);
+  const summary = getPurchaseSummary({
+    from: filters.from,
+    to: filters.to,
+    supplier: filters.supplier,
+    q: filters.q,
+  });
   const data = purchasesToPrintData(summary, {
     venueName: "المخزن",
     printedByName: session.name,

@@ -1,17 +1,24 @@
 import Link from "next/link";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { Ban, Search } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
+import { Pagination } from "@/components/Pagination";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { cancelledItems, orders, tables } from "@/lib/db/schema";
+import { resolvePageInfo } from "@/lib/pagination";
 import { formatDateTime, formatMoney } from "@/lib/venues";
 
 export default async function AdminCancelledItemsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ venue?: string; q?: string }>;
+  searchParams: Promise<{
+    venue?: string;
+    q?: string;
+    page?: string;
+    size?: string;
+  }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
@@ -23,6 +30,21 @@ export default async function AdminCancelledItemsPage({
   if (q && Number.isFinite(invoiceId)) {
     conditions.push(eq(cancelledItems.orderId, invoiceId));
   }
+
+  const stats = db
+    .select({
+      total: sql<number>`count(*)`.mapWith(Number),
+      removed: sql<number>`coalesce(sum(${cancelledItems.lineTotalRemoved}), 0)`.mapWith(
+        Number,
+      ),
+    })
+    .from(cancelledItems)
+    .innerJoin(orders, eq(cancelledItems.orderId, orders.id))
+    .where(and(...conditions))
+    .get();
+  const total = stats?.total ?? 0;
+  const removedTotal = stats?.removed ?? 0;
+  const info = resolvePageInfo({ page: sp.page, size: sp.size }, total);
 
   const rows = db
     .select({
@@ -44,10 +66,9 @@ export default async function AdminCancelledItemsPage({
     .leftJoin(tables, eq(orders.tableId, tables.id))
     .where(and(...conditions))
     .orderBy(desc(cancelledItems.id))
-    .limit(200)
+    .limit(info.size)
+    .offset(info.offset)
     .all();
-
-  const removedTotal = rows.reduce((sum, row) => sum + row.lineTotalRemoved, 0);
 
   return (
     <div className="space-y-6">
@@ -59,11 +80,15 @@ export default async function AdminCancelledItemsPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الأصناف الملغاة</h2>
             <p className="text-sm text-base-content/45">
-              {rows.length} إلغاء · خصم {formatMoney(removedTotal)}
+              {total} إلغاء · خصم {formatMoney(removedTotal)}
             </p>
           </div>
         </div>
-        <VenueTabs basePath="/admin/cancelled-items" venue={venue} />
+        <VenueTabs
+          basePath="/admin/cancelled-items"
+          venue={venue}
+          keepParams={{ size: sp.size }}
+        />
       </div>
 
       <form className="flex items-end gap-2">
@@ -77,6 +102,7 @@ export default async function AdminCancelledItemsPage({
           />
         </label>
         <input type="hidden" name="venue" value={venue} />
+        {sp.size ? <input type="hidden" name="size" value={sp.size} /> : null}
         <button type="submit" className="btn btn-primary btn-sm gap-1">
           <Search className="size-3.5" />
           بحث
@@ -136,6 +162,8 @@ export default async function AdminCancelledItemsPage({
           </tbody>
         </table>
       </div>
+
+      <Pagination basePath="/admin/cancelled-items" params={sp} info={info} />
     </div>
   );
 }

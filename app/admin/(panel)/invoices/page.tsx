@@ -1,17 +1,24 @@
 import Link from "next/link";
-import { and, desc, eq, type SQL } from "drizzle-orm";
+import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { ReceiptText, Search } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
+import { Pagination } from "@/components/Pagination";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
 import { db } from "@/lib/db";
 import { orders, tables, users } from "@/lib/db/schema";
+import { resolvePageInfo } from "@/lib/pagination";
 import { formatDateTime, formatMoney } from "@/lib/venues";
 
 export default async function AdminInvoicesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ venue?: string; q?: string }>;
+  searchParams: Promise<{
+    venue?: string;
+    q?: string;
+    page?: string;
+    size?: string;
+  }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
@@ -23,6 +30,14 @@ export default async function AdminInvoicesPage({
   if (q && Number.isFinite(invoiceId)) {
     conditions.push(eq(orders.id, invoiceId));
   }
+
+  const total =
+    db
+      .select({ value: sql<number>`count(*)`.mapWith(Number) })
+      .from(orders)
+      .where(and(...conditions))
+      .get()?.value ?? 0;
+  const info = resolvePageInfo({ page: sp.page, size: sp.size }, total);
 
   const rows = db
     .select({
@@ -40,7 +55,8 @@ export default async function AdminInvoicesPage({
     .leftJoin(users, eq(orders.waiterId, users.id))
     .where(and(...conditions))
     .orderBy(desc(orders.id))
-    .limit(80)
+    .limit(info.size)
+    .offset(info.offset)
     .all();
 
   return (
@@ -57,7 +73,11 @@ export default async function AdminInvoicesPage({
             </p>
           </div>
         </div>
-        <VenueTabs basePath="/admin/invoices" venue={venue} />
+        <VenueTabs
+          basePath="/admin/invoices"
+          venue={venue}
+          keepParams={{ size: sp.size }}
+        />
       </div>
 
       <form className="premium-card card">
@@ -72,6 +92,7 @@ export default async function AdminInvoicesPage({
             />
           </label>
           <input type="hidden" name="venue" value={venue} />
+          {sp.size ? <input type="hidden" name="size" value={sp.size} /> : null}
           <button type="submit" className="btn btn-primary btn-sm gap-1">
             <Search className="size-3.5" />
             بحث
@@ -139,6 +160,8 @@ export default async function AdminInvoicesPage({
           </div>
         </div>
       </section>
+
+      <Pagination basePath="/admin/invoices" params={sp} info={info} />
     </div>
   );
 }

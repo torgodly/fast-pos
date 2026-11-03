@@ -127,6 +127,7 @@ export function IngredientsAdmin({
   to,
   item,
   category,
+  size,
 }: {
   ingredients: IngredientRow[];
   trackedItems: TrackedItemRow[];
@@ -136,6 +137,7 @@ export function IngredientsAdmin({
   to: string;
   item: string;
   category: string;
+  size?: string;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -263,6 +265,7 @@ export function IngredientsAdmin({
     if (toValue) params.set("to", toValue);
     if (itemValue) params.set("item", itemValue);
     if (categoryValue) params.set("category", categoryValue);
+    if (size) params.set("size", size);
     router.push(
       params.toString()
         ? `/admin/inventory?${params.toString()}`

@@ -1,10 +1,16 @@
 import { Clock3 } from "lucide-react";
 import { requireAdmin } from "@/app/actions/auth";
 import { AdminReprintShiftButton } from "@/components/AdminReprintShiftButton";
+import { Pagination } from "@/components/Pagination";
 import { PdfDownloadButton } from "@/components/PdfDownloadButton";
 import { VenueTabs } from "@/components/VenueTabs";
 import { parseVenueParam } from "@/lib/admin-venue";
-import { getOpenShift, listShifts } from "@/lib/shifts/core";
+import { resolvePageInfo } from "@/lib/pagination";
+import {
+  getOpenShift,
+  getShiftHistorySummary,
+  listShifts,
+} from "@/lib/shifts/core";
 import { formatDateTime, formatMoney } from "@/lib/venues";
 
 function DifferenceValue({ value }: { value: number | null }) {
@@ -27,19 +33,18 @@ function DifferenceValue({ value }: { value: number | null }) {
 export default async function AdminShiftsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ venue?: string }>;
+  searchParams: Promise<{ venue?: string; page?: string; size?: string }>;
 }) {
   await requireAdmin();
   const sp = await searchParams;
   const venue = parseVenueParam(sp.venue);
-  const rows = listShifts(venue, 100);
-  const openShift = getOpenShift(venue);
-  const salesTotal = rows.reduce((sum, row) => sum + row.totalSales, 0);
-  const expenseTotal = rows.reduce((sum, row) => sum + row.expenseTotal, 0);
-  const differenceTotal = rows.reduce(
-    (sum, row) => sum + (row.difference ?? 0),
-    0,
+  const history = getShiftHistorySummary(venue);
+  const info = resolvePageInfo(
+    { page: sp.page, size: sp.size },
+    history.shiftCount,
   );
+  const rows = listShifts(venue, info.size, info.offset);
+  const openShift = getOpenShift(venue);
 
   return (
     <div className="space-y-6">
@@ -51,13 +56,18 @@ export default async function AdminShiftsPage({
           <div>
             <h2 className="text-2xl font-black sm:text-3xl">الورديات</h2>
             <p className="text-sm text-base-content/45">
-              {rows.length} وردية مغلقة · إجمالي {formatMoney(salesTotal)} ·
-              مصروفات {formatMoney(expenseTotal)} · صافي الفروقات{" "}
-              {formatMoney(differenceTotal)}
+              {history.shiftCount} وردية مغلقة · إجمالي{" "}
+              {formatMoney(history.totalSales)} · مصروفات{" "}
+              {formatMoney(history.expenseTotal)} · صافي الفروقات{" "}
+              {formatMoney(history.differenceTotal)}
             </p>
           </div>
         </div>
-        <VenueTabs basePath="/admin/shifts" venue={venue} />
+        <VenueTabs
+          basePath="/admin/shifts"
+          venue={venue}
+          keepParams={{ size: sp.size }}
+        />
       </div>
 
       {openShift ? (
@@ -168,6 +178,8 @@ export default async function AdminShiftsPage({
           </tbody>
         </table>
       </div>
+
+      <Pagination basePath="/admin/shifts" params={sp} info={info} />
     </div>
   );
 }

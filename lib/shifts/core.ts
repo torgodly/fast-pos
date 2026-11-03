@@ -491,7 +491,11 @@ export function closeShift(
   return { ok: true, shift: getShiftById(shift.id)!, totals };
 }
 
-export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
+export function listShifts(
+  venueId: VenueId,
+  limit = 100,
+  offset = 0,
+): ShiftListItem[] {
   const closedUser = alias(users, "closed_user");
   const rows = db
     .select({
@@ -517,8 +521,9 @@ export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
         isNotNull(shifts.closedAt),
       ),
     )
-    .orderBy(desc(shifts.closedAt))
+    .orderBy(desc(shifts.closedAt), desc(shifts.id))
     .limit(limit)
+    .offset(offset)
     .all();
 
   const methods = listPaymentMethods();
@@ -607,4 +612,55 @@ export function listShifts(venueId: VenueId, limit = 100): ShiftListItem[] {
       },
     ];
   });
+}
+
+export function getShiftHistorySummary(venueId: VenueId) {
+  const closed = and(
+    eq(shifts.venueId, venueId),
+    eq(shifts.status, "closed"),
+    isNotNull(shifts.closedAt),
+  );
+
+  const shiftRow = db
+    .select({
+      shiftCount: sql<number>`count(*)`.mapWith(Number),
+      differenceTotal:
+        sql<number>`coalesce(sum(${shifts.difference}), 0)`.mapWith(Number),
+    })
+    .from(shifts)
+    .where(closed)
+    .get();
+
+  const salesRow = db
+    .select({
+      totalSales: sql<number>`coalesce(sum(${orders.total}), 0)`.mapWith(Number),
+    })
+    .from(orders)
+    .innerJoin(shifts, eq(orders.shiftId, shifts.id))
+    .where(
+      and(
+        eq(shifts.venueId, venueId),
+        eq(shifts.status, "closed"),
+        eq(orders.venueId, venueId),
+        eq(orders.status, "paid"),
+      ),
+    )
+    .get();
+
+  const expenseRow = db
+    .select({
+      expenseTotal:
+        sql<number>`coalesce(sum(${shiftExpenses.amount}), 0)`.mapWith(Number),
+    })
+    .from(shiftExpenses)
+    .innerJoin(shifts, eq(shiftExpenses.shiftId, shifts.id))
+    .where(and(eq(shifts.venueId, venueId), eq(shifts.status, "closed")))
+    .get();
+
+  return {
+    shiftCount: shiftRow?.shiftCount ?? 0,
+    totalSales: roundMoney(salesRow?.totalSales ?? 0),
+    expenseTotal: roundMoney(expenseRow?.expenseTotal ?? 0),
+    differenceTotal: roundMoney(shiftRow?.differenceTotal ?? 0),
+  };
 }
